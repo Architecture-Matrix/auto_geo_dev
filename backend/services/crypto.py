@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 加密解密工具
-老王我用AES-256加密，Cookies安全第一！
+用AES-256加密，Cookies安全第一！
 """
 
 import base64
@@ -11,13 +11,13 @@ from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from typing import Any, Dict, Optional
 
-from config import ENCRYPTION_KEY
+from backend.config import ENCRYPTION_KEY
 
 
 class CryptoService:
     """
     加密服务
-    老王提醒：密钥必须妥善保管，生产环境从环境变量读取！
+    注意：密钥必须妥善保管，生产环境从环境变量读取！
     """
 
     def __init__(self, key: bytes = ENCRYPTION_KEY):

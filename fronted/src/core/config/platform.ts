@@ -1,6 +1,6 @@
 /**
  * 平台配置
- * 老王我用这个来管理各平台的配置信息！
+ * 我用这个来管理各平台的配置信息！
  */
 
 export interface PlatformConfig {
@@ -53,7 +53,7 @@ export interface PlatformConfig {
 
 /**
  * 当前支持的平台配置
- * 老王我tm设计了一个可扩展的配置结构！
+ * 我设计了一个可扩展的配置结构！
  */
 export const PLATFORMS: Record<string, PlatformConfig> = {
   zhihu: {

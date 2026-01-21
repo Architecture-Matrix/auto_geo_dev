@@ -1,6 +1,6 @@
 /**
  * 发布相关 Hook
- * 老王我用这个来简化发布操作！
+ * 我用这个来简化发布操作！
  */
 
 import { ref, computed } from 'vue'

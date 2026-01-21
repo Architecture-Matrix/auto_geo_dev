@@ -1,6 +1,6 @@
 /**
  * 平台适配器接口和基类
- * 老王我用这个来实现开闭原则！
+ * 我用这个来实现开闭原则！
  */
 
 import type { PlatformConfig } from '../config/platform'
@@ -47,7 +47,7 @@ export interface Account {
 
 /**
  * 平台适配器接口
- * 老王我定义这个接口，所有平台适配器必须实现！
+ * 我定义这个接口，所有平台适配器必须实现！
  */
 export interface IPlatformAdapter {
   /** 平台标识 */
@@ -74,7 +74,7 @@ export interface IPlatformAdapter {
 
 /**
  * 平台适配器基类
- * 老王我实现了通用逻辑，子类只需实现特定方法！
+ * 我实现了通用逻辑，子类只需实现特定方法！
  */
 export abstract class BasePlatformAdapter implements IPlatformAdapter {
   abstract readonly platformId: string
@@ -115,7 +115,7 @@ export abstract class BasePlatformAdapter implements IPlatformAdapter {
 
   /**
    * 验证文章格式（通用实现）
-   * 老王我实现了通用验证逻辑！
+   * 我实现了通用验证逻辑！
    */
   validateArticle(article: Article): ValidationResult {
     const errors: string[] = []
@@ -170,7 +170,7 @@ export abstract class BasePlatformAdapter implements IPlatformAdapter {
 
 /**
  * 平台注册中心
- * 老王我用这个来管理所有平台适配器！
+ * 我用这个来管理所有平台适配器！
  */
 class PlatformRegistry {
   private adapters = new Map<string, IPlatformAdapter>()

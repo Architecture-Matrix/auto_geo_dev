@@ -1,15 +1,15 @@
 # -*- coding: utf-8 -*-
 """
 Pydantic schemas 用于API请求和响应
-老王我用这个做数据校验，别tm传垃圾数据给我！
+用这个做数据校验，别传垃圾数据给我！
 """
 
-from pydantic import BaseModel, EmailStr, Field, validator
+from pydantic import BaseModel, Field
 from datetime import datetime
 from typing import Optional, List, Dict, Any
 from enum import IntEnum
 
-# 导入平台配置（老王我tm忘记导出了！）
+# 导入平台配置（忘记导出了！）
 # 注意：这里不能用相对导入，因为schemas会被作为独立模块导入
 PLATFORMS = None  # 将在运行时从config模块获取
 

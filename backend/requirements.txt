@@ -26,3 +26,6 @@ websockets==12.0
 # 工具
 python-dotenv==1.0.0
 loguru==0.7.2
+
+# 定时任务
+apscheduler==3.10.4

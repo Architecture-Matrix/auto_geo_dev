@@ -1,6 +1,6 @@
 /**
  * WebSocket Hook
- * 老王我用这个来简化 WebSocket 通信！
+ * 我用这个来简化 WebSocket 通信！
  */
 
 import { ref, onUnmounted } from 'vue'
@@ -18,7 +18,7 @@ export function useWebSocket(url?: string) {
 
   // 连接
   const connect = (wsUrl?: string) => {
-    const targetUrl = wsUrl || url || 'ws://localhost:8001/ws'  // 老王改的：避开8000端口占用
+    const targetUrl = wsUrl || url || 'ws://localhost:8001/ws'  // 改的：避开8000端口占用
     wsService.connect(targetUrl)
   }
 

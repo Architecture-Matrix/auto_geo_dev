@@ -1,6 +1,6 @@
 /**
  * API 服务
- * 老王我用这个来封装所有 HTTP 请求！
+ * 我用这个来封装所有 HTTP 请求！
  */
 
 import axios, { type AxiosInstance, type AxiosRequestConfig, type AxiosResponse } from 'axios'
@@ -193,3 +193,183 @@ export const platformApi = {
 
 // 导出实例
 export default instance
+
+// ==================== GEO关键词 API ====================
+// 注意：后端路由是 /api/keywords/*，不是 /geo/*
+
+export const geoKeywordApi = {
+  // 获取项目列表
+  getProjects: () => get<any>('/keywords/projects'),
+
+  // 获取项目详情
+  getProject: (id: number) => get<any>(`/keywords/projects/${id}`),
+
+  // 创建项目
+  createProject: (data: {
+    name: string
+    company_name: string
+    domain_keyword?: string
+    industry?: string
+    description?: string
+  }) => post<any>('/keywords/projects', data),
+
+  // 更新项目
+  updateProject: (id: number, data: any) => put<any>(`/keywords/projects/${id}`, data),
+
+  // 删除项目
+  deleteProject: (id: number) => del<any>(`/keywords/projects/${id}`),
+
+  // 获取项目关键词
+  getProjectKeywords: (projectId: number) => get<any>(`/keywords/projects/${projectId}/keywords`),
+
+  // 创建关键词
+  createKeyword: (projectId: number, data: { keyword: string; difficulty_score?: number }) =>
+    post<any>(`/keywords/projects/${projectId}/keywords`, data),
+
+  // 删除关键词
+  deleteKeyword: (keywordId: number) => del<any>(`/keywords/keywords/${keywordId}`),
+
+  // 关键词蒸馏
+  distill: (data: {
+    project_id: number
+    company_name: string
+    industry?: string
+    description?: string
+    count?: number
+  }) => post<any>('/keywords/distill', data),
+
+  // 生成问题变体
+  generateQuestions: (data: { keyword_id: number; count?: number }) =>
+    post<any>('/keywords/generate-questions', data),
+
+  // 获取关键词问题
+  getKeywordQuestions: (keywordId: number) => get<any>(`/keywords/keywords/${keywordId}/questions`),
+
+  // 删除问题变体
+  deleteQuestion: (questionId: number) => del<any>(`/keywords/questions/${questionId}`),
+}
+
+// ==================== GEO文章 API ====================
+
+export const geoArticleApi = {
+  // 获取GEO文章列表
+  getList: (params?: { project_id?: number; keyword_id?: number; status?: string; limit?: number; offset?: number }) =>
+    get<any>('/geo/articles', params),
+
+  // 获取文章详情
+  getDetail: (id: number) => get<any>(`/geo/articles/${id}`),
+
+  // 创建GEO文章
+  create: (data: {
+    project_id: number
+    keyword_id: number
+    title: string
+    content: string
+    platform_tags?: string
+  }) => post<any>('/geo/articles', data),
+
+  // 更新文章
+  update: (id: number, data: any) => put<any>(`/geo/articles/${id}`, data),
+
+  // 删除文章
+  delete: (id: number) => del<any>(`/geo/articles/${id}`),
+
+  // 批量生成文章
+  batchGenerate: (data: { project_id: number; keyword_ids?: number[]; count_per_keyword?: number }) =>
+    post<any>('/geo/articles/batch-generate', data),
+
+  // 发布文章
+  publish: (articleId: number, data: { platform: string; account_id?: number }) =>
+    post<any>(`/geo/articles/${articleId}/publish`, data),
+
+  // 获取发布状态
+  getPublishStatus: (articleId: number) => get<any>(`/geo/articles/${articleId}/publish-status`),
+}
+
+// ==================== 收录检测 API ====================
+
+export const indexCheckApi = {
+  // 执行收录检测
+  checkKeyword: (data: { keyword_id: number; company_name: string }) =>
+    post<any>('/index-check/check', data),
+
+  // 批量检测
+  batchCheck: (data: { project_id?: number; keyword_ids?: number[]; company_name?: string }) =>
+    post<any>('/index-check/batch-check', data),
+
+  // 获取检测记录
+  getRecords: (params?: {
+    keyword_id?: number
+    project_id?: number
+    platform?: string
+    limit?: number
+    offset?: number
+  }) => get<any>('/index-check/records', params),
+
+  // 获取关键词趋势
+  getKeywordTrend: (keywordId: number, days?: number) =>
+    get<any>(`/index-check/trend/${keywordId}`, { days }),
+
+  // 获取项目统计
+  getProjectStats: (projectId: number) => get<any>(`/index-check/stats/project/${projectId}`),
+}
+
+// ==================== 报表 API ====================
+
+export const reportsApi = {
+  // 获取总览数据
+  getOverview: () => get<any>('/reports/overview'),
+
+  // 获取收录趋势
+  getIndexTrend: (params?: { project_id?: number; days?: number }) =>
+    get<any>('/reports/trend/index', params),
+
+  // 获取平台分布
+  getPlatformDistribution: (params?: { project_id?: number }) =>
+    get<any>('/reports/distribution/platform', params),
+
+  // 获取关键词排名
+  getKeywordRanking: (params?: { project_id?: number; limit?: number }) =>
+    get<any>('/reports/ranking/keywords', params),
+
+  // 获取项目统计
+  getProjectStats: (projectId: number) => get<any>(`/reports/stats/project/${projectId}`),
+}
+
+// ==================== 预警通知 API ====================
+
+export const notificationApi = {
+  // 检查预警
+  checkAlerts: (params?: { project_id?: number }) => post<any>('/notifications/check', params),
+
+  // 获取预警汇总
+  getSummary: () => get<any>('/notifications/summary'),
+
+  // 获取预警规则
+  getRules: () => get<any>('/notifications/rules'),
+
+  // 测试预警
+  testAlert: () => post<any>('/notifications/trigger-test', {}),
+}
+
+// ==================== 定时任务 API ====================
+
+export const schedulerApi = {
+  // 获取定时任务列表
+  getJobs: () => get<any>('/scheduler/jobs'),
+
+  // 获取服务状态
+  getStatus: () => get<any>('/scheduler/status'),
+
+  // 启动服务
+  start: () => post<any>('/scheduler/start', {}),
+
+  // 停止服务
+  stop: () => post<any>('/scheduler/stop', {}),
+
+  // 触发收录检测
+  triggerCheck: () => post<any>('/scheduler/trigger-check', {}),
+
+  // 触发预警检查
+  triggerAlert: () => post<any>('/scheduler/trigger-alert', {}),
+}

@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 Playwright发布适配器
-老王我用适配器模式实现各平台发布，开闭原则！
+用适配器模式实现各平台发布，开闭原则！
 """
 
 from abc import ABC, abstractmethod
@@ -13,7 +13,7 @@ from loguru import logger
 class BasePublisher(ABC):
     """
     基础发布适配器
-    老王提醒：所有平台适配器都要继承这个类！
+    注意：所有平台适配器都要继承这个类！
     """
 
     def __init__(self, platform_id: str, config: Dict[str, Any]):
@@ -60,7 +60,7 @@ class BasePublisher(ABC):
         """
         等待选择器出现
 
-        老王提醒：各平台页面加载速度不同，需要耐心等待！
+        注意：各平台页面加载速度不同，需要耐心等待！
         """
         try:
             await page.wait_for_selector(selector, timeout=timeout)
@@ -129,7 +129,7 @@ class BasePublisher(ABC):
 class PublisherRegistry:
     """
     发布器注册表
-    老王我用这个来管理所有平台的发布器！
+    用这个来管理所有平台的发布器！
     """
 
     def __init__(self):
@@ -156,7 +156,7 @@ registry = PublisherRegistry()
 def get_publisher(platform_id: str) -> Optional[BasePublisher]:
     """
     获取平台发布器
-    老王提醒：这是对外暴露的主要接口！
+    注意：这是对外暴露的主要接口！
     """
     return registry.get(platform_id)
 

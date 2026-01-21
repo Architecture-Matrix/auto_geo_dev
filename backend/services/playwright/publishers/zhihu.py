@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 知乎发布适配器
-老王我研究过知乎的页面结构，这tm得仔细处理！
+研究过知乎的页面结构，这得仔细处理！
 """
 
 import asyncio
@@ -19,7 +19,7 @@ class ZhihuPublisher(BasePublisher):
     发布页面：https://zhuanlan.zhihu.com/write
     """
 
-    # 选择器定义（老王我根据实际页面结构定义的）
+    # 选择器定义（根据实际页面结构定义的）
     SELECTORS = {
         "title_input": "input[placeholder*='标题']",
         "content_editor": ".public-DraftStyleDefault-block",  # Draft.js编辑器
@@ -89,7 +89,7 @@ class ZhihuPublisher(BasePublisher):
         """
         填充正文（知乎用Draft.js编辑器）
 
-        老王提醒：知乎的编辑器比较复杂，直接模拟键盘输入！
+        注意：知乎的编辑器比较复杂，直接模拟键盘输入！
         """
         try:
             # 方法1：尝试找到编辑器div并点击

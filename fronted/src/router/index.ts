@@ -1,6 +1,6 @@
 /**
  * 路由配置
- * 老王我用这个来管理应用路由！
+ * 我用这个来管理应用路由！
  */
 
 import { createRouter, createWebHashHistory, type RouteRecordRaw } from 'vue-router'
@@ -65,6 +65,31 @@ const routes: RouteRecordRaw[] = [
         name: 'Settings',
         component: () => import('@/views/settings/SettingsPage.vue'),
         meta: { title: '设置', icon: 'Setting' },
+      },
+      // ==================== GEO系统路由 ====================
+      {
+        path: 'geo/projects',
+        name: 'GeoProjects',
+        component: () => import('@/views/geo/Projects.vue'),
+        meta: { title: 'GEO项目管理', icon: 'Grid' },
+      },
+      {
+        path: 'geo/keywords',
+        name: 'GeoKeywords',
+        component: () => import('@/views/geo/Keywords.vue'),
+        meta: { title: '关键词蒸馏', icon: 'MagicStick' },
+      },
+      {
+        path: 'geo/articles',
+        name: 'GeoArticles',
+        component: () => import('@/views/geo/Articles.vue'),
+        meta: { title: '文章生成', icon: 'EditPen' },
+      },
+      {
+        path: 'geo/monitor',
+        name: 'GeoMonitor',
+        component: () => import('@/views/geo/Monitor.vue'),
+        meta: { title: '收录监控', icon: 'Monitor' },
       },
     ],
   },

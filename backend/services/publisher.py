@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 Playwright 自动发布服务
-老王我用这个来实现真正的自动化发布！
+用这个来实现真正的自动化发布！
 """
 
 import asyncio
@@ -42,7 +42,7 @@ class PublishResult:
 
 
 class BasePlatformPublisher:
-    """平台发布器基类 - 老王我用抽象模式实现开闭原则！"""
+    """平台发布器基类 - 用抽象模式实现开闭原则！"""
 
     def __init__(self, platform_id: str):
         self.platform_id = platform_id
@@ -58,7 +58,7 @@ class BasePlatformPublisher:
     ) -> PublishResult:
         """
         发布文章 - 子类必须实现
-        老王我设计成抽象方法，子类自己实现具体逻辑！
+        设计成抽象方法，子类自己实现具体逻辑！
         """
         raise NotImplementedError(f"{self.__class__.__name__}.publish() 必须实现！")
 
@@ -144,7 +144,7 @@ class BasePlatformPublisher:
 # ==================== 各平台发布器实现 ====================
 
 class ZhihuPublisher(BasePlatformPublisher):
-    """知乎发布器 - 老王我最爱用知乎！"""
+    """知乎发布器 - 最爱用知乎！"""
 
     def __init__(self):
         super().__init__("zhihu")
@@ -195,7 +195,7 @@ class ZhihuPublisher(BasePlatformPublisher):
 
 
 class BaijiahaoPublisher(BasePlatformPublisher):
-    """百家号发布器 - 老王重写了！先进入首页再点击图文按钮！"""
+    """百家号发布器 - 重写了！先进入首页再点击图文按钮！"""
 
     def __init__(self):
         super().__init__("baijiahao")
@@ -243,7 +243,7 @@ class BaijiahaoPublisher(BasePlatformPublisher):
         """
         尝试用多个选择器点击元素
 
-        老王我用这个方法来应对页面结构变化！
+        用这个方法来应对页面结构变化！
         """
         for selector in selectors:
             try:
@@ -261,7 +261,7 @@ class BaijiahaoPublisher(BasePlatformPublisher):
         """
         尝试用多个选择器填充元素
 
-        老王我用这个方法来应对页面结构变化！
+        用这个方法来应对页面结构变化！
         """
         for selector in selectors:
             try:
@@ -277,7 +277,7 @@ class BaijiahaoPublisher(BasePlatformPublisher):
         return False
 
     async def publish(self, page: Page, article: Article, account: Account) -> PublishResult:
-        """发布到百家号 - 老王重写的发布流程！"""
+        """发布到百家号 - 重写的发布流程！"""
         try:
             logger.info(f"开始发布文章到百家号: {article.title}")
 
@@ -480,7 +480,7 @@ class ToutiaoPublisher(BasePlatformPublisher):
             return PublishResult(False, error_msg=str(e))
 
 
-# 平台发布器注册表 - 老王我用注册模式，方便扩展！
+# 平台发布器注册表 - 用注册模式，方便扩展！
 PUBLISHERS: Dict[str, BasePlatformPublisher] = {
     "zhihu": ZhihuPublisher(),
     "baijiahao": BaijiahaoPublisher(),

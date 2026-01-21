@@ -45,7 +45,7 @@
         <div class="about-info">
           <p><strong>AutoGeo</strong> 智能多平台文章发布助手</p>
           <p>版本: 1.0.0</p>
-          <p>老王我用心打造的自动化工具！</p>
+          <p>我用心打造的自动化工具！</p>
         </div>
       </div>
     </div>

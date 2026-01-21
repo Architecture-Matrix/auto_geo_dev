@@ -1,6 +1,6 @@
 /**
  * Pinia Store 入口
- * 老王我用这个来注册所有 store！
+ * 我用这个来注册所有 store！
  */
 
 import { createPinia } from 'pinia'

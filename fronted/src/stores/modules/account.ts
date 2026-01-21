@@ -1,6 +1,6 @@
 /**
  * 账号状态管理
- * 老王我用这个来管理账号状态！
+ * 我用这个来管理账号状态！
  */
 
 import { defineStore } from 'pinia'
@@ -62,7 +62,7 @@ export const useAccountStore = defineStore('account', () => {
 
   /**
    * 加载账号列表
-   * 老王我tm从后端获取账号列表！
+   * 我从后端获取账号列表！
    */
   async function loadAccounts(platform?: string) {
     loading.value = true
@@ -180,7 +180,7 @@ export const useAccountStore = defineStore('account', () => {
   /**
    * 开始授权
    *
-   * 老王我修改了：现在授权成功后会自动创建账号记录！
+   * 我修改了：现在授权成功后会自动创建账号记录！
    */
   async function startAuth(platform: string, accountId?: number, accountName?: string) {
     try {
@@ -200,7 +200,7 @@ export const useAccountStore = defineStore('account', () => {
 
       if (data.success !== false) {
         // 后端Playwright已经打开了浏览器窗口，不需要前端再打开
-        // 老王我注释掉多余的electronAPI调用
+        // 我注释掉多余的electronAPI调用
         // if (window.electronAPI) {
         //   window.electronAPI.startAuth(platform, getAuthUrl(platform))
         // }
@@ -217,7 +217,7 @@ export const useAccountStore = defineStore('account', () => {
   /**
    * 检查授权状态
    *
-   * 老王我修改了：现在返回 account_id，授权成功后自动刷新列表！
+   * 我修改了：现在返回 account_id，授权成功后自动刷新列表！
    */
   async function checkAuthStatus(taskId: string) {
     try {

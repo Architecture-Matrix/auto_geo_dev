@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 Playwright浏览器管理器
-老王我用异步模式，效率拉满！
+用异步模式，效率拉满！
 """
 
 import asyncio
@@ -16,11 +16,11 @@ from playwright.async_api import async_playwright, Browser, BrowserContext, Page
 from loguru import logger
 from sqlalchemy.orm import Session
 
-from config import (
+from backend.config import (
     BROWSER_TYPE, BROWSER_ARGS, USER_DATA_DIR,
     LOGIN_CHECK_INTERVAL, LOGIN_MAX_WAIT_TIME, PLATFORMS
 )
-from services.crypto import encrypt_cookies, encrypt_storage_state, decrypt_cookies, decrypt_storage_state
+from backend.services.crypto import encrypt_cookies, encrypt_storage_state, decrypt_cookies, decrypt_storage_state
 
 
 class AuthTask:
@@ -50,7 +50,7 @@ class PlaywrightManager:
     """
     Playwright管理器
 
-    老王提醒：这个类管理所有浏览器实例，别tm搞泄漏！
+    注意：这个类管理所有浏览器实例，！
     """
 
     def __init__(self):
@@ -86,7 +86,7 @@ class PlaywrightManager:
 
         self._playwright = await async_playwright().start()
 
-        # 老王我用真实Chrome，不用Chromium被知乎检测！
+        # 用真实Chrome，不用Chromium被知乎检测！
         # Windows Chrome路径
         chrome_paths = [
             r"C:\Program Files\Google\Chrome\Application\chrome.exe",
@@ -152,7 +152,7 @@ class PlaywrightManager:
         """
         创建授权任务
 
-        老王我用 expose_function 绕过 CORS 问题！
+        用 expose_function 绕过 CORS 问题！
         用户在目标页面登录后，切换到控制页点击按钮即可。
 
         Args:
@@ -239,7 +239,7 @@ class PlaywrightManager:
                 cookies_to_save = all_cookies
                 logger.info(f"[授权确认] 登录验证通过，保存全部 {len(cookies_to_save)} 个cookies")
 
-                # 老王新增：提取平台用户名
+                # 新增：提取平台用户名
                 username = await self._extract_username(task.page, task.platform)
                 if username:
                     logger.info(f"[授权确认] 提取到用户名: {username}")
@@ -253,7 +253,7 @@ class PlaywrightManager:
                     return '{"success": false, "message": "数据库连接失败"}'
 
                 try:
-                    from database.models import Account
+                    from backend.database.models import Account
 
                     if task.account_id:
                         # 更新现有账号
@@ -263,7 +263,7 @@ class PlaywrightManager:
                             account.storage_state = encrypt_storage_state(storage_state)
                             account.status = 1
                             account.last_auth_time = task.created_at
-                            account.username = username or account.username  # 老王更新：保存用户名
+                            account.username = username or account.username  # 更新：保存用户名
                             db.commit()
                             task.account_id = account.id
                             logger.info(f"[授权确认] 账号已更新: {account.id}")
@@ -277,7 +277,7 @@ class PlaywrightManager:
                         account = Account(
                             platform=task.platform,
                             account_name=account_name_to_use,
-                            username=username,  # 老王新增：保存用户名
+                            username=username,  # 新增：保存用户名
                             cookies=encrypt_cookies(cookies_to_save),  # 保存全部cookies
                             storage_state=encrypt_storage_state(storage_state),
                             status=1,
@@ -346,7 +346,7 @@ class PlaywrightManager:
 
         # 第二个标签页：打开本地HTML控制页
         static_dir = Path(__file__).parent.parent.parent / "backend" / "static"
-        control_page_path = static_dir / "auth_confirm.html"
+        control_page_path = static_dir / "auth_confirm.hl"
         control_page_url = f"file:///{control_page_path.as_posix()}?task_id={task.task_id}&platform={platform}"
 
         control_page = await context.new_page()
@@ -361,7 +361,7 @@ class PlaywrightManager:
         """
         检测登录状态
 
-        老王提醒：各平台的登录成功判断逻辑不同，需要适配！
+        注意：各平台的登录成功判断逻辑不同，需要适配！
         """
         start_time = datetime.now()
         platform = task.platform
@@ -402,7 +402,7 @@ class PlaywrightManager:
         """
         保存授权结果到数据库
 
-        老王我用这个来自动创建或更新账号记录！
+        用这个来自动创建或更新账号记录！
         """
         db = self._get_db()
         if not db:
@@ -410,7 +410,7 @@ class PlaywrightManager:
             return
 
         try:
-            from database.models import Account
+            from backend.database.models import Account
 
             if task.account_id:
                 # 更新现有账号
@@ -462,7 +462,7 @@ class PlaywrightManager:
         """
         检查各平台登录状态
 
-        老王提醒：这个方法需要根据各平台实际页面结构调整！
+        注意：这个方法需要根据各平台实际页面结构调整！
         """
         try:
             if platform == "zhihu":
@@ -555,7 +555,7 @@ class PlaywrightManager:
         """
         从平台页面提取用户名
 
-        老王我用这个来获取平台用户名并保存到数据库！
+        用这个来获取平台用户名并保存到数据库！
         """
         import re
 
@@ -868,7 +868,7 @@ class PublishTask:
 class PublishManager:
     """
     发布管理器
-    老王我用这个来管理批量发布任务！
+    用这个来管理批量发布任务！
     """
 
     def __init__(self, platforms_config: Dict[str, Any]):

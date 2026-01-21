@@ -1,6 +1,6 @@
 /**
  * Store 统一导出
- * 老王我用这个来统一管理所有 store！
+ * 我用这个来统一管理所有 store！
  */
 
 export { usePlatformStore } from './platform'

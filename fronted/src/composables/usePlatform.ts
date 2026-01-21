@@ -1,6 +1,6 @@
 /**
  * 平台相关 Hook
- * 老王我用这个来简化平台操作！
+ * 我用这个来简化平台操作！
  */
 
 import { computed } from 'vue'

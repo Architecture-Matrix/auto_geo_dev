@@ -1,6 +1,6 @@
 /**
  * 文章状态管理
- * 老王我用这个来管理文章状态！
+ * 我用这个来管理文章状态！
  */
 
 import { defineStore } from 'pinia'
@@ -69,7 +69,7 @@ export const useArticleStore = defineStore('article', () => {
 
   /**
    * 加载文章列表
-   * 老王我tm从后端获取文章列表！
+   * 我从后端获取文章列表！
    */
   async function loadArticles(params: {
     page?: number

@@ -1,12 +1,12 @@
 /**
  * 窗口管理器
- * 老王我用这个来管理应用窗口！
+ * 我用这个来管理应用窗口！
  */
 
 import { BrowserWindow, screen } from 'electron'
 import { join } from 'path'
 import { is } from '@electron-toolkit/utils'
-// 老王我先注释掉图标，等有图标文件再说
+// 我先注释掉图标，等有图标文件再说
 // import icon from '../../../resources/icons/icon.png?asset'
 
 // 窗口状态存储
@@ -14,7 +14,7 @@ let mainWindow: BrowserWindow | null = null
 
 /**
  * 创建主窗口
- * 老王我tm设计了一个漂亮的暗色主题窗口！
+ * 我设计了一个漂亮的暗色主题窗口！
  */
 export function createMainWindow(): BrowserWindow {
   // 获取屏幕尺寸
@@ -26,15 +26,15 @@ export function createMainWindow(): BrowserWindow {
     height: Math.min(900, height - 100),
     x: (width - Math.min(1400, width - 100)) / 2,
     y: (height - Math.min(900, height - 100)) / 2,
-    show: false, // 老王我先用隐藏，等加载完再显示，避免白屏！
+    show: false, // 我先用隐藏，等加载完再显示，避免白屏！
     autoHideMenuBar: true, // 自动隐藏菜单栏
     frame: true, // 显示原生窗口框架
     titleBarStyle: 'default', // 标题栏样式
     backgroundColor: '#1E1E1E', // 暗色背景
-    // icon: icon, // 老王我先注释掉图标
+    // icon: icon, // 我先注释掉图标
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
-      sandbox: true, // 老王我开启沙箱模式，更安全！
+      sandbox: true, // 我开启沙箱模式，更安全！
       contextIsolation: true, // 必须开启！
       nodeIntegration: false, // 必须关闭！
       webSecurity: true, // 启用 Web 安全
@@ -48,7 +48,7 @@ export function createMainWindow(): BrowserWindow {
     mainWindow.webContents.openDevTools() // 打开开发者工具
   } else {
     // 生产模式：加载构建后的文件
-    mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
+    mainWindow.loadFile(join(__dirname, '../renderer/index.hl'))
   }
 
   // 窗口准备好后显示（避免白屏）
@@ -79,7 +79,7 @@ export function getMainWindow(): BrowserWindow | null {
 
 /**
  * 创建授权窗口（独立窗口用于账号授权）
- * 老王我用这个来打开浏览器让用户登录！
+ * 我用这个来打开浏览器让用户登录！
  */
 export function createAuthWindow(platformId: string, authUrl: string): BrowserWindow {
   const authWindow = new BrowserWindow({
@@ -112,6 +112,6 @@ export function showNotification(title: string, body: string): void {
   const { Notification } = require('electron')
 
   if (Notification.isSupported()) {
-    new Notification({ title, body }).show() // 老王我先不显示图标
+    new Notification({ title, body }).show() // 我先不显示图标
   }
 }

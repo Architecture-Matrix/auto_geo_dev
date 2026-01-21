@@ -1,6 +1,6 @@
 /**
  * WebSocket 服务
- * 老王我用这个来处理实时通信！
+ * 我用这个来处理实时通信！
  */
 
 import { ref, onUnmounted } from 'vue'
@@ -162,7 +162,7 @@ const wsService = new WebSocketService()
 
 /**
  * WebSocket Hook
- * 老王我用这个来在组件中使用 WebSocket！
+ * 我用这个来在组件中使用 WebSocket！
  */
 export function useWebSocket(url?: string) {
   const connect = (wsUrl?: string) => {

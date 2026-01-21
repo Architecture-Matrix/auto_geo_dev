@@ -1,12 +1,15 @@
 # -*- coding: utf-8 -*-
 """
 数据模型定义
-老王我用SQLAlchemy ORM，类型安全！
+用SQLAlchemy ORM，类型安全！
 """
 
 from sqlalchemy import Column, Integer, String, Text, DateTime, Boolean, func, ForeignKey
 from sqlalchemy.orm import relationship
-from database import Base
+from backend.database import Base
+
+# 表参数：允许扩展现有表
+TABLE_ARGS = {"extend_existing": True}
 
 
 class Account(Base):
@@ -15,6 +18,7 @@ class Account(Base):
     存储各平台账号信息和授权状态
     """
     __tablename__ = "accounts"
+    __table_args__ = TABLE_ARGS
 
     id = Column(Integer, primary_key=True, autoincrement=True, comment="主键ID")
     platform = Column(String(50), nullable=False, index=True, comment="平台ID：zhihu/baijiahao/sohu/toutiao")
@@ -47,6 +51,7 @@ class Article(Base):
     存储文章内容和基本信息
     """
     __tablename__ = "articles"
+    __table_args__ = TABLE_ARGS
 
     id = Column(Integer, primary_key=True, autoincrement=True, comment="主键ID")
     title = Column(String(200), nullable=False, comment="文章标题")
@@ -80,6 +85,7 @@ class PublishRecord(Base):
     记录文章到各平台的发布状态
     """
     __tablename__ = "publish_records"
+    __table_args__ = TABLE_ARGS
 
     id = Column(Integer, primary_key=True, autoincrement=True, comment="主键ID")
 
@@ -107,3 +113,129 @@ class PublishRecord(Base):
 
     def __repr__(self):
         return f"<PublishRecord article_id={self.article_id} account_id={self.account_id} status={self.publish_status}>"
+
+
+# ==================== GEO相关表 ====================
+
+class Project(Base):
+    """
+    项目表
+    存储客户/项目信息
+    """
+    __tablename__ = "projects"
+    __table_args__ = TABLE_ARGS
+
+    id = Column(Integer, primary_key=True, autoincrement=True, comment="主键ID")
+    name = Column(String(200), nullable=False, comment="项目名称")
+    company_name = Column(String(200), nullable=False, comment="公司名称")
+    domain_keyword = Column(String(200), nullable=True, comment="领域关键词，用于关键词蒸馏")
+    description = Column(Text, nullable=True, comment="项目描述")
+    industry = Column(String(100), nullable=True, comment="行业")
+
+    # 状态
+    status = Column(Integer, default=1, comment="状态：1=活跃 0=停用")
+
+    # 时间戳
+    created_at = Column(DateTime, default=func.now(), comment="创建时间")
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now(), comment="更新时间")
+
+    def __repr__(self):
+        return f"<Project {self.name}>"
+
+
+class Keyword(Base):
+    """
+    关键词表
+    存储AI分析出的高价值关键词
+    """
+    __tablename__ = "keywords"
+    __table_args__ = TABLE_ARGS
+
+    id = Column(Integer, primary_key=True, autoincrement=True, comment="主键ID")
+    project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True, comment="项目ID")
+    keyword = Column(String(200), nullable=False, comment="关键词")
+    difficulty_score = Column(Integer, nullable=True, comment="难度评分（0-100）")
+
+    # 状态
+    status = Column(String(20), default="active", comment="状态：active=活跃 inactive=停用")
+
+    # 时间戳
+    created_at = Column(DateTime, default=func.now(), comment="创建时间")
+
+    def __repr__(self):
+        return f"<Keyword {self.keyword}>"
+
+
+class QuestionVariant(Base):
+    """
+    问题变体表
+    存储基于关键词生成的不同问法
+    """
+    __tablename__ = "question_variants"
+    __table_args__ = TABLE_ARGS
+
+    id = Column(Integer, primary_key=True, autoincrement=True, comment="主键ID")
+    keyword_id = Column(Integer, ForeignKey("keywords.id", ondelete="CASCADE"), nullable=False, index=True, comment="关键词ID")
+    question = Column(Text, nullable=False, comment="问题变体")
+
+    # 时间戳
+    created_at = Column(DateTime, default=func.now(), comment="创建时间")
+
+    def __repr__(self):
+        return f"<QuestionVariant {self.question[:30]}...>"
+
+
+class IndexCheckRecord(Base):
+    """
+    收录检测记录表
+    存储AI平台收录检测结果
+    """
+    __tablename__ = "index_check_records"
+    __table_args__ = TABLE_ARGS
+
+    id = Column(Integer, primary_key=True, autoincrement=True, comment="主键ID")
+    keyword_id = Column(Integer, ForeignKey("keywords.id", ondelete="CASCADE"), nullable=False, index=True, comment="关键词ID")
+    platform = Column(String(50), nullable=False, comment="检测平台：doubao/qianwen/deepseek")
+    question = Column(Text, nullable=False, comment="检测时使用的问题")
+    answer = Column(Text, nullable=True, comment="AI回答内容")
+
+    # 检测结果
+    keyword_found = Column(Boolean, nullable=True, comment="是否包含关键词")
+    company_found = Column(Boolean, nullable=True, comment="是否包含公司名")
+
+    # 时间戳
+    check_time = Column(DateTime, default=func.now(), comment="检测时间")
+
+    def __repr__(self):
+        return f"<IndexCheckRecord keyword_id={self.keyword_id} platform={self.platform}>"
+
+
+class GeoArticle(Base):
+    """
+    GEO文章表
+    存储AI生成的文章及质检信息
+    """
+    __tablename__ = "geo_articles"
+    __table_args__ = TABLE_ARGS
+
+    id = Column(Integer, primary_key=True, autoincrement=True, comment="主键ID")
+    keyword_id = Column(Integer, ForeignKey("keywords.id", ondelete="CASCADE"), nullable=False, index=True, comment="关键词ID")
+    title = Column(Text, nullable=True, comment="文章标题")
+    content = Column(Text, nullable=False, comment="文章正文内容")
+
+    # 质检相关
+    quality_score = Column(Integer, nullable=True, comment="质量评分（0-100）")
+    ai_score = Column(Integer, nullable=True, comment="AI味检测分数（0-100，越高越像AI）")
+    readability_score = Column(Integer, nullable=True, comment="可读性评分（0-100）")
+    quality_status = Column(String(20), default="pending", comment="质检状态：pending=待检查 passed=通过 failed=未通过")
+
+    # 发布相关
+    platform = Column(String(50), nullable=True, comment="目标发布平台")
+    publish_status = Column(String(20), default="draft", comment="发布状态：draft=草稿 published=已发布 failed=发布失败")
+
+    # 时间戳
+    created_at = Column(DateTime, default=func.now(), comment="创建时间")
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now(), comment="更新时间")
+
+    def __repr__(self):
+        return f"<GeoArticle id={self.id} keyword_id={self.keyword_id}>"

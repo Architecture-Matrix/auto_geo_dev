@@ -1,6 +1,6 @@
 # 平台登录 Cookie 调研报告
 
-> 老王我亲自调研的，数据真实可靠！
+> 开发者我亲自调研的，数据真实可靠！
 >
 > 调研日期: 2026-01-09
 
@@ -30,7 +30,7 @@
 ### 1.3 实现建议
 
 ```python
-# 老王建议：保存完整的 cookies，不要只保存几个
+# 开发者建议：保存完整的 cookies，不要只保存几个
 # 因为知乎可能会验证多个 cookie 的组合
 
 # 必须保留的核心 cookies
@@ -77,7 +77,7 @@ BAIDU_CORE_COOKIES = ['BDUSS', 'STOKEN', 'PTOKEN', 'BAIDUID']
 # 百家号特定 cookies (从 baijiahao.baidu.com 域获取)
 BAIJIAHAO_COOKIES = ['PHPSESSID', 'theme']
 
-# 老王提醒：百家号登录可能需要同时获取两个域的 cookie！
+# 开发者提醒：百家号登录可能需要同时获取两个域的 cookie！
 ```
 
 ---
@@ -112,7 +112,7 @@ BAIJIAHAO_COOKIES = ['PHPSESSID', 'theme']
 
 ```python
 # 搜狐的 cookie 相对较少公开信息
-# 老王建议保存所有 .sohu.com 域下的 cookie
+# 开发者建议保存所有 .sohu.com 域下的 cookie
 
 # 已确认的 cookie
 SUV = '唯一设备标识'
@@ -128,7 +128,7 @@ SESSION_COOKIES = ['SMPID', 'SSID', 'SESSIONID']  # 需要实际测试
 ### 4.1 Cookie 保存策略
 
 ```python
-# 老王的建议：全部保存，别精简！
+# 开发者的建议：全部保存，别精简！
 # 1. 各平台的反爬策略不同，可能验证多个 cookie 的组合
 # 2. cookie 文件不大，全保存更安全
 # 3. 使用 Playwright 的 context.cookies() 直接获取全部
@@ -207,7 +207,7 @@ async def check_login_status(page, platform):
 
 ---
 
-## 七、老王总结
+## 七、开发者总结
 
 | 平台 | 核心 Cookie | 跨域 | 难度 |
 |------|------------|------|------|
@@ -223,4 +223,4 @@ async def check_login_status(page, platform):
 
 ---
 
-*老王我tm研究得够仔细了吧！*
+*开发者我tm研究得够仔细了吧！*

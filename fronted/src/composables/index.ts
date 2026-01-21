@@ -1,6 +1,6 @@
 /**
  * Composables 统一导出
- * 老王我用这个来管理所有 hooks！
+ * 我用这个来管理所有 hooks！
  */
 
 export * from './useAccount'

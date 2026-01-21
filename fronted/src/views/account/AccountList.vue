@@ -175,7 +175,7 @@ const saveAccount = async () => {
 
 /**
  * 授权新账号
- * 老王我修改了：现在直接授权，不需要先创建账号！
+ * 我修改了：现在直接授权，不需要先创建账号！
  */
 const authNewAccount = async () => {
   if (!formData.value.platform) {

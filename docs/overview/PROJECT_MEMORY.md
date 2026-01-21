@@ -16,7 +16,7 @@
 
 > 📘 **详细架构文档：** [`.claude/docs/ARCHITECTURE.md`](.claude/docs/ARCHITECTURE.md)
 >
-> 老王备注：里面有完整的 Vite + Electron + Python 通信关系说明！
+> 开发者备注：里面有完整的 Vite + Electron + Python 通信关系说明！
 
 ### 整体架构
 ```
@@ -224,7 +224,7 @@ auto_geo/
 ## 平台适配器设计
 
 ### 开闭原则（OCP）
-老王我用适配器模式实现了开闭原则！新增平台只需：
+开发者我用适配器模式实现了开闭原则！新增平台只需：
 
 1. **添加平台配置** (`src/core/config/platform.ts`)
 ```typescript
@@ -331,7 +331,7 @@ AUTO_GEO_ENCRYPTION_KEY=你的32字节密钥
 
 ---
 
-**老王备注：** 项目框架完全按照架构设计文档搭建！
+**开发者备注：** 项目框架完全按照架构设计文档搭建！
 ## 当前进度 @ 2025-01-09
 
 ### ✅ 已完成 (v1.1)

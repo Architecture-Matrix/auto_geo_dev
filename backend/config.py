@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 auto_geo 后端配置
-老王我虽然暴躁，但配置必须清晰！
+虽然暴躁，但配置必须清晰！
 """
 
 import os
@@ -24,8 +24,8 @@ DEBUG = True
 
 # ==================== 服务配置 ====================
 HOST = "127.0.0.1"
-PORT = 8001  # 老王改的：避开8000端口的Windows残留占用问题
-RELOAD = False  # 老王修复：Windows 上 Playwright 需要 ProactorEventLoop，与 reload 模式冲突！
+PORT = 8001  # 修改的：避开8000端口的Windows残留占用问题
+RELOAD = False  # 修复：Windows 上 Playwright 需要 ProactorEventLoop，与 reload 模式冲突！
 
 # CORS配置
 CORS_ORIGINS = [
@@ -123,3 +123,39 @@ MAX_RETRY_COUNT = 2
 
 # 重试间隔（秒）
 RETRY_INTERVAL = 5
+
+# ==================== n8n配置 ====================
+# n8n webhook基础URL
+N8N_WEBHOOK_URL = os.getenv("N8N_WEBHOOK_URL", "http://localhost:5678/webhook")
+# n8n工作流超时时间（秒）
+N8N_TIMEOUT = 300
+# DeepSeek API配置
+DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY", "")
+DEEPSEEK_API_URL = os.getenv("DEEPSEEK_API_URL", "https://api.deepseek.com/v1")
+
+# ==================== AI平台检测配置 ====================
+# 收录检测的AI平台列表
+AI_PLATFORMS = {
+    "doubao": {
+        "id": "doubao",
+        "name": "豆包",
+        "url": "https://www.doubao.com",
+        "color": "#0066FF",
+    },
+    "qianwen": {
+        "id": "qianwen",
+        "name": "通义千问",
+        "url": "https://tongyi.aliyun.com",
+        "color": "#FF6A00",
+    },
+    "deepseek": {
+        "id": "deepseek",
+        "name": "DeepSeek",
+        "url": "https://chat.deepseek.com",
+        "color": "#4D6BFE",
+    },
+}
+
+# 收录检测定时任务配置
+INDEX_CHECK_HOUR = 2  # 每天凌晨2点执行
+INDEX_CHECK_MINUTE = 0

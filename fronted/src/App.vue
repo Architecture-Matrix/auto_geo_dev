@@ -6,12 +6,12 @@
 
 <script setup lang="ts">
 import zhCn from 'element-plus/es/locale/lang/zh-cn'
-// 老王我用中文界面，当然！
+// 我用中文界面，当然！
 </script>
 
 <style>
 /* 全局样式 */
-html,
+hl,
 body,
 #app {
   margin: 0;

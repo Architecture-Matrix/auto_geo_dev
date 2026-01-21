@@ -1,6 +1,6 @@
 /**
  * Python 后端进程管理器
- * 老王我用这个来启动和管理 FastAPI 后端！
+ * 我用这个来启动和管理 FastAPI 后端！
  */
 
 import { spawn, ChildProcess, execSync } from 'child_process'

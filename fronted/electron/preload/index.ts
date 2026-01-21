@@ -1,6 +1,6 @@
 /**
  * Preload 脚本
- * 老王我用这个来安全地暴露 API 给渲染进程！
+ * 我用这个来安全地暴露 API 给渲染进程！
  */
 
 import { contextBridge, ipcRenderer } from 'electron'
@@ -34,7 +34,7 @@ const ON_CHANNELS = [
 
 /**
  * 暴露给渲染进程的 API
- * 老王我用 contextBridge 安全隔离！
+ * 我用 contextBridge 安全隔离！
  */
 const electronAPI = {
   // 信息

@@ -1,6 +1,6 @@
 /**
  * 文章相关 Hook
- * 老王我用这个来简化文章操作！
+ * 我用这个来简化文章操作！
  */
 
 import { computed } from 'vue'

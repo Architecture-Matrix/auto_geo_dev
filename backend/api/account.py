@@ -1,23 +1,23 @@
 # -*- coding: utf-8 -*-
 """
 账号管理API
-老王我写的API，简洁高效！
+写的API，简洁高效！
 """
 
 from typing import List
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
-from database import get_db
-from database.models import Account
-from schemas import (
+from backend.database import get_db
+from backend.database.models import Account
+from backend.schemas import (
     AccountCreate, AccountUpdate, AccountResponse, AccountDetailResponse,
     AuthStartRequest, AuthStartResponse, AuthStatusResponse,
     ApiResponse
 )
-from config import PLATFORMS
-from services.playwright_mgr import playwright_mgr
-from services.crypto import encrypt_cookies, encrypt_storage_state
+from backend.config import PLATFORMS
+from backend.services.playwright_mgr import playwright_mgr
+from backend.services.crypto import encrypt_cookies, encrypt_storage_state
 from loguru import logger
 
 
@@ -53,7 +53,7 @@ async def get_accounts(
     """
     获取账号列表
 
-    老王提醒：支持按平台和状态筛选！
+    注意：支持按平台和状态筛选！
     """
     query = db.query(Account)
 
@@ -96,7 +96,7 @@ async def create_account(account_data: AccountCreate, db: Session = Depends(get_
     """
     创建账号
 
-    老王提醒：创建后需要授权才能使用！
+    注意：创建后需要授权才能使用！
     """
     # 检查平台是否支持
     if account_data.platform not in PLATFORMS:
@@ -148,7 +148,7 @@ async def delete_account(account_id: int, db: Session = Depends(get_db)):
     """
     删除账号
 
-    老王提醒：删除会级联删除相关的发布记录！
+    注意：删除会级联删除相关的发布记录！
     """
     account = db.query(Account).filter(Account.id == account_id).first()
     if not account:
@@ -168,7 +168,7 @@ async def start_auth(auth_data: AuthStartRequest, db: Session = Depends(get_db))
     """
     开始账号授权
 
-    老王提醒：这个方法会打开浏览器窗口！授权成功后自动创建或更新账号！
+    注意：这个方法会打开浏览器窗口！授权成功后自动创建或更新账号！
     """
     platform = auth_data.platform
 
@@ -208,7 +208,7 @@ async def get_auth_status(task_id: str, db: Session = Depends(get_db)):
     """
     获取授权状态
 
-    老王提醒：前端应该轮询这个接口！授权成功后会自动创建账号！
+    注意：前端应该轮询这个接口！授权成功后会自动创建账号！
     """
     task = playwright_mgr.get_auth_task(task_id)
     if not task:
@@ -238,7 +238,7 @@ async def save_auth(task_id: str, account_id: int, db: Session = Depends(get_db)
     """
     手动保存授权结果（用于新账号）
 
-    老王提醒：新账号授权完成后需要调用这个接口！
+    注意：新账号授权完成后需要调用这个接口！
     """
     task = playwright_mgr.get_auth_task(task_id)
     if not task:
@@ -270,7 +270,7 @@ async def confirm_auth(task_id: str, db: Session = Depends(get_db)):
     """
     用户手动确认授权完成
 
-    老王我提取当前浏览器的 cookie 和 storage！
+    提取当前浏览器的 cookie 和 storage！
     用户点击浏览器里的"授权完成"按钮后会调用这个接口。
     """
     task = playwright_mgr.get_auth_task(task_id)
@@ -304,7 +304,7 @@ async def confirm_auth(task_id: str, db: Session = Depends(get_db)):
 
     # 保存到数据库
     try:
-        from database.models import Account
+        from backend.database.models import Account
 
         if task.account_id:
             # 更新现有账号

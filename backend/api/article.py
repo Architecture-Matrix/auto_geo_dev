@@ -1,16 +1,16 @@
 # -*- coding: utf-8 -*-
 """
 文章管理API
-老王我写的文章API，简单明了！
+写的文章API，简单明了！
 """
 
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
-from database import get_db
-from database.models import Article
-from schemas import ArticleCreate, ArticleUpdate, ArticleResponse, ArticleListResponse, ApiResponse
+from backend.database import get_db
+from backend.database.models import Article
+from backend.schemas import ArticleCreate, ArticleUpdate, ArticleResponse, ArticleListResponse, ApiResponse
 from loguru import logger
 from sqlalchemy import func
 
@@ -29,7 +29,7 @@ async def get_articles(
     """
     获取文章列表
 
-    老王提醒：支持分页、状态筛选、关键词搜索！
+    注意：支持分页、状态筛选、关键词搜索！
     """
     query = db.query(Article)
 
@@ -70,7 +70,7 @@ async def create_article(article_data: ArticleCreate, db: Session = Depends(get_
     """
     创建文章
 
-    老王提醒：初始状态为草稿！
+    注意：初始状态为草稿！
     """
     article = Article(
         title=article_data.title,
@@ -127,7 +127,7 @@ async def delete_article(article_id: int, db: Session = Depends(get_db)):
     """
     删除文章
 
-    老王提醒：删除会级联删除相关的发布记录！
+    注意：删除会级联删除相关的发布记录！
     """
     article = db.query(Article).filter(Article.id == article_id).first()
     if not article:

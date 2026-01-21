@@ -1,6 +1,6 @@
 /**
  * IPC 通信处理器
- * 老王我用这个来处理渲染进程和主进程之间的通信！
+ * 我用这个来处理渲染进程和主进程之间的通信！
  */
 
 import { ipcMain, shell, dialog } from 'electron'
@@ -31,7 +31,7 @@ const SEND_CHANNELS = [
 
 /**
  * 验证发送者（安全检查）
- * 老王我用这个来防止SB攻击！
+ * 我用这个来防止攻击！
  */
 function validateSender(frame: any): boolean {
   if (!frame) return false
@@ -161,7 +161,7 @@ export function registerHandlers(): void {
     return backendManager.backendManager.getConfig()
   })
 
-  // 老王提示：未注册的通道会被拒绝，安全第一！
+  // 提示：未注册的通道会被拒绝，安全第一！
   ipcMain.handle('unknown-channel', () => {
     throw new Error('Unknown IPC channel')
   })

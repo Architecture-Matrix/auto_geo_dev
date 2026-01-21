@@ -1,6 +1,6 @@
 /**
  * 系统托盘管理器
- * 老王我用这个来管理系统托盘图标！
+ * 我用这个来管理系统托盘图标！
  */
 
 import { Tray, Menu, nativeImage, app } from 'electron'
@@ -11,7 +11,7 @@ let tray: Tray | null = null
 
 /**
  * 创建系统托盘
- * 老王我设计了一个简洁的托盘菜单！
+ * 我设计了一个简洁的托盘菜单！
  */
 export function createTray(mainWindow: any): void {
   // 开发环境使用默认图标，生产环境使用自定义图标
@@ -90,7 +90,7 @@ export function destroyTray(): void {
 export function updateTrayIcon(isActive: boolean): void {
   if (!tray) return
 
-  // 老王提示：可以用不同图标表示不同状态
+  // 提示：可以用不同图标表示不同状态
   // 例如：有发布任务进行中时显示蓝色图标
   // 这里简单实现，实际可以准备多个图标
 }

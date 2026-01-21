@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 发布管理 API
-老王我用这个接口来处理文章发布！
+用这个接口来处理文章发布！
 """
 
 import asyncio
@@ -11,9 +11,9 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from loguru import logger
 
-from database import get_db
-from database.models import PublishRecord, Account, Article
-from schemas import (
+from backend.database import get_db
+from backend.database.models import PublishRecord, Account, Article
+from backend.schemas import (
     ApiResponse,
     PublishTaskCreate,
     PublishTaskResponse,
@@ -21,7 +21,7 @@ from schemas import (
     PublishProgressItem,
     PublishStatus,
 )
-from config import PLATFORMS
+from backend.config import PLATFORMS
 
 
 router = APIRouter(prefix="/api/publish", tags=["发布管理"])
@@ -31,7 +31,7 @@ router = APIRouter(prefix="/api/publish", tags=["发布管理"])
 class PublishTaskManager:
     """
     发布任务管理器
-    老王我用这个来跟踪批量发布任务！
+    用这个来跟踪批量发布任务！
     """
     def __init__(self):
         self._tasks: dict = {}  # task_id -> task_info
@@ -89,11 +89,23 @@ class PublishTaskManager:
 # 全局任务管理器实例
 publish_task_manager = PublishTaskManager()
 
+# WebSocket管理器（由main.py设置）
+_ws_manager = None
+
+def set_ws_manager(ws_mgr):
+    """设置WebSocket管理器，避免循环导入"""
+    global _ws_manager
+    _ws_manager = ws_mgr
+
+def get_ws_manager():
+    """获取WebSocket管理器"""
+    return _ws_manager
+
 
 # ==================== 导入发布服务 ====================
 def get_publish_manager():
     """延迟导入，避免循环依赖"""
-    from services.playwright_mgr import PublishManager, playwright_mgr
+    from backend.services.playwright_mgr import PublishManager, playwright_mgr
     return PublishManager(PLATFORMS)
 
 
@@ -104,7 +116,7 @@ async def get_supported_platforms():
     """
     获取支持的发布平台
 
-    老王我用这个接口来告诉前端有哪些平台可以用！
+    用这个接口来告诉前端有哪些平台可以用！
     """
     platforms = []
     for platform_id, config in PLATFORMS.items():
@@ -127,7 +139,7 @@ async def create_publish_task(
     """
     创建发布任务
 
-    老王我用这个接口来启动批量发布！
+    用这个接口来启动批量发布！
     """
     # 1. 验证文章和账号是否存在
     articles = db.query(Article).filter(Article.id.in_(request.article_ids)).all()
@@ -173,7 +185,7 @@ async def create_publish_task(
     db.commit()
 
     # 5. 后台执行发布任务
-    # 老王提醒：用asyncio.create_task而不是BackgroundTasks，因为要运行async函数！
+    # 注意：用asyncio.create_task而不是BackgroundTasks，因为要运行async函数！
     asyncio.create_task(execute_publish_task(task_id, articles, accounts))
 
     logger.info(f"发布任务已创建: {task_id}, 文章数: {len(articles)}, 账号数: {len(accounts)}")
@@ -190,9 +202,9 @@ async def execute_publish_task(task_id: str, articles: List[Article],
     """
     执行发布任务（后台异步任务）
 
-    老王提醒：这个函数在事件循环中运行！
+    注意：这个函数在事件循环中运行！
     """
-    from services.playwright_mgr import PublishManager, playwright_mgr
+    from backend.services.playwright_mgr import PublishManager, playwright_mgr
 
     # 获取发布管理器
     publish_mgr = PublishManager(PLATFORMS)
@@ -228,7 +240,7 @@ async def execute_publish_task(task_id: str, articles: List[Article],
         )
 
         # 更新数据库记录
-        from database import SessionLocal
+        from backend.database import SessionLocal
         db = SessionLocal()
         try:
             record = db.query(PublishRecord).filter(
@@ -261,26 +273,27 @@ async def execute_publish_task(task_id: str, articles: List[Article],
             article_obj = db.query(Article).filter(Article.id == article_id).first()
 
             if account_obj and article_obj:
-                from config import PLATFORMS
+                from backend.config import PLATFORMS
                 platform_config = PLATFORMS.get(account_obj.platform, {})
 
                 # 推送WebSocket进度更新
-                from main import ws_manager
-                await ws_manager.broadcast({
-                    "type": "publish_progress",
-                    "task_id": task_id,
-                    "data": {
-                        "article_id": article_id,
-                        "article_title": article_obj.title,
-                        "account_id": account_id,
-                        "account_name": account_obj.account_name,
-                        "platform": account_obj.platform,
-                        "platform_name": platform_config.get("name", account_obj.platform),
-                        "status": status,
-                        "platform_url": platform_url,
-                        "error_msg": error_msg,
-                    }
-                })
+                ws_mgr = get_ws_manager()
+                if ws_mgr:
+                    await ws_mgr.broadcast({
+                        "type": "publish_progress",
+                        "task_id": task_id,
+                        "data": {
+                            "article_id": article_id,
+                            "article_title": article_obj.title,
+                            "account_id": account_id,
+                            "account_name": account_obj.account_name,
+                            "platform": account_obj.platform,
+                            "platform_name": platform_config.get("name", account_obj.platform),
+                            "status": status,
+                            "platform_url": platform_url,
+                            "error_msg": error_msg,
+                        }
+                    })
 
         except Exception as e:
             logger.error(f"更新发布记录失败: {e}")
@@ -301,7 +314,7 @@ async def get_publish_progress(task_id: str, db: Session = Depends(get_db)):
     """
     获取发布进度
 
-    老王我用这个接口来查询发布状态！
+    用这个接口来查询发布状态！
     """
     task_info = publish_task_manager.get_task(task_id)
 
@@ -362,7 +375,7 @@ async def get_publish_records(
     """
     获取发布记录
 
-    老王我用这个接口来查看历史发布记录！
+    用这个接口来查看历史发布记录！
     """
     query = db.query(PublishRecord)
 
@@ -411,7 +424,7 @@ async def retry_publish(
     """
     重试发布
 
-    老王我用这个接口来重新发布失败的任务！
+    用这个接口来重新发布失败的任务！
     """
     # 1. 查找发布记录
     record = db.query(PublishRecord).filter(PublishRecord.id == record_id).first()

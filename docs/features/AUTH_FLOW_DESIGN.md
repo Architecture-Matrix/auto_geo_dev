@@ -128,7 +128,7 @@ async def confirm_auth(task_id: str, db: Session = Depends(get_db)):
     """
     用户手动确认授权完成
 
-    老王我提取当前浏览器的 cookie 和 storage！
+    开发者我提取当前浏览器的 cookie 和 storage！
     """
     task = playwright_mgr.get_auth_task(task_id)
     if not task:
@@ -273,4 +273,4 @@ async def confirm_auth(task_id: str, db: Session = Depends(get_db)):
 
 ---
 
-**老王备注**: 这个方案的核心是把控制权交给用户，不再依赖不可靠的自动检测！
+**开发者备注**: 这个方案的核心是把控制权交给用户，不再依赖不可靠的自动检测！

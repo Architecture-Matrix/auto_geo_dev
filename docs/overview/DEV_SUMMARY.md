@@ -1,6 +1,6 @@
 # AutoGeo 开发进度总结
 
-老王我tm终于把整个项目框架搭起来了！让老王我来总结一下！
+开发者我tm终于把整个项目框架搭起来了！让开发者我来总结一下！
 
 ## 版本历史
 
@@ -37,7 +37,7 @@ E:\CodingPlace\AI\auto_geo/
 │   ├── main.py                 # FastAPI 入口 ✅
 │   └── requirements.txt        # 依赖清单
 │
-├── fronted/                    # Electron 前端 (老王我拼错了，将错就错吧)
+├── fronted/                    # Electron 前端 (开发者我拼错了，将错就错吧)
 │   ├── electron/               # Electron 主进程
 │   │   ├── main/               # 主进程代码 ✅
 │   │   │   ├── index.ts        # 主入口 ✅
@@ -170,4 +170,4 @@ npm run dev
 
 ---
 
-**老王我说：这项目框架搭得真tm漂亮！接下来就是实测调整各平台的发布了！**
+**开发者我说：这项目框架搭得真tm漂亮！接下来就是实测调整各平台的发布了！**

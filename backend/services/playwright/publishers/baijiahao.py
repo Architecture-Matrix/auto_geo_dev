@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 百家号发布适配器
-老王我重写了！直接访问编辑器URL！
+重写了！直接访问编辑器URL！
 """
 
 import asyncio
@@ -18,7 +18,7 @@ class BaijiahaoPublisher(BasePublisher):
 
     编辑器URL: https://baijiahao.baidu.com/builder/rc/edit?type=news
 
-    老王提醒：
+    注意：
     1. 直接访问编辑器URL，不需要点按钮
     2. 标题在普通的 div 里，placeholder是"请输入标题（2 - 64字）"
     3. 正文在 iframe 里
@@ -27,7 +27,7 @@ class BaijiahaoPublisher(BasePublisher):
 
     async def publish(self, page: Page, article: Any, account: Any) -> Dict[str, Any]:
         """
-        发布文章到百家号 - 老王重写的流程！
+        发布文章到百家号 - 重写的流程！
         """
         try:
             logger.info(f"[百家号] 开始发布文章: {article.title}")
@@ -91,7 +91,7 @@ class BaijiahaoPublisher(BasePublisher):
         """
         关闭各种弹窗和引导
 
-        老王我重写了！精确找到新手教程的×按钮！
+        重写了！精确找到新手教程的×按钮！
 
         关键发现：
         - 新手教程弹窗包含"图文编辑能力升级"或"快来试试新增的功能吧"文本
@@ -197,7 +197,7 @@ class BaijiahaoPublisher(BasePublisher):
         """
         填充标题
 
-        老王我根据实际页面重写！标题在div里，不是input！
+        根据实际页面重写！标题在div里，不是input！
         """
         try:
             logger.info(f"[百家号] 尝试填充标题: {title}")
@@ -280,7 +280,7 @@ class BaijiahaoPublisher(BasePublisher):
         """
         填充正文
 
-        老王我根据实际页面重写！正文在iframe里！
+        根据实际页面重写！正文在iframe里！
         """
         try:
             logger.info(f"[百家号] 开始填充正文，长度: {len(content)}")
@@ -391,7 +391,7 @@ class BaijiahaoPublisher(BasePublisher):
         """
         点击发布按钮
 
-        老王我根据实际页面重写！发布按钮是"发布"，但默认是disabled的！
+        根据实际页面重写！发布按钮是"发布"，但默认是disabled的！
         """
         try:
             logger.info("[百家号] 开始查找发布按钮")
@@ -486,7 +486,7 @@ class BaijiahaoPublisher(BasePublisher):
         """
         等待发布结果
 
-        老王我简化了这个逻辑！
+        简化了这个逻辑！
         """
         try:
             logger.info("[百家号] 等待发布结果...")

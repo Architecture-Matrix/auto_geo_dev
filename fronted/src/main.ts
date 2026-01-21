@@ -1,6 +1,6 @@
 /**
  * AutoGeo Vue 应用入口
- * 老王我用这个来启动整个前端！
+ * 我用这个来启动整个前端！
  */
 
 import { createApp } from 'vue'

@@ -1,8 +1,16 @@
 # -*- coding: utf-8 -*-
 """
 AutoGeo 后端服务入口
-老王我用FastAPI，异步高性能！
+用FastAPI，异步高性能！
 """
+
+import sys
+import os
+from pathlib import Path
+
+# 添加项目根目录到Python路径
+project_root = Path(__file__).parent.parent
+sys.path.insert(0, str(project_root))
 
 import uuid
 from contextlib import asynccontextmanager
@@ -11,12 +19,12 @@ from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from loguru import logger
 
-from config import (
+from backend.config import (
     APP_NAME, APP_VERSION, DEBUG, HOST, PORT, RELOAD,
     CORS_ORIGINS, PLATFORMS
 )
-from database import init_db, get_db
-from api import account, article, publish
+from backend.database import init_db, get_db
+from backend.api import account, article, publish, keywords, geo, index_check, reports, notifications, scheduler
 
 
 # ==================== WebSocket连接管理 ====================
@@ -49,7 +57,7 @@ class ConnectionManager:
             await connection.send_json(message)
 
 
-ws_manager = ConnectionManager()  # WebSocket管理器，老王我给个清晰的命名
+ws_manager = ConnectionManager()  # WebSocket管理器，给个清晰的命名
 
 
 # ==================== 应用生命周期 ====================
@@ -62,9 +70,13 @@ async def lifespan(app: FastAPI):
 
     # 设置 account API 的 WebSocket 管理器
     account.set_ws_manager(ws_manager)
+    # 设置 publish API 的 WebSocket 管理器
+    publish.set_ws_manager(ws_manager)
+    # 设置 notifications API 的 WebSocket 回调
+    notifications.set_ws_callback(ws_manager.broadcast)
 
     # 导入并启动Playwright（延迟导入）
-    from services.playwright_mgr import playwright_mgr
+    from backend.services.playwright_mgr import playwright_mgr
     # 设置数据库工厂
     playwright_mgr.set_db_factory(get_db)
     # 设置WebSocket回调
@@ -75,7 +87,7 @@ async def lifespan(app: FastAPI):
 
     # 关闭时
     logger.info("正在关闭服务...")
-    from services.playwright_mgr import playwright_mgr
+    from backend.services.playwright_mgr import playwright_mgr
     await playwright_mgr.stop()
 
 
@@ -99,7 +111,13 @@ app.add_middleware(
 # 注册路由
 app.include_router(account.router)
 app.include_router(article.router)
-app.include_router(publish.router)  # 老王我加上发布路由！
+app.include_router(publish.router)  # 加上发布路由！
+app.include_router(keywords.router)  # 加上关键词路由！
+app.include_router(geo.router)  # 加上GEO文章路由！
+app.include_router(index_check.router)  # 加上收录检测路由！
+app.include_router(reports.router)  # 加上数据报表路由！
+app.include_router(notifications.router)  # 加上预警通知路由！
+app.include_router(scheduler.router)  # 加上定时任务路由！
 
 
 # ==================== 基础接口 ====================
@@ -133,7 +151,7 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str = None):
     """
     WebSocket端点
 
-    老王提醒：用于实时推送发布进度！
+    注意：用于实时推送发布进度！
     """
     if not client_id:
         client_id = str(uuid.uuid4())
@@ -163,7 +181,7 @@ if __name__ == "__main__":
     import asyncio
     import sys
 
-    # 老王修复：Windows 上 asyncio 子进程需要 ProactorEventLoop
+    # 修复：Windows 上 asyncio 子进程需要 ProactorEventLoop
     if sys.platform == "win32":
         asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
 

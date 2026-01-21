@@ -1,6 +1,6 @@
 /**
  * 开发启动脚本
- * 老王我用这个来同时启动 Vite 和 Electron！
+ * 我用这个来同时启动 Vite 和 Electron！
  *
  * 修复说明：
  * - 自动编译 electron 主进程代码后再启动

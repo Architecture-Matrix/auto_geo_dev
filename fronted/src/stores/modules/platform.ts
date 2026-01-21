@@ -1,6 +1,6 @@
 /**
  * 平台状态管理
- * 老王我用这个来管理平台状态！
+ * 我用这个来管理平台状态！
  */
 
 import { defineStore } from 'pinia'
