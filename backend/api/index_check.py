@@ -26,6 +26,12 @@ class CheckRequest(BaseModel):
     """收录检测请求"""
     keyword_id: int
     company_name: str
+<<<<<<< HEAD
+=======
+<<<<<<< HEAD
+    platforms: Optional[List[str]] = ["doubao", "qianwen", "deepseek"]
+=======
+>>>>>>> 38d2541 (feat: 收录查询功能开发中-保存当前进度)
     platforms: Optional[List[str]] = None
 
 
@@ -43,6 +49,10 @@ class CheckResultResponse(BaseModel):
     company_found: bool
     success: bool
 
+<<<<<<< HEAD
+=======
+>>>>>>> d55bdd5 (feat: 收录查询功能开发中-保存当前进度)
+>>>>>>> 38d2541 (feat: 收录查询功能开发中-保存当前进度)
 
 class RecordResponse(BaseModel):
     """检测记录响应"""
@@ -90,8 +100,77 @@ async def check_index(
     keyword = db.query(Keyword).filter(Keyword.id == request.keyword_id).first()
     if not keyword:
         raise HTTPException(status_code=404, detail="关键词不存在")
+<<<<<<< HEAD
+=======
+    service = IndexCheckService(db)
+<<<<<<< HEAD
+    background_tasks.add_task(
+        service.run_ai_search_check,
+        keyword_id=request.keyword_id,
+        company_name=request.company_name,
+        platforms=request.platforms
+    )
+    return ApiResponse(success=True, message="监测任务已下发至后台执行")
+=======
+
+    # 执行检测
+    try:
+        results = await service.check_keyword(
+            keyword_id=request.keyword_id,
+            company_name=request.company_name,
+            platforms=request.platforms
+        )
+
+        return ApiResponse(
+            success=True,
+            message=f"检测完成，共{len(results)}条记录",
+            data={"results": results}
+        )
+    except Exception as e:
+        logger.error(f"收录检测失败: {e}")
+        return ApiResponse(success=False, message=f"检测失败: {str(e)}")
+
+@router.post("/batch/check", response_model=ApiResponse)
+async def batch_check_index(
+    request: BatchCheckRequest,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db)
+):
+    """
+    批量执行收录检测
+    
+    调用Playwright自动化检测项目下所有关键词在AI平台的收录情况。
+    注意：这是一个耗时操作，建议异步执行！
+    """
+    # 验证项目存在
+    from backend.database.models import Project
+    project = db.query(Project).filter(Project.id == request.project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="项目不存在")
 
     service = IndexCheckService(db)
+
+    # 执行批量检测
+    try:
+        results = await service.check_project_keywords(
+            project_id=request.project_id,
+            platforms=request.platforms
+        )
+
+        return ApiResponse(
+            success=True,
+            message=f"批量检测完成，共{len(results)}条记录",
+            data={"results": results}
+        )
+    except Exception as e:
+        logger.error(f"批量收录检测失败: {e}")
+        return ApiResponse(success=False, message=f"批量检测失败: {str(e)}")
+
+>>>>>>> d55bdd5 (feat: 收录查询功能开发中-保存当前进度)
+>>>>>>> 38d2541 (feat: 收录查询功能开发中-保存当前进度)
+
+    service = IndexCheckService(db)
+<<<<<<< HEAD
 
     # 执行检测
     try:
@@ -222,6 +301,13 @@ async def batch_delete_records(
     service = IndexCheckService(db)
     count = service.batch_delete_records(request.record_ids)
     return ApiResponse(success=True, message=f"已删除 {count} 条记录")
+=======
+<<<<<<< HEAD
+    return service.get_check_records(keyword_id=keyword_id, limit=limit)
+=======
+    records = service.get_check_records(keyword_id, platform, limit)
+    return records
+>>>>>>> 38d2541 (feat: 收录查询功能开发中-保存当前进度)
 
 
 @router.get("/keywords/{keyword_id}/hit-rate", response_model=HitRateResponse)
@@ -375,3 +461,7 @@ async def delete_record(record_id: int, db: Session = Depends(get_db)):
 
     logger.info(f"检测记录已删除: {record_id}")
     return ApiResponse(success=True, message="记录已删除")
+<<<<<<< HEAD
+=======
+>>>>>>> d55bdd5 (feat: 收录查询功能开发中-保存当前进度)
+>>>>>>> 38d2541 (feat: 收录查询功能开发中-保存当前进度)
