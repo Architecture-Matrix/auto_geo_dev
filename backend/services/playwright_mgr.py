@@ -12,11 +12,9 @@ import uuid
 from datetime import datetime
 from pathlib import Path
 from typing import Optional, Dict, List, Any, Callable
-
 from playwright.async_api import async_playwright, Browser, BrowserContext, Page
 from loguru import logger
 from sqlalchemy.orm import Session
-
 from backend.config import (
     BROWSER_TYPE, BROWSER_ARGS,
     LOGIN_CHECK_INTERVAL, LOGIN_MAX_WAIT_TIME, PLATFORMS
@@ -28,7 +26,6 @@ from backend.services.playwright.publishers.base import registry
 
 class AuthTask:
     """授权任务模型"""
-
     def __init__(
             self,
             platform: str,
@@ -55,7 +52,6 @@ class PlaywrightManager:
     Playwright 管理器 (单例模式)
     管理所有浏览器实例、授权任务和上下文
     """
-
     def __init__(self):
         self._playwright = None
         self._browser: Optional[Browser] = None
@@ -96,9 +92,10 @@ class PlaywrightManager:
             return
 
         logger.info("🚀 正在启动 Playwright 浏览器服务...")
+
         self._playwright = await async_playwright().start()
 
-        # 尝试查找本地 Chrome 路径（绕过检测，更稳定）
+        # 尝试查找本地 Chrome 浏览器（绕过检测，更稳定）
         chrome_paths = [
             r"C:\Program Files\Google\Chrome\Application\chrome.exe",
             r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
@@ -154,7 +151,6 @@ class PlaywrightManager:
         logger.info("🛑 Playwright 浏览器服务已停止")
 
     # ==================== 授权相关 ====================
-
     async def create_auth_task(
             self,
             platform: str,
@@ -207,7 +203,7 @@ class PlaywrightManager:
             # 这里可以考虑写入一个临时文件或者直接用 data:text/html
             # 为了简单，我们假设文件存在。实际部署时请确保 backend/static/auth_confirm.html 存在。
 
-        control_page_url = f"file:///{control_page_path.as_posix()}?task_id={task.task_id}&platform={platform}"
+        control_page_url = f"file://{control_page_path.as_posix()}?task_id={task.task_id}&platform={platform}"
         control_page = await context.new_page()
         try:
             await control_page.goto(control_page_url)
@@ -216,7 +212,6 @@ class PlaywrightManager:
 
         task.status = "running"
         logger.info(f"[Auth] 授权任务就绪: {task.task_id}")
-
         return task
 
     def get_auth_task(self, task_id: str) -> Optional[AuthTask]:
@@ -389,7 +384,6 @@ class PlaywrightManager:
                     )
                     db.add(account)
                     db.commit()
-                    db.refresh(account)
                     task.created_account_id = account.id
                     logger.success(f"[Auth] 新账号 {name} 创建成功")
 
@@ -407,14 +401,11 @@ class PlaywrightManager:
                 # 延时关闭
                 asyncio.create_task(self._delayed_close_task(task_id))
 
-                return json.dumps({"success": True, "message": "授权成功！账号已保存"})
-
             except Exception as e:
                 db.rollback()
                 logger.error(f"[Auth] 数据库错误: {e}")
-                return json.dumps({"success": False, "message": str(e)})
-            finally:
-                db.close()
+
+            return json.dumps({"success": True, "message": "授权成功！账号已保存"})
 
         except Exception as e:
             logger.error(f"[Auth] 处理异常: {e}")
@@ -429,8 +420,10 @@ class PlaywrightManager:
         """关闭任务资源"""
         task = self._auth_tasks.get(task_id)
         if task:
-            if task.context: await task.context.close()
-            if task_id in self._auth_tasks: del self._auth_tasks[task_id]
+            if task.context:
+                await task.context.close()
+            if task_id in self._auth_tasks:
+                del self._auth_tasks[task_id]
             logger.info(f"[Auth] 任务资源已释放: {task_id}")
 
     async def _extract_username(self, page: Page, platform: str) -> Optional[str]:
@@ -445,8 +438,8 @@ class PlaywrightManager:
                     el = await page.query_selector(s)
                     if el:
                         text = await el.text_content()
-                        if text: return text.strip()
-
+                        if text:
+                            return text.strip()
             elif platform == "toutiao":
                 selectors = [".user-name", ".name", ".mp-name"]
                 for s in selectors:
@@ -788,7 +781,6 @@ class PlaywrightManager:
             return None
 
     # ==================== 发布相关 ====================
-
     async def execute_publish(self, article: Any, account: Any) -> Dict[str, Any]:
         """
         供 Service 调用的发布执行入口 (核心)
@@ -827,7 +819,6 @@ class PlaywrightManager:
             # 执行发布逻辑
             logger.info(f"🚀 [Publish] 开始执行发布: {account.platform} - {article.title}")
             result = await publisher.publish(page, article, account)
-
             return result
 
         except Exception as e:

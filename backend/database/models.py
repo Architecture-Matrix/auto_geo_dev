@@ -396,10 +396,10 @@ class User(Base):
     username = Column(String(100), nullable=False, unique=True, comment="用户名")
     email = Column(String(200), nullable=True, unique=True, comment="邮箱")
     password_hash = Column(String(200), nullable=True, comment="密码哈希")
-    
+
     # 状态
     status = Column(Integer, default=1, comment="状态：1=活跃 0=禁用")
-    
+
     # 时间戳
     created_at = Column(DateTime, default=func.now(), comment="创建时间")
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now(), comment="更新时间")

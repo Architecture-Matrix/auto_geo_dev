@@ -171,18 +171,10 @@ app.include_router(article_collection.router)  # 加上文章收集路由！
 >>>>>>> b4f4500 (备份-合并后状态-20260203-1600)
 >>>>>>> 0515147 (备份-合并后状态-20260203-1600)
 =======
-app.include_router(publish.router)
-app.include_router(keywords.router)
-app.include_router(geo.router)
-app.include_router(index_check.router)  # 同时新增的收录监控
-app.include_router(reports.router)
-app.include_router(notifications.router)
-app.include_router(scheduler.router)
-app.include_router(knowledge.router)  # 同时新增的知识库
-app.include_router(upload.router)  # 文件上传路由
-app.include_router(candidate.router)  # AI招聘候选人管理路由
-app.include_router(auth.router)  # AI平台授权路由
->>>>>>> 3b3cc0c (完成了前后端对接，通过测试修复了代码的问题，完成了合并)
+app.include_router(candidate.router)  # 加上AI招聘候选人管理路由！
+app.include_router(auth.router)  # 加上授权路由！
+app.include_router(article_collection.router)  # 加上爆火文章收集路由！
+>>>>>>> a717c6e (feat: 完成部分文章收集)
 
 
 # ==================== WebSocket 端点 ====================
