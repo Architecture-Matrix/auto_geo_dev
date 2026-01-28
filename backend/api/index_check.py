@@ -11,9 +11,10 @@ from sqlalchemy.orm import Session
 
 from backend.database import get_db
 from backend.services.index_check_service import IndexCheckService
-from backend.database.models import IndexCheckRecord
+from backend.database.models import IndexCheckRecord, Keyword, User
 from backend.schemas import ApiResponse
 from loguru import logger
+from backend.services.auth import get_current_user, is_admin
 
 
 router = APIRouter(prefix="/api/index-check", tags=["收录检测"])
@@ -66,7 +67,8 @@ class HitRateResponse(BaseModel):
 async def check_index(
     request: CheckRequest,
     background_tasks: BackgroundTasks,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """
     执行收录检测
@@ -75,8 +77,10 @@ async def check_index(
     注意：这是一个耗时操作，建议异步执行！
     """
     # 验证关键词存在
-    from backend.database.models import Keyword
-    keyword = db.query(Keyword).filter(Keyword.id == request.keyword_id).first()
+    keyword_query = db.query(Keyword).filter(Keyword.id == request.keyword_id)
+    if not is_admin(current_user):
+        keyword_query = keyword_query.filter(Keyword.owner_id == current_user.id)
+    keyword = keyword_query.first()
     if not keyword:
         raise HTTPException(status_code=404, detail="关键词不存在")
 
@@ -105,7 +109,8 @@ async def get_records(
     keyword_id: Optional[int] = Query(None, description="关键词ID筛选"),
     platform: Optional[str] = Query(None, description="平台筛选"),
     limit: int = Query(100, ge=1, le=500),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """
     获取检测记录
@@ -114,19 +119,23 @@ async def get_records(
     """
     service = IndexCheckService(db)
     records = service.get_check_records(keyword_id, platform, limit)
+    if not is_admin(current_user):
+        records = [r for r in records if r.owner_id == current_user.id]
     return records
 
 
 @router.get("/keywords/{keyword_id}/hit-rate", response_model=HitRateResponse)
-async def get_hit_rate(keyword_id: int, db: Session = Depends(get_db)):
+async def get_hit_rate(keyword_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     """
     获取关键词命中率
 
     注意：命中率越高，SEO效果越好！
     """
     # 验证关键词存在
-    from backend.database.models import Keyword as KwModel
-    keyword = db.query(KwModel).filter(KwModel.id == keyword_id).first()
+    keyword_query = db.query(Keyword).filter(Keyword.id == keyword_id)
+    if not is_admin(current_user):
+        keyword_query = keyword_query.filter(Keyword.owner_id == current_user.id)
+    keyword = keyword_query.first()
     if not keyword:
         raise HTTPException(status_code=404, detail="关键词不存在")
 
@@ -135,22 +144,28 @@ async def get_hit_rate(keyword_id: int, db: Session = Depends(get_db)):
 
 
 @router.get("/records/{record_id}", response_model=RecordResponse)
-async def get_record(record_id: int, db: Session = Depends(get_db)):
+async def get_record(record_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     """获取检测记录详情"""
-    record = db.query(IndexCheckRecord).filter(IndexCheckRecord.id == record_id).first()
+    query = db.query(IndexCheckRecord).filter(IndexCheckRecord.id == record_id)
+    if not is_admin(current_user):
+        query = query.filter(IndexCheckRecord.owner_id == current_user.id)
+    record = query.first()
     if not record:
         raise HTTPException(status_code=404, detail="记录不存在")
     return record
 
 
 @router.delete("/records/{record_id}", response_model=ApiResponse)
-async def delete_record(record_id: int, db: Session = Depends(get_db)):
+async def delete_record(record_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     """
     删除检测记录
 
     注意：删除操作不可恢复！
     """
-    record = db.query(IndexCheckRecord).filter(IndexCheckRecord.id == record_id).first()
+    query = db.query(IndexCheckRecord).filter(IndexCheckRecord.id == record_id)
+    if not is_admin(current_user):
+        query = query.filter(IndexCheckRecord.owner_id == current_user.id)
+    record = query.first()
     if not record:
         raise HTTPException(status_code=404, detail="记录不存在")
 
