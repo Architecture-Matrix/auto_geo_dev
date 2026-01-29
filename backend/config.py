@@ -7,9 +7,13 @@ auto_geo 后端配置
 import os
 from pathlib import Path
 from typing import Literal
+from dotenv import load_dotenv
 
 # ==================== 项目路径 ====================
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+# 加载环境变量
+load_dotenv(BASE_DIR / ".env")
 DATA_DIR = BASE_DIR / ".cookies"
 DATABASE_DIR = BASE_DIR / "backend" / "database"
 

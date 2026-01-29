@@ -271,26 +271,42 @@ class ArticleCollectorService:
 
         for article in articles:
             try:
-                # 检查是否已存在（根据 URL 去重）
+                # 1. 检查是否已存在（根据 URL 去重）
                 url = article.get("url", "")
                 existing = self.db.query(ReferenceArticle).filter(
                     ReferenceArticle.url == url
                 ).first()
 
                 if existing:
-                    logger.debug(f"文章已存在，跳过: {url}")
+                    logger.debug(f"文章 URL 已存在，跳过: {url}")
                     saved_results.append({
                         "url": url,
                         "saved": False,
-                        "reason": "already_exists",
+                        "reason": "url_exists",
                         "article_id": existing.id
                     })
                     continue
 
-                # 清洗内容
+                # 2. 清洗内容
                 cleaned_content = self._clean_html(article.get("content", ""))
+                if not cleaned_content:
+                    logger.warning(f"文章内容为空，跳过: {article.get('title')}")
+                    continue
 
-                # 创建新记录
+                # 3. 语义去重检测（核心逻辑）
+                dup_check = await self.check_duplicate(cleaned_content)
+                if dup_check.get("is_duplicate"):
+                    title = article.get("title", "无标题")
+                    logger.warning(f"检测到重复文章：{title}")
+                    saved_results.append({
+                        "url": url,
+                        "saved": False,
+                        "reason": "semantic_duplicate",
+                        "similar_articles": dup_check.get("similar_articles")
+                    })
+                    continue
+
+                # 4. 创建新记录
                 ref_article = ReferenceArticle(
                     title=article.get("title", "")[:500],
                     url=url,

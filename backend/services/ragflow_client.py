@@ -298,6 +298,8 @@ class RAGFlowClient:
 
         # 生成内容摘要（取前500字符）
         summary = content[:500] if len(content) > 500 else content
+        logger.debug(f"去重检索摘要: {summary[:50]}...")
+        logger.debug(f"检索阈值: {threshold}, 知识库: {dataset_ids}")
 
         result = self.retrieve(summary, dataset_ids, similarity_threshold=threshold)
 
@@ -315,16 +317,19 @@ class RAGFlowClient:
         articles = {}
         for chunk in similar_chunks:
             doc_id = chunk.get("document_id")
+            if not doc_id:
+                continue
+                
             if doc_id not in articles:
                 articles[doc_id] = {
                     "document_id": doc_id,
-                    "document_name": chunk.get("document_name"),
+                    "document_name": chunk.get("document_name") or chunk.get("docname") or f"Doc_{doc_id[:8]}",
                     "max_similarity": chunk.get("similarity"),
                     "similar_content": chunk.get("content", "")[:200]
                 }
             articles[doc_id]["max_similarity"] = max(
                 articles[doc_id]["max_similarity"],
-                chunk.get("similarity")
+                chunk.get("similarity", 0)
             )
 
         return True, list(articles.values())
