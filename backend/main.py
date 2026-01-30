@@ -24,7 +24,7 @@ from backend.config import (
     CORS_ORIGINS, PLATFORMS
 )
 from backend.database import init_db, get_db, engine
-from backend.api import account, article, publish, keywords, geo, index_check, reports, notifications, scheduler, knowledge, upload, candidate
+from backend.api import account, article, publish, keywords, geo, index_check, reports, notifications, scheduler, knowledge, upload, candidate, auth
 
 
 # ==================== WebSocket连接管理 ====================
@@ -121,6 +121,7 @@ app.include_router(scheduler.router)  # 加上定时任务路由！
 app.include_router(knowledge.router)  # 加上知识库路由！
 app.include_router(upload.router)  # 加上文件上传路由！
 app.include_router(candidate.router)  # 加上候选人管理路由！
+app.include_router(auth.router)  # 加上授权路由！
 
 
 # ==================== 基础接口 ====================

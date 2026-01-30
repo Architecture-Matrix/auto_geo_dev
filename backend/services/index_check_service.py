@@ -8,8 +8,9 @@ from typing import List, Dict, Any, Optional
 from loguru import logger
 from sqlalchemy.orm import Session
 from playwright.async_api import async_playwright, Browser
+import asyncio
 
-from backend.database.models import IndexCheckRecord, Keyword, QuestionVariant
+from backend.database.models import IndexCheckRecord, Keyword, QuestionVariant, Project
 from backend.config import AI_PLATFORMS
 from backend.services.playwright.ai_platforms import DoubaoChecker, QianwenChecker, DeepSeekChecker
 
@@ -124,7 +125,7 @@ class IndexCheckService:
         
         # 使用单个Playwright实例处理所有关键词，提高效率
         async with async_playwright() as p:
-            browser = await p.chromium.launch(headless=True, args=["--no-sandbox"])
+            browser = await p.chromium.launch(headless=False, args=["--no-sandbox"])
             context = await browser.new_context()
             page = await context.new_page()
             
@@ -178,7 +179,7 @@ class IndexCheckService:
         results = []
         
         async with async_playwright() as p:
-            browser = await p.chromium.launch(headless=True, args=["--no-sandbox"])
+            browser = await p.chromium.launch(headless=False, args=["--no-sandbox"])
             context = await browser.new_context()
             page = await context.new_page()
             

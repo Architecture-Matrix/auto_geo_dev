@@ -7,14 +7,14 @@ import axios, { type AxiosInstance, type AxiosRequestConfig, type AxiosResponse 
 import { ElMessage } from 'element-plus'
 
 // API 基础地址
-const BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api'
+const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8001/api'
 
 /**
  * 创建 axios 实例
  */
 const instance: AxiosInstance = axios.create({
   baseURL: BASE_URL,
-  timeout: 30000,
+  timeout: 60000, // 增加到60秒超时，以便浏览器有足够的启动时间
   headers: {
     'Content-Type': 'application/json',
   },
@@ -290,7 +290,7 @@ export const geoArticleApi = {
 
 export const indexCheckApi = {
   // 执行收录检测
-  checkKeyword: (data: { keyword_id: number; company_name: string }) =>
+  checkKeyword: (data: { keyword_id: number; company_name: string; platforms?: string[] }) =>
     post<any>('/index-check/check', data),
 
   // 批量检测
@@ -322,7 +322,7 @@ export const reportsApi = {
 
   // 获取收录趋势
   getIndexTrend: (params?: { project_id?: number; days?: number }) =>
-    get<any>('/reports/trend/index', params),
+    get<any>('/reports/trends', params),
 
   // 获取平台分布
   getPlatformDistribution: (params?: { project_id?: number }) =>
@@ -372,4 +372,18 @@ export const schedulerApi = {
 
   // 触发预警检查
   triggerAlert: () => post<any>('/scheduler/trigger-alert', {}),
+}
+
+// 导出统一的api对象
+export const api = {
+  account: accountApi,
+  article: articleApi,
+  publish: publishApi,
+  platform: platformApi,
+  geoKeyword: geoKeywordApi,
+  geoArticle: geoArticleApi,
+  indexCheck: indexCheckApi,
+  reports: reportsApi,
+  notification: notificationApi,
+  scheduler: schedulerApi
 }

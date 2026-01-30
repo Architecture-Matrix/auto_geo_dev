@@ -241,6 +241,32 @@ class GeoArticle(Base):
         return f"<GeoArticle id={self.id} keyword_id={self.keyword_id}>"
 
 
+# ==================== 用户相关表 ====================
+
+class User(Base):
+    """
+    用户表
+    存储系统用户信息
+    """
+    __tablename__ = "users"
+    __table_args__ = TABLE_ARGS
+
+    id = Column(Integer, primary_key=True, autoincrement=True, comment="主键ID")
+    username = Column(String(100), nullable=False, unique=True, comment="用户名")
+    email = Column(String(200), nullable=True, unique=True, comment="邮箱")
+    password_hash = Column(String(200), nullable=True, comment="密码哈希")
+    
+    # 状态
+    status = Column(Integer, default=1, comment="状态：1=活跃 0=禁用")
+    
+    # 时间戳
+    created_at = Column(DateTime, default=func.now(), comment="创建时间")
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now(), comment="更新时间")
+
+    def __repr__(self):
+        return f"<User {self.username}>"
+
+
 # ==================== 知识库相关表 ====================
 
 class KnowledgeCategory(Base):

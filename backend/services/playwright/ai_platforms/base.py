@@ -154,7 +154,7 @@ class AIPlatformChecker(ABC):
 
     async def navigate_to_page(self, page: Page) -> bool:
         """
-        导航到AI平台页面
+        增强的导航到AI平台页面
 
         Returns:
             是否成功导航
@@ -162,11 +162,48 @@ class AIPlatformChecker(ABC):
         try:
             self._log("info", f"正在导航到平台页面: {self.url}")
 
-            await page.goto(self.url, wait_until="networkidle", timeout=30000)
+            # 使用更灵活的等待策略
+            await page.goto(
+                self.url, 
+                wait_until="load",  # 改为load，更快速
+                timeout=60000  # 增加超时时间
+            )
 
+            # 等待页面稳定
+            await page.wait_for_load_state("networkidle", timeout=30000)
+            
             self._log("info", f"页面加载完成: {self.name}")
 
-            await asyncio.sleep(2)
+            # 增加页面稳定等待时间
+            await asyncio.sleep(3)
+            
+            # 检查是否需要登录（通过检测常见的登录元素）
+            login_indicators = [
+                "[class*='login']",
+                "[id*='login']",
+                "[class*='auth']",
+                "[id*='auth']",
+                "button*='登录'",
+                "button*='Sign in'"
+            ]
+            
+            has_login = False
+            for indicator in login_indicators:
+                try:
+                    elements = await page.query_selector_all(indicator)
+                    if elements:
+                        has_login = True
+                        break
+                except Exception:
+                    continue
+            
+            if has_login:
+                self._log("info", "检测到登录页面，请手动完成登录")
+                # 给用户30秒时间完成登录
+                await asyncio.sleep(30)
+                # 重新等待页面稳定
+                await page.wait_for_load_state("networkidle", timeout=30000)
+                await asyncio.sleep(2)
 
             return True
         except Exception as e:
@@ -177,10 +214,10 @@ class AIPlatformChecker(ABC):
         self,
         page: Page,
         selectors: List[str],
-        timeout: int = 15000
+        timeout: int = 20000
     ) -> tuple:
         """
-        智能等待选择器出现（支持多个备选选择器）
+        增强的智能等待选择器出现（支持多个备选选择器）
 
         Args:
             page: Playwright Page对象
@@ -193,18 +230,48 @@ class AIPlatformChecker(ABC):
         start_time = time.time()
         self._log("info", f"等待选择器: {selectors}, 超时时间: {timeout}ms")
 
-        for selector in selectors:
-            try:
-                self._log("debug", f"尝试选择器: {selector}")
+        # 增加更多通用选择器
+        enhanced_selectors = selectors + [
+            "input[type='text']",
+            "input[type='textarea']",
+            "[contenteditable='true']",
+            "[class*='message-input']",
+            "[class*='user-input']",
+            "[class*='chat-box']",
+            "[id*='input']",
+            "[name*='input']"
+        ]
 
-                await page.wait_for_selector(selector, timeout=timeout // len(selectors))
+        # 分批次等待，每批3个选择器
+        batch_size = 3
+        for i in range(0, len(enhanced_selectors), batch_size):
+            batch_selectors = enhanced_selectors[i:i+batch_size]
+            batch_timeout = timeout // (len(enhanced_selectors) // batch_size + 1)
+            
+            self._log("debug", f"尝试选择器批次: {batch_selectors}")
+            
+            for selector in batch_selectors:
+                try:
+                    self._log("debug", f"尝试选择器: {selector}")
+                    
+                    # 先检查元素是否存在
+                    elements = await page.query_selector_all(selector)
+                    if elements:
+                        self._log("info", f"选择器匹配成功: {selector}")
+                        return True, selector
+                    
+                    # 再等待元素出现
+                    await page.wait_for_selector(selector, timeout=batch_timeout)
+                    
+                    self._log("info", f"选择器匹配成功: {selector}")
+                    return True, selector
 
-                self._log("info", f"选择器匹配成功: {selector}")
-                return True, selector
+                except Exception as e:
+                    self._log("debug", f"选择器 {selector} 未找到: {e}")
+                    continue
 
-            except Exception as e:
-                self._log("debug", f"选择器 {selector} 未找到: {e}")
-                continue
+            # 批次之间短暂休息
+            await asyncio.sleep(0.5)
 
         elapsed_time = (time.time() - start_time) * 1000
         self._log("warning", f"所有选择器都未找到, 耗时: {elapsed_time:.0f}ms")

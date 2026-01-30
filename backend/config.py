@@ -145,7 +145,7 @@ AI_PLATFORMS = {
     "qianwen": {
         "id": "qianwen",
         "name": "通义千问",
-        "url": "https://tongyi.aliyun.com",
+        "url": "https://qianwen.com/?source=tongyiqw",
         "color": "#FF6A00",
     },
     "deepseek": {

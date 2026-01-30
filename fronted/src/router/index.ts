@@ -66,6 +66,8 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/settings/SettingsPage.vue'),
         meta: { title: '设置', icon: 'Setting' },
       },
+
+
       // ==================== GEO系统路由 ====================
       {
         path: 'geo/projects',
