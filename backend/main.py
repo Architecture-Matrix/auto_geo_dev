@@ -38,6 +38,8 @@ from backend.services.scheduler_service import get_scheduler_service
 from backend.services.n8n_service import get_n8n_service
 
 
+>>>>>>> 3cf4b56 (feat(auth): 添加AI平台授权系统)
+
 # ==================== 🌟 日志拦截器 (核心监控功能) ====================
 
 def socket_log_sink(message):
@@ -159,6 +161,7 @@ app.include_router(upload.router)  # 加上文件上传路由！
 app.include_router(candidate.router)  # 加上候选人管理路由！
 app.include_router(auth.router)  # 加上授权路由！
 app.include_router(article_collection.router)  # 加上文章收集路由！
+>>>>>>> 3cf4b56 (feat(auth): 添加AI平台授权系统)
 
 
 # ==================== WebSocket 端点 ====================

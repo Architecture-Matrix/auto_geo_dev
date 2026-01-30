@@ -32,7 +32,6 @@ from backend.config import AI_PLATFORMS
 from backend.services.playwright.ai_platforms import DoubaoChecker, QianwenChecker, DeepSeekChecker
 =======
 from sqlalchemy import and_
-
 from backend.database.models import IndexCheckRecord, Keyword, QuestionVariant, GeoArticle, Project
 from backend.config import AI_PLATFORMS
 from backend.services.playwright.ai_platforms import DoubaoChecker, QianwenChecker, DeepSeekChecker
@@ -571,6 +570,38 @@ class IndexCheckService:
         logger.info(f"项目关键词批量检测完成: 项目ID={project_id}, 关键词数={len(keywords)}, 检测数={len(all_results)}")
         return all_results
 >>>>>>> 38d2541 (feat: 收录查询功能开发中-保存当前进度)
+
+    async def _execute_checks(
+        self,
+        keyword_id: int,
+        keyword_obj: Keyword,
+        questions: List[QuestionVariant],
+        company_name: str,
+        platforms: List[str]
+    ) -> List[Dict[str, Any]]:
+        """
+        执行检测的通用方法
+        """
+        results = []
+
+        async with async_playwright() as p:
+            browser = await p.chromium.launch(headless=True, args=["--no-sandbox"])
+            context = await browser.new_context()
+            page = await context.new_page()
+
+            try:
+                results = await self._execute_checks_for_single_keyword(
+                    keyword_id=keyword_id,
+                    keyword_obj=keyword_obj,
+                    questions=questions,
+                    company_name=company_name,
+                    platforms=platforms,
+                    page=page
+                )
+            finally:
+                await browser.close()
+
+        return results
 
     async def _execute_checks_for_single_keyword(
         self,

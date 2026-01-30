@@ -267,25 +267,9 @@ class DoubaoChecker(AIPlatformChecker):
         self._log("info", f"目标关键词: {keyword}, 公司: {company}")
 
         try:
-            async def navigate_operation():
-                if await self.navigate_to_page(page):
-                    return {"success": True}
-                return {"success": False, "error_msg": "导航失败"}
-
-            nav_result = await self._retry_operation(
-                navigate_operation,
-                "导航到豆包",
-                max_retries=2
-            )
-
-            if not nav_result["success"]:
-                return {
-                    "success": False,
-                    "answer": None,
-                    "keyword_found": False,
-                    "company_found": False,
-                    "error_msg": nav_result.get("error_msg", "导航失败")
-                }
+            # 跳过导航操作，使用已经打开的页面
+            self._log("info", "跳过导航操作，使用已经打开的页面")
+            nav_result = {"success": True}
 
 <<<<<<< HEAD
             async def clear_operation():

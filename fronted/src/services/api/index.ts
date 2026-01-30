@@ -168,6 +168,31 @@ export const indexCheckApi = {
     post('/index-check/check', data),
   
   getTrend: (keywordId: number, days = 7) => get(`/index-check/trend/${keywordId}`, { days })
+=======
+  // 执行收录检测
+  checkKeyword: (data: { keyword_id: number; company_name: string; platforms?: string[] }) =>
+    post<any>('/index-check/check', data),
+
+  // 批量检测
+  batchCheck: (data: { project_id?: number; keyword_ids?: number[]; company_name?: string }) =>
+    post<any>('/index-check/batch-check', data),
+
+  // 获取检测记录
+  getRecords: (params?: {
+    keyword_id?: number
+    project_id?: number
+    platform?: string
+    limit?: number
+    offset?: number
+  }) => get<any>('/index-check/records', params),
+
+  // 获取关键词趋势
+  getKeywordTrend: (keywordId: number, days?: number) =>
+    get<any>(`/index-check/trend/${keywordId}`, { days }),
+
+  // 获取项目统计
+  getProjectStats: (projectId: number) => get<any>(`/index-check/stats/project/${projectId}`),
+>>>>>>> db82301 (feat(auth): 添加AI平台授权系统)
 }
 
 // ==================== 5. 报表 API ====================
@@ -205,6 +230,7 @@ export const reportsApi = {
   // 🌟 [新增] 执行收录检测
   runCheck: (data: { project_id: number; platforms?: string[] }) =>
     post('/reports/run-check', data)
+>>>>>>> 3cf4b56 (feat(auth): 添加AI平台授权系统)
 }
 
 // ==================== 6. 定时任务 API ====================
@@ -226,3 +252,4 @@ export const api = {
 
 // 导出默认实例
 export default instance
+>>>>>>> 3cf4b56 (feat(auth): 添加AI平台授权系统)
