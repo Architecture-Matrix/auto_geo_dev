@@ -27,6 +27,8 @@ declare module 'vue' {
     ElInput: typeof import('element-plus/es')['ElInput']
     ElInputNumber: typeof import('element-plus/es')['ElInputNumber']
     ElOption: typeof import('element-plus/es')['ElOption']
+    ElPagination: typeof import('element-plus/es')['ElPagination']
+    ElPopconfirm: typeof import('element-plus/es')['ElPopconfirm']
     ElProgress: typeof import('element-plus/es')['ElProgress']
     ElSelect: typeof import('element-plus/es')['ElSelect']
     ElSwitch: typeof import('element-plus/es')['ElSwitch']
@@ -46,6 +48,7 @@ declare module 'vue' {
     ProjectSidebar: typeof import('./../components/business/project/ProjectSidebar.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']
+    WangEditor: typeof import('./../components/business/editor/WangEditor.vue')['default']
   }
   export interface ComponentCustomProperties {
     vLoading: typeof import('element-plus/es')['ElLoadingDirective']

@@ -346,7 +346,7 @@ class PlaywrightManager:
 
         # 第二个标签页：打开本地HTML控制页
         static_dir = Path(__file__).parent.parent.parent / "backend" / "static"
-        control_page_path = static_dir / "auth_confirm.hl"
+        control_page_path = static_dir / "auth_confirm.html"
         control_page_url = f"file:///{control_page_path.as_posix()}?task_id={task.task_id}&platform={platform}"
 
         control_page = await context.new_page()
@@ -522,12 +522,69 @@ class PlaywrightManager:
         # 创建新上下文
         context = await self._browser.new_context(
             viewport={"width": 1280, "height": 720},
-            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
         )
 
         # 添加cookies
         if cookies:
             await context.add_cookies(cookies)
+            logger.info(f"账号 {account_id} 已加载 {len(cookies)} 个cookies")
+
+        # 重要！设置localStorage/sessionStorage
+        # 使用 add_init_script 在每个页面加载前执行，这样比临时页面更可靠！
+        # about:blank 页面不允许访问localStorage，这个SB安全限制！
+        if storage_state:
+            init_scripts = []
+
+            # 构建localStorage设置脚本
+            if storage_state.get("localStorage"):
+                # 将localStorage数据转换为JavaScript代码
+                ls_items = []
+                for key, value in storage_state["localStorage"].items():
+                    # 转义特殊字符
+                    escaped_key = key.replace("\\", "\\\\").replace("'", "\\'")
+                    escaped_value = value.replace("\\", "\\\\").replace("'", "\\'")
+                    ls_items.append(f"localStorage.setItem('{escaped_key}', '{escaped_value}');")
+
+                if ls_items:
+                    init_scripts.append(f"""
+                        // 自动在页面加载前设置localStorage
+                        (() => {{
+                            try {{
+                                {chr(10).join(ls_items)}
+                                console.log('localStorage已自动设置');
+                            }} catch(e) {{
+                                console.error('设置localStorage失败:', e);
+                            }}
+                        }})();
+                    """)
+                    logger.info(f"账号 {account_id} 已配置 {len(storage_state.get('localStorage', {}))} 个localStorage项")
+
+            # 构建sessionStorage设置脚本
+            if storage_state.get("sessionStorage"):
+                ss_items = []
+                for key, value in storage_state["sessionStorage"].items():
+                    escaped_key = key.replace("\\", "\\\\").replace("'", "\\'")
+                    escaped_value = value.replace("\\", "\\\\").replace("'", "\\'")
+                    ss_items.append(f"sessionStorage.setItem('{escaped_key}', '{escaped_value}');")
+
+                if ss_items:
+                    init_scripts.append(f"""
+                        // 自动在页面加载前设置sessionStorage
+                        (() => {{
+                            try {{
+                                {chr(10).join(ss_items)}
+                                console.log('sessionStorage已自动设置');
+                            }} catch(e) {{
+                                console.error('设置sessionStorage失败:', e);
+                            }}
+                        }})();
+                    """)
+                    logger.info(f"账号 {account_id} 已配置 {len(storage_state.get('sessionStorage', {}))} 个sessionStorage项")
+
+            # 添加初始化脚本到上下文
+            for script in init_scripts:
+                await context.add_init_script(script)
 
         self._contexts[context_id] = context
         logger.info(f"账号上下文已加载: {context_id}")
