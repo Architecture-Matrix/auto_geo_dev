@@ -1,10 +1,9 @@
 # -*- coding: utf-8 -*-
 """
-知乎发布适配器 - v4.1 多图流排版版
-核心升级：
-1. 支持多张图片依次插入，不再仅限首图
-2. 模拟“翻页 -> 换行 -> 粘贴”的排版逻辑，使图片分布在文章不同位置
-3. 保持强制配图和封面上传的稳定性
+知乎发布适配器 - v4.2 合并版
+合并策略：
+1. 核心保留 v4.1 (多图流、剪贴板注入、强制配图)，确保图片上传成功率
+2. 融合 upstream (同事) 的 AI 声明功能
 """
 
 import asyncio
@@ -26,7 +25,7 @@ class ZhihuPublisher(BasePublisher):
     async def publish(self, page: Page, article: Any, account: Any) -> Dict[str, Any]:
         temp_files = []
         try:
-            logger.info("🚀 开始知乎发布 (v4.1 多图流排版版)...")
+            logger.info("🚀 开始知乎发布 (v4.2 合并加强版)...")
 
             # 1. 导航
             await page.goto(self.config["publish_url"], wait_until="networkidle", timeout=60000)
@@ -41,7 +40,7 @@ class ZhihuPublisher(BasePublisher):
             # C. 强制补图策略
             if not image_urls:
                 keyword = article.title[:10] if article.title else "technology"
-                # 生成3张不同的图，确保文章丰富度
+                # 生成3张不同的图
                 for i in range(3):
                     seed = random.randint(1, 1000)
                     encoded_kw = urllib.parse.quote(f"high quality realistic photo of {keyword} {seed}")
@@ -62,10 +61,13 @@ class ZhihuPublisher(BasePublisher):
             # 4. 填充正文
             await self._fill_content_and_clean_ui(page, clean_content)
 
-            # 5. 🌟 执行多图排版上传
+            # 5. [新增] 设置 AI 声明 (来自同事的功能)
+            await self._set_ai_declaration(page)
+
+            # 6. 执行多图排版上传 (你的核心功能)
             await self._handle_multi_image_upload(page, downloaded_paths)
 
-            # 6. 发布流程
+            # 7. 发布流程
             topic_word = getattr(article, 'keyword_text', article.title[:4])
             if not await self._handle_publish_process(page, topic_word):
                 return {"success": False, "error_msg": "发布确认环节失败"}
@@ -89,14 +91,13 @@ class ZhihuPublisher(BasePublisher):
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
         }
         async with httpx.AsyncClient(headers=headers, verify=False, follow_redirects=True) as client:
-            # 下载前 3 张
             for i, url in enumerate(urls[:3]):
                 for attempt in range(2):
                     try:
                         resp = await client.get(url, timeout=20.0)
                         if resp.status_code == 200:
                             if len(resp.content) < 1000: continue
-                            tmp_path = os.path.join(tempfile.gettempdir(), f"zh_v41_{random.randint(1000, 9999)}.jpg")
+                            tmp_path = os.path.join(tempfile.gettempdir(), f"zh_v42_{random.randint(1000, 9999)}.jpg")
                             with open(tmp_path, "wb") as f:
                                 f.write(resp.content)
                             paths.append(tmp_path)
@@ -107,13 +108,9 @@ class ZhihuPublisher(BasePublisher):
         return paths
 
     async def _handle_multi_image_upload(self, page: Page, paths: List[str]):
-        """
-        多图排版逻辑：
-        1. 第一张设为封面 + 插入文章顶部
-        2. 后续图片插入文章中间或底部
-        """
+        """多图排版逻辑"""
         try:
-            # Step 1: 上传封面 (使用第一张图)
+            # Step 1: 上传封面
             logger.info("🖼️ 正在设置文章封面...")
             cover_input = page.locator("input.UploadPicture-input").first
             if await cover_input.count() > 0:
@@ -128,31 +125,23 @@ class ZhihuPublisher(BasePublisher):
                 logger.info(f"📝 正在插入第 {i + 1}/{len(paths)} 张图片...")
 
                 if i == 0:
-                    # 第一张：回到顶部插入
                     await page.keyboard.press("Control+Home")
                     await page.keyboard.press("Enter")
                     await page.keyboard.press("ArrowUp")
                 else:
-                    # 后续图片：模拟向下阅读翻页，然后插入
-                    # 按 4 次 PageDown (约往下翻 2-3 屏)
                     for _ in range(4):
                         await page.keyboard.press("PageDown")
                         await asyncio.sleep(0.2)
-
-                    # 回车换行，腾出空间
                     await page.keyboard.press("Enter")
 
-                # 执行粘贴注入
                 await self._paste_image_via_js(page, image_path)
-
-                # 等待上传完成，避免并发冲突
                 await asyncio.sleep(5)
 
         except Exception as e:
             logger.error(f"多图上传流程部分失败: {e}")
 
     async def _paste_image_via_js(self, page: Page, image_path: str):
-        """通用粘贴函数：读取本地图片并伪造 Paste 事件"""
+        """剪贴板注入技术"""
         with open(image_path, "rb") as f:
             b64_data = base64.b64encode(f.read()).decode('utf-8')
 
@@ -203,6 +192,23 @@ class ZhihuPublisher(BasePublisher):
                 await confirm.click()
         except:
             pass
+
+    async def _set_ai_declaration(self, page: Page):
+        """设置 AI 创作声明 (移植自 Upstream)"""
+        try:
+            logger.info("正在设置 AI 声明...")
+            # 查找并点击 AI 助手按钮
+            ai_btn = page.locator("button:has-text('AI助手'), .ToolbarButton:has-text('AI')").first
+            if await ai_btn.is_visible(timeout=3000):
+                await ai_btn.click()
+                await asyncio.sleep(1)
+                # 选择 AI 辅助创作
+                option = page.locator("text=AI辅助创作, [role='menuitem']:has-text('AI')").first
+                if await option.is_visible(timeout=2000):
+                    await option.click()
+                    logger.info("✅ 已勾选 AI 辅助创作声明")
+        except:
+            logger.warning("未找到 AI 声明入口，跳过此步")
 
     async def _handle_publish_process(self, page: Page, topic: str) -> bool:
         await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")

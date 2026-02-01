@@ -1,6 +1,10 @@
 # -*- coding: utf-8 -*-
 """
-AutoGeo 后端服务入口 - 工业加固版
+AutoGeo 后端服务入口 - 工业加固合并版
+合并内容：
+1. 包含收录监控、知识库等新路由
+2. 保留 Loguru WebSocket 日志广播 (前端监控核心)
+3. 修复 DB Session 工厂问题
 """
 
 import sys
@@ -19,26 +23,31 @@ from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from loguru import logger
 
-# 导入内部组件
-from backend.services.websocket_manager import ws_manager
+# 导入配置和数据库
 from backend.config import (
     APP_NAME, APP_VERSION, DEBUG, HOST, PORT, RELOAD,
     CORS_ORIGINS, PLATFORMS
 )
-from backend.database import init_db, get_db, SessionLocal
+from backend.database import init_db, SessionLocal
+
+# 导入服务组件
+from backend.services.websocket_manager import ws_manager
+from backend.services.scheduler_service import get_scheduler_service
+from backend.services.n8n_service import get_n8n_service
+
+# 导入路由
 from backend.api import (
     account, article, publish, keywords, geo,
     index_check, reports, notifications, scheduler, knowledge
 )
-from backend.services.scheduler_service import get_scheduler_service
-from backend.services.n8n_service import get_n8n_service
 
 
-# ==================== 🌟 日志拦截器 (优化版) ====================
+# ==================== 🌟 日志拦截器 (核心监控功能) ====================
 
 def socket_log_sink(message):
     """
     Loguru 拦截器：将每一条日志通过 WebSocket 广播出去
+    这是前端控制台能看到“绿色日志”的关键！
     """
     try:
         record = message.record
@@ -56,7 +65,6 @@ def socket_log_sink(message):
             if loop.is_running():
                 loop.create_task(ws_manager.broadcast(log_payload))
         except RuntimeError:
-            # 如果当前线程没有运行中的 loop，则忽略（通常发生在关闭阶段）
             pass
     except Exception:
         pass
@@ -80,18 +88,18 @@ async def lifespan(app: FastAPI):
     # 1. 初始化数据库 (WAL模式)
     try:
         init_db()
+        logger.success("✅ 数据库初始化检查完成")
     except Exception as e:
         logger.error(f"数据库初始化失败: {e}")
 
-    # 2. 注入全局 WebSocket 管理器
+    # 2. 注入全局 WebSocket 管理器 (让各模块能发消息)
     account.set_ws_manager(ws_manager)
     publish.set_ws_manager(ws_manager)
     notifications.set_ws_callback(ws_manager.broadcast)
 
     # 3. 初始化 Playwright 管理器
     from backend.services.playwright_mgr import playwright_mgr
-    # 🌟 关键修复：使用 SessionLocal 而不是 get_db
-    # SessionLocal() 会直接返回 Session 对象，而 get_db() 返回的是生成器
+    # 🌟 关键修复：使用 SessionLocal (工厂) 而不是 get_db (生成器)
     playwright_mgr.set_db_factory(SessionLocal)
     playwright_mgr.set_ws_callback(ws_manager.broadcast)
 
@@ -137,17 +145,18 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# 注册路由 - 请确保 reports.router 在 index_check 之后，或者前缀区分明确
+# ==================== 注册路由 ====================
+# 这里合并了所有的路由模块
 app.include_router(account.router)
 app.include_router(article.router)
 app.include_router(publish.router)
 app.include_router(keywords.router)
 app.include_router(geo.router)
-app.include_router(index_check.router)  # 前缀 /api/index-check
-app.include_router(reports.router)  # 前缀 /api/reports
+app.include_router(index_check.router)  # 同事新增的收录监控
+app.include_router(reports.router)
 app.include_router(notifications.router)
 app.include_router(scheduler.router)
-app.include_router(knowledge.router)
+app.include_router(knowledge.router)  # 同事新增的知识库
 
 
 # ==================== WebSocket 端点 ====================
@@ -171,7 +180,7 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str = None):
 
     try:
         while True:
-            # 保持连接，接收客户端心跳（如有）
+            # 保持连接，接收客户端心跳
             await websocket.receive_text()
     except WebSocketDisconnect:
         ws_manager.disconnect(client_id)
@@ -191,6 +200,22 @@ async def health():
     return {"status": "ok"}
 
 
+@app.get("/api/platforms")
+async def get_platforms():
+    """获取支持的平台列表"""
+    return {
+        "platforms": list(PLATFORMS.values())
+    }
+
+
+# ==================== 全局异常处理 ====================
+@app.exception_handler(Exception)
+async def global_exception_handler(request, exc):
+    """全局异常处理，防止 500 错误没有任何返回"""
+    logger.exception(f"未处理的异常: {exc}")
+    return HTTPException(status_code=500, detail=str(exc))
+
+
 # ==================== 启动脚本 ====================
 if __name__ == "__main__":
     import uvicorn
@@ -198,6 +223,9 @@ if __name__ == "__main__":
     # Windows 下异步策略优化
     if sys.platform == "win32":
         asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
+
+    logger.info(f"正在启动 {APP_NAME} v{APP_VERSION}...")
+    logger.info(f"服务地址: http://{HOST}:{PORT}")
 
     uvicorn.run(
         "main:app",

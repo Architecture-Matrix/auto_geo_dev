@@ -7,7 +7,7 @@
 ### 核心功能
 - ✅ **多平台发布**：知乎、百家号、搜狐、头条号
 - ✅ **账号管理**：安全的 Cookie 存储和授权
-- ✅ **文章编辑**：富文本编辑器，支持图片上传
+- ✅ **文章编辑**：WangEditor 5 富文本编辑器，所见即所得，支持图片上传
 - ✅ **批量发布**：一键发布到多个平台
 - ✅ **发布进度**：实时查看发布状态
 
@@ -24,7 +24,7 @@
 
 | 层级 | 技术选型 |
 |------|---------|
-| 前端 | Vue 3 + TypeScript + Vite + Element Plus + Pinia + ECharts |
+| 前端 | Vue 3 + TypeScript + Vite + Element Plus + Pinia + ECharts + WangEditor 5 |
 | 后端 | FastAPI + SQLAlchemy + Playwright + APScheduler |
 | AI中台 | n8n 工作流引擎 + DeepSeek API |
 | 桌面 | Electron |
@@ -219,6 +219,14 @@ A: 只需在 n8n 中修改 AI 节点的凭证配置，无需修改业务代码�
 
 ## 更新日志
 
+### v2.2.0 (2025-01-26)
+- ✅ 更换富文本编辑器：ByteMD → WangEditor 5
+- ✅ WangEditor 支持所见即所得编辑
+- ✅ 完善图片上传功能，支持拖拽上传
+- ✅ 代码高亮支持 17 种编程语言
+- ✅ 深色模式样式优化
+- ✅ 创建前端技术文档 `fronted/FRONTEND.md`
+
 ### v2.1.0 (2025-01-22)
 - ✅ 新增 n8n AI 中台架构
 - ✅ AI 能力与业务代码解耦
@@ -247,5 +255,5 @@ MIT License
 ---
 
 **维护者**: 老王
-**更新日期**: 2025-01-22
-**版本**: v2.1.0 (新增 n8n AI 中台)
+**更新日期**: 2025-01-26
+**版本**: v2.2.0 (更换 WangEditor 5 编辑器)
