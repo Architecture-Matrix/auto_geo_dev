@@ -5,6 +5,11 @@
         <el-icon><ArrowLeft /></el-icon>
         返回
       </el-button>
+      <div class="toolbar-center">
+        <el-tag v-if="articleId && articleId !== 'add'" type="info">
+          {{ article.status === 1 ? '已发布' : '草稿' }}
+        </el-tag>
+      </div>
       <div class="toolbar-right">
         <el-button @click="saveDraft">保存草稿</el-button>
         <el-button type="primary" @click="publish">发布</el-button>
@@ -20,10 +25,10 @@
       />
 
       <div class="editor-wrapper">
-        <textarea
+        <WangEditor
           v-model="article.content"
-          placeholder="请输入文章内容..."
-          class="content-editor"
+          height="100%"
+          @change="handleContentChange"
         />
       </div>
     </div>
@@ -36,11 +41,13 @@ import { useRouter, useRoute } from 'vue-router'
 import { ArrowLeft } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { useArticleStore } from '@/stores/modules/article'
+import WangEditor from '@/components/business/editor/WangEditor.vue'
 
 const router = useRouter()
 const route = useRoute()
 const articleStore = useArticleStore()
 
+const articleId = ref<string>('')
 const article = ref({
   title: '',
   content: '',
@@ -50,23 +57,39 @@ const article = ref({
 
 onMounted(async () => {
   const id = route.params.id as string
+  articleId.value = id
   if (id && id !== 'add') {
     await articleStore.loadArticleDetail(Number(id))
     if (articleStore.currentArticle.id) {
-      article.value = { ...articleStore.currentArticle }
+      article.value = {
+        title: articleStore.currentArticle.title || '',
+        content: articleStore.currentArticle.content || '',
+        tags: articleStore.currentArticle.tags || '',
+        category: articleStore.currentArticle.category || '',
+      }
     }
   }
 })
+
+const handleContentChange = (value: string) => {
+  article.value.content = value
+}
 
 const saveDraft = async () => {
   if (!article.value.title) {
     ElMessage.warning('请输入标题')
     return
   }
-  const result = await articleStore.createArticle({ ...article.value, status: 0 })
+  const isEdit = articleId.value && articleId.value !== 'add'
+  const result = isEdit
+    ? await articleStore.updateArticle(Number(articleId.value), { ...article.value, status: 0 })
+    : await articleStore.createArticle({ ...article.value, status: 0 })
+
   if (result.success) {
-    ElMessage.success('保存成功')
-    router.push('/articles')
+    ElMessage.success(isEdit ? '更新成功' : '保存成功')
+    if (!isEdit) {
+      router.push('/articles')
+    }
   }
 }
 
@@ -75,9 +98,13 @@ const publish = async () => {
     ElMessage.warning('请填写标题和内容')
     return
   }
-  const result = await articleStore.createArticle({ ...article.value, status: 1 })
+  const isEdit = articleId.value && articleId.value !== 'add'
+  const result = isEdit
+    ? await articleStore.updateArticle(Number(articleId.value), { ...article.value, status: 1 })
+    : await articleStore.createArticle({ ...article.value, status: 1 })
+
   if (result.success) {
-    ElMessage.success('发布成功')
+    ElMessage.success(isEdit ? '发布成功' : '保存成功')
     router.push('/articles')
   }
 }
@@ -88,6 +115,7 @@ const publish = async () => {
   display: flex;
   flex-direction: column;
   height: 100%;
+  padding: 20px;
 }
 
 .toolbar {
@@ -97,6 +125,11 @@ const publish = async () => {
   padding: 16px 0;
   border-bottom: 1px solid var(--border);
   margin-bottom: 24px;
+
+  .toolbar-center {
+    display: flex;
+    align-items: center;
+  }
 }
 
 .editor-container {
@@ -104,6 +137,7 @@ const publish = async () => {
   display: flex;
   flex-direction: column;
   gap: 20px;
+  min-height: 0;
 
   .title-input {
     :deep(.el-input__wrapper) {
@@ -122,23 +156,10 @@ const publish = async () => {
 
   .editor-wrapper {
     flex: 1;
-    background: var(--bg-secondary);
+    min-height: 0;
     border-radius: 12px;
-    padding: 20px;
     overflow: hidden;
-
-    .content-editor {
-      width: 100%;
-      height: 100%;
-      background: transparent;
-      border: none;
-      outline: none;
-      color: var(--text-primary);
-      font-size: 16px;
-      line-height: 1.8;
-      resize: none;
-      font-family: inherit;
-    }
+    border: 1px solid var(--border);
   }
 }
 </style>
