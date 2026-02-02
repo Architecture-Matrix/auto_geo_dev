@@ -152,6 +152,78 @@ export const PLATFORMS: Record<string, PlatformConfig> = {
     },
     limits: { titleLength: [5, 30], contentLength: [0, 50000], imageCount: 100 },
   },
+  netease: {
+    id: 'netease',
+    name: '网易号',
+    code: 'NT',
+    icon: 'netease.svg',
+    color: '#E60012',
+    features: { article: true, video: false, image: true, draft: true, schedule: true },
+    auth: {
+      type: 'qrcode',
+      loginUrl: 'https://mp.163.com/',
+      checkLoginInterval: 1000,
+      maxWaitTime: 120000,
+    },
+    publish: {
+      entryUrl: 'https://mp.163.com/upload/article',
+      selectors: {
+        title: 'input[placeholder*="标题"], .title-input',
+        content: '.editor-content, #ueditor_textarea',
+        submit: '.publish-btn, button[class*="publish"]',
+      },
+      waitTimes: { afterLoad: 2000, afterFill: 1000, afterSubmit: 3000 },
+    },
+    limits: { titleLength: [5, 40], contentLength: [0, 50000], imageCount: 50 },
+  },
+  wechat: {
+    id: 'wechat',
+    name: '微信公众号',
+    code: 'WX',
+    icon: 'wechat.svg',
+    color: '#07C160',
+    features: { article: true, video: true, image: true, draft: true, schedule: true },
+    auth: {
+      type: 'qrcode',
+      loginUrl: 'https://mp.weixin.qq.com/',
+      checkLoginInterval: 1000,
+      maxWaitTime: 120000,
+    },
+    publish: {
+      entryUrl: 'https://mp.weixin.qq.com/cgi-bin/appmsg?t=media/appmsg_edit&action=edit&type=77',
+      selectors: {
+        title: '#title',
+        content: '#js_editor',
+        submit: '#js_submit, button[class*="submit"]',
+      },
+      waitTimes: { afterLoad: 4000, afterFill: 1000, afterSubmit: 5000 },
+    },
+    limits: { titleLength: [1, 64], contentLength: [0, 50000], imageCount: 100 },
+  },
+  people: {
+    id: 'people',
+    name: '人民号',
+    code: 'RM',
+    icon: 'people.svg',
+    color: '#C62828',
+    features: { article: true, video: true, image: true, draft: true, schedule: true },
+    auth: {
+      type: 'qrcode',
+      loginUrl: 'https://pdcreator.pdnews.cn/login?service=https%3A%2F%2Fpdcreator.pdnews.cn%2Fproducer',
+      checkLoginInterval: 1000,
+      maxWaitTime: 120000,
+    },
+    publish: {
+      entryUrl: 'https://pdcreator.pdnews.cn/producer',
+      selectors: {
+        title: 'input[placeholder*="标题"]',
+        content: '.editor-content, #ueditor_textarea',
+        submit: '.publish-btn, button[class*="publish"]',
+      },
+      waitTimes: { afterLoad: 3000, afterFill: 1000, afterSubmit: 5000 },
+    },
+    limits: { titleLength: [5, 50], contentLength: [0, 50000], imageCount: 100 },
+  },
 }
 
 /**

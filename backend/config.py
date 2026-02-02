@@ -29,6 +29,8 @@ RELOAD = False  # 修复：Windows 上 Playwright 需要 ProactorEventLoop，与
 
 # CORS配置
 CORS_ORIGINS = [
+    "http://localhost:5500",
+    "http://127.0.0.1:5500",
     "http://localhost:5179",
     "http://localhost:5173",
     "http://127.0.0.1:5173",
@@ -100,6 +102,30 @@ PLATFORMS = {
         "login_url": "https://mp.toutiao.com/",
         "publish_url": "https://mp.toutiao.com/profile/article/article_edit",
         "color": "#333333",
+    },
+    "netease": {
+        "id": "netease",
+        "name": "网易号",
+        "code": "NT",
+        "login_url": "https://mp.163.com/",
+        "publish_url": "https://mp.163.com/upload/article",
+        "color": "#E60012",
+    },
+    "wechat": {
+        "id": "wechat",
+        "name": "微信公众号",
+        "code": "WX",
+        "login_url": "https://mp.weixin.qq.com/",
+        "publish_url": "https://mp.weixin.qq.com/cgi-bin/appmsg?t=media/appmsg_edit&action=edit&type=77",
+        "color": "#07C160",
+    },
+    "people": {
+        "id": "people",
+        "name": "人民号",
+        "code": "RM",
+        "login_url": "https://pdcreator.pdnews.cn/login?service=https%3A%2F%2Fpdcreator.pdnews.cn%2Fproducer",
+        "publish_url": "https://pdcreator.pdnews.cn/producer",
+        "color": "#C62828",
     },
 }
 

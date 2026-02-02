@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+﻿# -*- coding: utf-8 -*-
 """
 Playwright发布适配器模块
 用这个来管理所有平台的发布器！
@@ -7,7 +7,6 @@ Playwright发布适配器模块
 from .base import BasePublisher, PublisherRegistry, registry, get_publisher, list_publishers
 from .zhihu import ZhihuPublisher
 from .baijiahao import BaijiahaoPublisher
-from .sohu import SohuPublisher
 from .toutiao import ToutiaoPublisher
 
 
@@ -24,8 +23,6 @@ def register_publishers(platforms_config):
             publisher = ZhihuPublisher(platform_id, config)
         elif platform_id == "baijiahao":
             publisher = BaijiahaoPublisher(platform_id, config)
-        elif platform_id == "sohu":
-            publisher = SohuPublisher(platform_id, config)
         elif platform_id == "toutiao":
             publisher = ToutiaoPublisher(platform_id, config)
 
@@ -42,6 +39,5 @@ __all__ = [
     "register_publishers",
     "ZhihuPublisher",
     "BaijiahaoPublisher",
-    "SohuPublisher",
     "ToutiaoPublisher",
 ]

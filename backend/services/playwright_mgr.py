@@ -18,8 +18,9 @@ from loguru import logger
 from sqlalchemy.orm import Session
 
 from backend.config import (
-    BROWSER_TYPE, BROWSER_ARGS,
-    LOGIN_CHECK_INTERVAL, LOGIN_MAX_WAIT_TIME, PLATFORMS
+    BROWSER_TYPE, BROWSER_ARGS, USER_DATA_DIR,
+    LOGIN_CHECK_INTERVAL, LOGIN_MAX_WAIT_TIME, PLATFORMS,
+    HOST, PORT
 )
 from backend.services.crypto import encrypt_cookies, encrypt_storage_state, decrypt_cookies, decrypt_storage_state
 # 注意：这里我们只导入 registry，具体的发布器注册逻辑通常在应用启动时完成
@@ -196,18 +197,10 @@ class PlaywrightManager:
         task.page = login_page
         await login_page.goto(platform_config["login_url"], wait_until="domcontentloaded")
 
-        # Tab 2: 打开本地控制页
-        # 假设 static 目录在 backend 下
-        static_dir = Path(__file__).parent.parent / "static"
-        control_page_path = static_dir / "auth_confirm.html"
+        # 第二个标签页：打开本地HTML控制页
+        # 修复：使用 HTTP URL 代替 file:///，更可靠且解决了拼写错误问题
+        control_page_url = f"http://{HOST}:{PORT}/static/auth_confirm.html?task_id={task.task_id}&platform={platform}"
 
-        # 兼容性处理：如果找不到文件，使用内置HTML
-        if not control_page_path.exists():
-            logger.warning(f"控制页模板未找到: {control_page_path}")
-            # 这里可以考虑写入一个临时文件或者直接用 data:text/html
-            # 为了简单，我们假设文件存在。实际部署时请确保 backend/static/auth_confirm.html 存在。
-
-        control_page_url = f"file:///{control_page_path.as_posix()}?task_id={task.task_id}&platform={platform}"
         control_page = await context.new_page()
         try:
             await control_page.goto(control_page_url)
@@ -236,15 +229,41 @@ class PlaywrightManager:
                 "() => ({ localStorage: {...localStorage}, sessionStorage: {...sessionStorage} })") or {}
 
             # 2. 基础验证
-            # 针对不同平台的关键 Cookie 检查
-            platform_checks = {
-                "zhihu": "z_c0",
-                "baijiahao": "BDUSS",
-                "toutiao": "sessionid"
+            # 各平台的登录验证关键cookie
+            platform_login_check_cookies = {
+                "zhihu": ["z_c0"],
+                "baijiahao": ["BDUSS"],
+                "sohu": ["SUV"],
+                "toutiao": ["sessionid"],
+                "netease": ["NTES_SESS", "S_INFO"],
+                "wechat": ["data_ticket", "bizuin"],
+                "people": ["token", "uid", "sid"],
             }
-            key_cookie = platform_checks.get(task.platform)
-            if key_cookie and not any(c['name'] == key_cookie for c in cookies):
-                return json.dumps({"success": False, "message": f"未检测到登录凭证 ({key_cookie})，请先登录"})
+
+            check_cookies = platform_login_check_cookies.get(task.platform, [])
+            cookie_names = {c["name"] for c in cookies}
+
+            # 验证是否真的登录了
+            if task.platform == "netease":
+                has_login_cookie = any(name in cookie_names for name in ["S_INFO", "P_INFO", "NTES_SESS", "NETEASE_WDA_TOKEN"])
+                if not has_login_cookie:
+                    return json.dumps({"success": False, "message": "网易号未检测到登录cookie"})
+            elif task.platform == "wechat":
+                has_login_cookie = any(name in cookie_names for name in ["bizuin", "data_ticket", "slave_sid"])
+                if not has_login_cookie:
+                    return json.dumps({"success": False, "message": "微信公众号未检测到登录cookie"})
+            elif task.platform == "people":
+                has_token = any("token" in name.lower() or "uid" in name.lower() for name in cookie_names)
+                if not has_token and "login" in task.page.url:
+                    return json.dumps({"success": False, "message": "人民号未检测到登录信息"})
+            elif task.platform == "sohu":
+                has_login_cookie = any(name in cookie_names for name in ["ppinf", "pprdig", "SUV"])
+                if not has_login_cookie:
+                    return json.dumps({"success": False, "message": "搜狐号未检测到登录cookie"})
+            else:
+                missing_cookies = [name for name in check_cookies if name not in cookie_names]
+                if missing_cookies:
+                    return json.dumps({"success": False, "message": f"缺少关键cookie: {', '.join(missing_cookies)}"})
 
             # 3. 提取用户名
             username = await self._extract_username(task.page, task.platform)
@@ -299,7 +318,8 @@ class PlaywrightManager:
                         "type": "auth_complete",
                         "task_id": task_id,
                         "success": True,
-                        "platform": task.platform
+                        "platform": task.platform,
+                        "account_id": task.account_id or task.created_account_id
                     })
 
                 # 延时关闭
@@ -337,7 +357,6 @@ class PlaywrightManager:
         """
         try:
             if platform == "zhihu":
-                # 尝试多种选择器
                 selectors = [".AppHeader-profileText", ".Header-userName", ".UserLink-link", ".ProfileHeader-name"]
                 for s in selectors:
                     el = await page.query_selector(s)
@@ -346,7 +365,60 @@ class PlaywrightManager:
                         if text: return text.strip()
 
             elif platform == "toutiao":
-                selectors = [".user-name", ".name", ".mp-name"]
+                # 尝试从页面获取用户信息
+                try:
+                    user_info = await page.evaluate("""() => {
+                        for (let key in localStorage) {
+                            if (key.includes('user') || key.includes('User')) {
+                                try {
+                                    const data = JSON.parse(localStorage[key]);
+                                    if (data && (data.name || data.userName || data.user_info)) {
+                                        return data;
+                                    }
+                                } catch(e) {}
+                            }
+                        }
+                        return null;
+                    }""")
+                    if user_info:
+                        username = (user_info.get('name') or user_info.get('userName') or
+                                   user_info.get('user_info', {}).get('name'))
+                        if username: return str(username)
+                except: pass
+
+                selectors = [".user-name", ".author-name", ".user-info .name", ".mp-name"]
+                for s in selectors:
+                    el = await page.query_selector(s)
+                    if el:
+                        text = await el.text_content()
+                        if text: return text.strip()
+
+            elif platform == "netease":
+                selectors = [".user-name", ".name-text", ".nick-name", ".account-info .name"]
+                for s in selectors:
+                    el = await page.query_selector(s)
+                    if el:
+                        text = await el.text_content()
+                        if text: return text.strip()
+
+            elif platform == "wechat":
+                selectors = [".weui-desktop-account__nickname", ".nickname", ".account_name", ".user_name"]
+                for s in selectors:
+                    el = await page.query_selector(s)
+                    if el:
+                        text = await el.text_content()
+                        if text: return text.strip()
+
+            elif platform == "people":
+                selectors = [".user-name", ".nickname", ".account-name", ".name"]
+                for s in selectors:
+                    el = await page.query_selector(s)
+                    if el:
+                        text = await el.text_content()
+                        if text: return text.strip()
+
+            elif platform == "sohu":
+                selectors = [".user-name", ".nick-name", "#username", ".account-info-name"]
                 for s in selectors:
                     el = await page.query_selector(s)
                     if el:
