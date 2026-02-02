@@ -1,10 +1,9 @@
 # -*- coding: utf-8 -*-
 """
-今日头条 (头条号) 发布适配器 - v5.9 全物理坐标+弹窗粉碎版
-修复：
-1. 解决标题点击超时：增加 5s 短超时保护 + 坐标点击兜底
-2. 解决封面遮挡：每步操作后强制点击 (10,10) 粉碎透明遮罩
-3. 修正逻辑顺序：正文 -> 插图 -> 封面 -> 标题 -> 暴力发布
+今日头条 (头条号) 发布适配器 - v6.1 严重BUG修复版
+紧急修复：
+1. BUG 1：正文内容丢失 - 改用JS剪贴板注入，调整执行顺序
+2. BUG 2：图片变封面 - 直接插入编辑器内，优化排版逻辑
 """
 
 import asyncio
@@ -14,6 +13,7 @@ import httpx
 import tempfile
 import random
 import base64
+import urllib.parse
 from typing import Dict, Any, List, Optional
 from playwright.async_api import Page
 from loguru import logger
@@ -24,7 +24,7 @@ class ToutiaoPublisher(BasePublisher):
     async def publish(self, page: Page, article: Any, account: Any) -> Dict[str, Any]:
         temp_files = []
         try:
-            logger.info("🚀 开始今日头条 v5.9 流程 (终极物理版)...")
+            logger.info("🚀 开始今日头条 v6.1 严重BUG修复版...")
 
             # 1. 初始导航
             await page.goto(self.config["publish_url"], wait_until="load", timeout=60000)
@@ -35,37 +35,55 @@ class ToutiaoPublisher(BasePublisher):
             safe_title = article.title.replace("#", "").replace("*", "").strip()[:25]
             clean_text = self._deep_clean_content(article.content)
 
-            downloaded_paths = await self._download_images_fast(["https://api.dujin.org/bing/1920.php"])
+            # --- AI 自动配图 ---
+            image_urls = re.findall(r'!\[.*?\]\(((?:https?://)?\S+?)\)', article.content)
+
+            if not image_urls:
+                keyword = article.title[:15] if article.title else "business technology"
+                logger.info(f"🎨 文章无图片，启动 AI 自动配图 (关键词: {keyword})...")
+
+                for i in range(3):
+                    seed = random.randint(1, 1000)
+                    prompt = f"realistic professional photo of {keyword} for business article, high quality, {seed}"
+                    encoded_prompt = urllib.parse.quote(prompt)
+                    url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?width=800&height=600&nologo=true"
+                    image_urls.append(url)
+
+                logger.info(f"✅ AI 已生成 {len(image_urls)} 张配图链接")
+
+            # 下载图片
+            downloaded_paths = await self._download_images_fast(image_urls)
             temp_files.extend(downloaded_paths)
 
-            # --- 🌟 执行顺序逻辑 ---
+            if not downloaded_paths:
+                logger.error("❌ 图片下载失败，无法继续发布")
+                return {"success": False, "error_msg": "图片下载失败"}
 
-            # Step 1: 填充正文内容
-            logger.info("Step 1: 写入正文内容...")
-            await self._fill_and_wake_body(page, clean_text)
-            await page.mouse.click(10, 10)  # 点击空白处粉碎弹窗
+            logger.info(f"✅ 成功下载 {len(downloaded_paths)} 张图片")
 
-            # Step 2: 粘贴照片
-            if downloaded_paths:
-                logger.info("Step 2: 正在正文粘贴照片...")
-                await self._inject_image_pro(page, downloaded_paths[0])
+            # --- 🌟 修复后的执行顺序 ---
+
+            # Step 1: 填充标题
+            logger.info("Step 1: 填充标题...")
+            await self._fill_title(page, safe_title)
+
+            # Step 2: 填充正文内容 (使用JS剪贴板注入)
+            logger.info("Step 2: 填充正文内容...")
+            await self._inject_text_content(page, clean_text)
             await page.mouse.click(10, 10)
-            await asyncio.sleep(2)
+            await asyncio.sleep(random.uniform(1, 2))
 
-            # Step 3: 上传封面
+            # Step 3: 在正文中插入图片 (修复BUG2)
+            logger.info("Step 3: 在正文中插入图片...")
             if downloaded_paths:
-                logger.info("Step 3: 正在上传展示封面...")
-                await self._force_upload_cover(page, downloaded_paths[0])
-            await page.mouse.click(10, 10)  # 关键：点掉上传成功的提示框
-            await asyncio.sleep(2)
+                await self._inject_images_in_editor(page, downloaded_paths)
 
-            # Step 4: 锁定标题 (压轴)
-            logger.info(f"Step 4: 正在压轴锁定标题 -> {safe_title}")
-            await self._physical_type_title_v59(page, safe_title)
-            await asyncio.sleep(1)
+            # Step 4: 设置封面 (使用正文中第一张图)
+            logger.info("Step 4: 设置封面...")
+            await self._set_cover_from_editor(page)
 
-            # Step 5: 暴力连点发布
-            logger.info("Step 5: 进入暴力发布阶段...")
+            # Step 5: 发布
+            logger.info("Step 5: 进入发布阶段...")
             if not await self._brutal_publish_click_loop(page):
                 return {"success": False, "error_msg": "发布失败：按钮未响应或被屏蔽"}
 
@@ -82,32 +100,207 @@ class ToutiaoPublisher(BasePublisher):
                     except:
                         pass
 
-    async def _physical_type_title_v59(self, page: Page, title: str):
-        """增强版标题锁定：选择器 + 物理坐标双保险"""
+    async def _inject_text_content(self, page: Page, content: str):
+        """
+        🌟 BUG1修复: 使用JS剪贴板注入法填充正文
+        这是写入正文的最可靠方式
+        """
         try:
-            # 1. 确保滚到最上方
-            await page.evaluate("window.scrollTo(0, 0)")
+            # 点击编辑器激活
+            editor = page.locator(".ProseMirror").first
+            await editor.click(force=True)
+            await asyncio.sleep(0.5)
+
+            # 使用JS剪贴板注入
+            await page.evaluate('''(text) => {
+                const el = document.querySelector(".ProseMirror");
+                if(el) {
+                    // 清空编辑器
+                    el.innerHTML = "";
+
+                    // 创建剪贴板事件
+                    const dt = new DataTransfer();
+                    dt.setData("text/plain", text);
+
+                    const event = new ClipboardEvent("paste", {
+                        clipboardData: dt,
+                        bubbles: true,
+                        cancelable: true
+                    });
+
+                    // 触发粘贴事件
+                    el.dispatchEvent(event);
+                }
+            }''', content)
+
+            logger.info("✅ 正文内容JS剪贴板注入完成")
+            await asyncio.sleep(2)
+
+            # 验证内容是否真的写入了
+            text_content = await page.evaluate("document.querySelector('.ProseMirror').innerText")
+            if len(text_content) < 10:
+                logger.warning("⚠️ 正文内容可能没有成功写入")
+            else:
+                logger.info(f"✅ 正文字数确认: {len(text_content)}")
+
+        except Exception as e:
+            logger.error(f"❌ 正文注入失败: {str(e)}")
+            raise
+
+    async def _inject_images_in_editor(self, page: Page, image_paths: List[str]):
+        """
+        🌟 BUG2修复: 直接在编辑器内插入图片
+        图片插入到正文内，而不是封面区域
+        """
+        try:
+            logger.info(f"📝 开始在正文中插入图片，共 {len(image_paths)} 张")
+
+            # 第1张：插入到文章开头
+            logger.info("   → 插入位置: 文章开头")
+            editor = page.locator(".ProseMirror").first
+            await editor.click(force=True)
+            await asyncio.sleep(0.5)
+            await page.keyboard.press("Control+Home")
+            await asyncio.sleep(0.3)
+            await self._paste_image_via_clipboard(page, image_paths[0])
+
+            await asyncio.sleep(1)
+            await page.mouse.click(10, 10)
+
+            # 第2张：插入到文章中间
+            logger.info("   → 插入位置: 文章中间")
+            await page.keyboard.press("Home")
+            # 按多次PageDown移动到中间
+            for _ in range(5):
+                await page.keyboard.press("PageDown")
+                await asyncio.sleep(0.2)
+            await page.keyboard.press("Enter")
+            await asyncio.sleep(0.3)
+            await self._paste_image_via_clipboard(page, image_paths[1])
+
+            await asyncio.sleep(1)
+            await page.mouse.click(10, 10)
+
+            # 第3张：插入到文章结尾
+            logger.info("   → 插入位置: 文章结尾")
+            await page.keyboard.press("Home")
+            # 快速到达结尾
+            for _ in range(10):
+                await page.keyboard.press("PageDown")
+                await asyncio.sleep(0.1)
+            await page.keyboard.press("End")
+            await asyncio.sleep(0.3)
+            await self._paste_image_via_clipboard(page, image_paths[2])
+
+            logger.info("✅ 正文中图片插入完成")
+            await asyncio.sleep(2)
+
+        except Exception as e:
+            logger.error(f"❌ 正文中图片插入失败: {str(e)}")
+            raise
+
+    async def _paste_image_via_clipboard(self, page: Page, image_path: str):
+        """
+        剪贴板注入法插入图片 (优化版)
+        直接在编辑器中分发剪贴板事件
+        """
+        try:
+            with open(image_path, "rb") as f:
+                b64 = base64.b64encode(f.read()).decode('utf-8')
+
+            await page.evaluate('''(b64) => {
+                const editor = document.querySelector(".ProseMirror");
+                if(!editor) return;
+
+                // 将base64转换为File对象
+                const byteCharacters = atob(b64);
+                const byteNumbers = new Array(byteCharacters.length);
+                for (let i = 0; i < byteCharacters.length; i++) {
+                    byteNumbers[i] = byteCharacters.charCodeAt(i);
+                }
+                const byteArray = new Uint8Array(byteNumbers);
+                const blob = new Blob([byteArray], { type: 'image/jpeg' });
+                const file = new File([blob], "auto_inserted.jpg", { type: 'image/jpeg' });
+
+                // 创建DataTransfer
+                const dt = new DataTransfer();
+                dt.items.add(file);
+
+                // 创建并分发剪贴板事件
+                const event = new ClipboardEvent("paste", {
+                    clipboardData: dt,
+                    bubbles: true,
+                    cancelable: true
+                });
+
+                editor.dispatchEvent(event);
+            }''', b64)
+
+            logger.info("   ✅ 图片剪贴板注入完成")
+            await asyncio.sleep(3)  # 给编辑器更多时间处理图片
+
+        except Exception as e:
+            logger.warning(f"   ⚠️ 图片注入失败: {str(e)}")
+
+    async def _set_cover_from_editor(self, page: Page):
+        """
+        从正文中抓取图片作为封面（最稳妥的方式）
+        """
+        try:
+            # 滚动到底部
+            await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
             await asyncio.sleep(1)
 
-            title_sel = "textarea.byte-input__inner, .title-input textarea, textarea[placeholder*='标题']"
-            target = page.locator(title_sel).first
+            # 点击"单图"选项
+            await page.locator("text=单图").first.click(force=True)
+            await asyncio.sleep(1)
 
-            # 2. 尝试点击（设定 5 秒短超时，防止死等）
+            logger.info("✅ 已选择单图模式，系统将自动从正文中抓取图片作为封面")
+            await asyncio.sleep(2)
+
+            # 等待系统自动抓取
             try:
-                await target.click(force=True, timeout=5000)
+                await page.wait_for_selector("text=预览, text=替换", timeout=15000)
+                logger.info("✅ 系统自动抓取封面图片成功")
             except:
-                logger.warning("选择器点击超时，尝试使用物理坐标点击标题区...")
-                # 直接点标题所在坐标（1280x800 分辨率下的经验位置）
-                await page.mouse.click(450, 220)
+                logger.warning("⚠️ 等待封面抓取超时，但可能已成功")
 
-                # 3. 物理按键清空并输入
+        except Exception as e:
+            logger.warning(f"⚠️ 设置封面时出现问题: {str(e)}")
+
+    async def _fill_title(self, page: Page, title: str):
+        """填充标题"""
+        try:
+            # 尝试多种标题选择器
+            title_selectors = [
+                "textarea.byte-input__inner",
+                ".title-input textarea",
+                "textarea[placeholder*='标题']",
+                "input[placeholder*='标题']"
+            ]
+
+            for selector in title_selectors:
+                try:
+                    await page.wait_for_selector(selector, timeout=3000)
+                    await page.fill(selector, title)
+                    logger.info("✅ 标题填充成功")
+                    return
+                except:
+                    continue
+
+            # 如果选择器都不行，使用物理坐标
+            logger.warning("⚠️ 选择器方式失败，尝试物理坐标...")
+            await page.evaluate("window.scrollTo(0, 0)")
+            await asyncio.sleep(1)
+            await page.mouse.click(450, 220)
             await page.keyboard.press("Control+A")
             await page.keyboard.press("Backspace")
             await page.keyboard.type(title, delay=30)
             await page.keyboard.press("Tab")
             logger.info("✅ 标题物理输入完成")
-        except:
-            pass
+
+        except Exception as e:
+            logger.error(f"❌ 标题填充失败: {str(e)}")
 
     async def _brutal_publish_click_loop(self, page: Page) -> bool:
         """暴力发布循环：多点并发"""
@@ -134,93 +327,54 @@ class ToutiaoPublisher(BasePublisher):
                     logger.success("🎯 发布最终确认成功！")
                     return True
 
-                if "articles" in page.url: return True
+                if "articles" in page.url:
+                    return True
             except:
                 pass
             await asyncio.sleep(1)
         return False
 
-    async def _fill_and_wake_body(self, page: Page, content: str):
-        editor = page.locator(".ProseMirror").first
-        await editor.click(force=True)
-        await page.evaluate('''(text) => {
-            const el = document.querySelector(".ProseMirror");
-            if(el) {
-                el.innerHTML = "";
-                const dt = new DataTransfer();
-                dt.setData("text/plain", text);
-                el.dispatchEvent(new ClipboardEvent("paste", { clipboardData: dt, bubbles: true }));
-            }
-        }''', content)
-        await page.keyboard.press("End")
-        await page.keyboard.press("Enter")
-        await page.keyboard.press("Backspace")
-
-    async def _inject_image_pro(self, page: Page, path: str):
-        try:
-            await page.keyboard.press("Control+Home")
-            await page.keyboard.press("Enter")
-            await page.keyboard.press("ArrowUp")
-            with open(path, "rb") as f:
-                b64 = base64.b64encode(f.read()).decode('utf-8')
-            await page.evaluate('''(b64) => {
-                const byteCharacters = atob(b64);
-                const byteNumbers = new Array(byteCharacters.length);
-                for (let i = 0; i < byteCharacters.length; i++) byteNumbers[i] = byteCharacters.charCodeAt(i);
-                const dt = new DataTransfer();
-                dt.items.add(new File([new Uint8Array(byteNumbers)], "img.jpg", { type: 'image/jpeg' }));
-                document.querySelector(".ProseMirror").dispatchEvent(new ClipboardEvent("paste", { clipboardData: dt, bubbles: true }));
-            }''', b64)
-            await asyncio.sleep(4)
-        except:
-            pass
-
-    async def _force_upload_cover(self, page: Page, path: str):
-        try:
-            await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
-            await page.locator("text=单图").first.click(force=True)
-            await asyncio.sleep(1)
-            await page.evaluate('''() => {
-                document.querySelectorAll('input[type="file"]').forEach(el => {
-                    el.style.display = 'block'; el.style.opacity = '1';
-                });
-            }''')
-            cover_input = page.locator("div:has-text('展示封面') >> input[type='file']").first
-            if await cover_input.count() == 0: cover_input = page.locator("input[type='file']").last
-            await cover_input.set_input_files(path)
-            await page.wait_for_selector("text=预览, text=替换", timeout=12000)
-            logger.info("✅ 封面上传成功")
-        except:
-            pass
-
     async def _brutal_kill_interferences(self, page: Page):
+        """粉碎干扰元素"""
         await page.evaluate('''() => {
             const targets = ['.creation-helper', '.byte-icon--close', '.add-desktop-prepare', '.portal-container', '.guide-mask'];
             targets.forEach(s => document.querySelectorAll(s).forEach(el => el.remove()));
         }''')
 
     def _deep_clean_content(self, text: str) -> str:
+        """深度清洗正文内容"""
         text = re.sub(r'!\[.*?\]\(.*?\)', '', text)
         text = re.sub(r'#+\s*', '', text)
         text = re.sub(r'\*\*+', '', text)
         return text.strip()
 
     async def _download_images_fast(self, urls: List[str]) -> List[str]:
+        """快速下载图片"""
         paths = []
-        async with httpx.AsyncClient(verify=False, timeout=15.0) as client:
-            for url in urls:
-                try:
-                    resp = await client.get(url)
-                    if resp.status_code == 200:
-                        tmp = os.path.join(tempfile.gettempdir(), f"tt_v59_{random.randint(1, 999)}.jpg")
-                        with open(tmp, "wb") as f: f.write(resp.content)
-                        paths.append(tmp)
-                        break
-                except:
-                    continue
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        }
+
+        async with httpx.AsyncClient(headers=headers, verify=False, follow_redirects=True, timeout=20.0) as client:
+            for i, url in enumerate(urls[:3]):  # 最多下载 3 张
+                for attempt in range(2):
+                    try:
+                        resp = await client.get(url)
+                        if resp.status_code == 200 and len(resp.content) > 1000:
+                            tmp = os.path.join(tempfile.gettempdir(), f"tt_v61_{random.randint(1, 9999)}.jpg")
+                            with open(tmp, "wb") as f:
+                                f.write(resp.content)
+                            paths.append(tmp)
+                            logger.info(f"✅ 图片 {i + 1}/{min(len(urls), 3)} 下载成功")
+                            break
+                    except Exception as e:
+                        logger.warning(f"⚠️ 图片 {i + 1} 下载失败 (尝试 {attempt + 1}/2): {str(e)}")
+                        continue
+
         return paths
 
     async def _wait_for_publish_result(self, page: Page) -> Dict[str, Any]:
+        """等待发布结果"""
         for i in range(25):
             if "articles" in page.url or "content_manage" in page.url:
                 return {"success": True, "platform_url": page.url}

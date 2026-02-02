@@ -2,15 +2,17 @@
 """
 收录检测服务 - 工业加固版
 负责调用 Playwright 模拟 AI 搜索并实时推送执行进度
+包含百度搜索收录检测功能
 """
 
 import asyncio
 import random
 from datetime import datetime
+from pathlib import Path
 from typing import List, Dict, Any, Optional
 from loguru import logger
 from sqlalchemy.orm import Session
-from playwright.async_api import async_playwright
+from playwright.async_api import async_playwright, Browser, Page, BrowserContext
 
 from backend.database.models import IndexCheckRecord, Keyword, QuestionVariant, GeoArticle
 from backend.config import AI_PLATFORMS
@@ -20,6 +22,8 @@ chk_log = logger.bind(module="监测站")
 
 
 class IndexCheckService:
+    """收录检测服务类"""
+
     def __init__(self, db: Session):
         self.db = db
         # 注意：这里假设你已经定义好了相关的 Checker 类
@@ -153,3 +157,203 @@ class IndexCheckService:
             "keyword_found_count": kw_f,
             "company_found_count": co_f
         }
+
+
+class BaiduIndexCheckService:
+    """百度收录检测服务 - 用于检测关键词在百度搜索中的收录情况"""
+
+    def __init__(self):
+        self.temp_screenshots_dir = Path("backend/temp_screenshots")
+        self.temp_screenshots_dir.mkdir(parents=True, exist_ok=True)
+        # 导入 playwright_mgr 单例
+        from backend.services.playwright_mgr import playwright_mgr
+        self.playwright_mgr = playwright_mgr
+
+    async def check_baidu_index(self, keyword: str, company_name: str) -> bool:
+        """
+        检查关键词在百度的收录情况
+
+        Args:
+            keyword: 要搜索的关键词
+            company_name: 要查找的公司名称
+
+        Returns:
+            bool: 是否在前两页结果中找到公司名称
+        """
+        logger.info(f"开始百度收录检测 - 关键词: {keyword}, 公司: {company_name}")
+
+        # 模拟人工停顿
+        await asyncio.sleep(1)
+
+        page = None
+        context = None
+
+        try:
+            # 获取浏览器页面
+            page, context = await self._get_browser_page()
+            logger.info("成功获取浏览器页面")
+
+            # 访问百度
+            await page.goto("https://www.baidu.com", wait_until="networkidle")
+            logger.info("正在访问百度首页...")
+
+            # 模拟人工停顿
+            await asyncio.sleep(1)
+
+            # 在搜索框中输入关键词
+            search_input = await page.wait_for_selector("#kw")
+            await search_input.fill(keyword)
+            logger.info(f"正在搜索: {keyword}...")
+
+            # 模拟人工停顿
+            await asyncio.sleep(1)
+
+            # 点击搜索按钮
+            search_button = await page.wait_for_selector("#su")
+            await search_button.click()
+            logger.info("已点击搜索按钮")
+
+            # 等待搜索结果加载
+            await page.wait_for_selector("#content_left", timeout=10000)
+            await asyncio.sleep(2)  # 额外等待确保结果完全加载
+
+            # 保存搜索结果截图
+            await self._save_screenshot(page, keyword, "search_results")
+            logger.info("已保存搜索结果截图")
+
+            # 检查第一页结果
+            page1_found = await self._check_search_results(page, company_name, 1)
+
+            if page1_found:
+                logger.info(f"发现匹配项: 第一页中找到 {company_name}")
+                return True
+            else:
+                logger.info("第一页未找到匹配项，继续检查第二页")
+
+                # 点击下一页
+                next_page = await page.wait_for_selector(".n", timeout=5000)
+                if next_page:
+                    await next_page.click()
+                    logger.info("正在加载第二页...")
+
+                    # 等待第二页加载
+                    await page.wait_for_selector("#content_left", timeout=10000)
+                    await asyncio.sleep(2)
+
+                    # 保存第二页截图
+                    await self._save_screenshot(page, keyword, "page2_results")
+
+                    # 检查第二页结果
+                    page2_found = await self._check_search_results(page, company_name, 2)
+
+                    if page2_found:
+                        logger.info(f"发现匹配项: 第二页中找到 {company_name}")
+                    else:
+                        logger.info("第二页也未找到匹配项")
+
+                    return page2_found
+                else:
+                    logger.warning("未找到下一页按钮")
+                    return False
+
+        except Exception as e:
+            logger.error(f"百度收录检测失败: {str(e)}")
+            # 保存错误截图
+            if page:
+                try:
+                    await self._save_screenshot(page, keyword, "error")
+                except:
+                    pass
+            return False
+
+        finally:
+            # 清理资源
+            if context:
+                await context.close()
+            logger.info("百度收录检测完成")
+
+    async def _get_browser_page(self) -> tuple[Page, BrowserContext]:
+        """获取浏览器页面和上下文"""
+        try:
+            # 检查浏览器是否已启动
+            if not self.playwright_mgr._browser:
+                logger.info("浏览器未启动，正在启动...")
+                await self.playwright_mgr.start()
+
+            # 创建新上下文
+            context = await self.playwright_mgr._browser.new_context()
+            page = await context.new_page()
+
+            # 设置页面视窗大小
+            await page.set_viewport_size({"width": 1280, "height": 720})
+
+            return page, context
+
+        except Exception as e:
+            logger.error(f"获取浏览器页面失败: {str(e)}")
+            raise
+
+    async def _check_search_results(self, page: Page, company_name: str, page_num: int) -> bool:
+        """
+        检查搜索结果中是否包含公司名称
+
+        Args:
+            page: 页面对象
+            company_name: 公司名称
+            page_num: 页码
+
+        Returns:
+            bool: 是否找到匹配项
+        """
+        logger.info(f"检查第{page_num}页搜索结果是否包含: {company_name}")
+
+        try:
+            # 获取所有搜索结果标题
+            result_elements = await page.query_selector_all("div#content_left .result h3")
+
+            found = False
+            for i, element in enumerate(result_elements, 1):
+                try:
+                    title = await element.inner_text()
+
+                    # 检查标题是否包含公司名称
+                    if company_name.lower() in title.lower():
+                        logger.info(f"在第{page_num}页第{i}个结果中找到匹配: {title}")
+                        found = True
+                        break
+
+                    # 如果没有匹配，检查摘要
+                    summary_element = await element.query_selector("../.. div.c-abstract")
+                    if summary_element:
+                        summary = await summary_element.inner_text()
+                        if company_name.lower() in summary.lower():
+                            logger.info(f"在第{page_num}页第{i}个结果的摘要中找到匹配: {summary[:50]}...")
+                            found = True
+                            break
+
+                except Exception as e:
+                    logger.warning(f"检查第{i}个结果时出错: {str(e)}")
+                    continue
+
+            return found
+
+        except Exception as e:
+            logger.error(f"检查搜索结果时出错: {str(e)}")
+            return False
+
+    async def _save_screenshot(self, page: Page, keyword: str, suffix: str) -> None:
+        """保存截图"""
+        try:
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"{keyword}_{suffix}_{timestamp}.png"
+            filepath = self.temp_screenshots_dir / filename
+
+            await page.screenshot(path=str(filepath))
+            logger.info(f"截图已保存: {filepath}")
+
+        except Exception as e:
+            logger.error(f"保存截图失败: {str(e)}")
+
+
+# 创建全局服务实例
+baidu_index_check_service = BaiduIndexCheckService()

@@ -318,6 +318,13 @@ class PlaywrightManager:
             logger.error(f"[Auth] 处理异常: {e}")
             return json.dumps({"success": False, "message": str(e)})
 
+    def get_auth_task(self, task_id: str) -> Optional[AuthTask]:
+        """
+        获取授权任务 (公共接口)
+        供 API 层调用以查询任务状态
+        """
+        return self._auth_tasks.get(task_id)
+
     async def _delayed_close_task(self, task_id: str):
         """延时关闭任务，给前端反应时间"""
         await asyncio.sleep(5)
@@ -330,6 +337,61 @@ class PlaywrightManager:
             if task.context: await task.context.close()
             if task_id in self._auth_tasks: del self._auth_tasks[task_id]
             logger.info(f"[Auth] 任务资源已释放: {task_id}")
+
+    async def update_account_storage_state(self, account_id: int, context: BrowserContext, page: Page) -> bool:
+        """
+        更新账号的 storage_state（用于扫码登录后保存新Cookie）
+
+        Args:
+            account_id: 账号ID
+            context: 浏览器上下文
+            page: 当前页面
+
+        Returns:
+            是否更新成功
+        """
+        try:
+            db = self._get_db()
+            if not db:
+                logger.error(f"[UpdateState] 无法获取数据库连接")
+                return False
+
+            try:
+                from backend.database.models import Account
+
+                # 1. 提取 Cookies 和 Storage
+                cookies = await context.cookies()
+                storage_state = await page.evaluate(
+                    "() => ({ localStorage: {...localStorage}, sessionStorage: {...sessionStorage} })") or {}
+
+                # 2. 加密敏感数据
+                enc_cookies = encrypt_cookies(cookies)
+                enc_storage = encrypt_storage_state(storage_state)
+
+                # 3. 更新数据库
+                account = db.query(Account).filter(Account.id == account_id).first()
+                if account:
+                    account.cookies = enc_cookies
+                    account.storage_state = enc_storage
+                    account.last_auth_time = datetime.now()
+                    account.status = 1  # 激活状态
+                    db.commit()
+                    logger.success(f"[UpdateState] 账号 {account.account_name} (ID:{account_id}) Cookie 已更新")
+                    return True
+                else:
+                    logger.error(f"[UpdateState] 未找到账号 ID: {account_id}")
+                    return False
+
+            except Exception as e:
+                db.rollback()
+                logger.error(f"[UpdateState] 数据库错误: {e}")
+                return False
+            finally:
+                db.close()
+
+        except Exception as e:
+            logger.error(f"[UpdateState] 更新异常: {e}")
+            return False
 
     async def _extract_username(self, page: Page, platform: str) -> Optional[str]:
         """
@@ -362,6 +424,7 @@ class PlaywrightManager:
     async def execute_publish(self, article: Any, account: Any) -> Dict[str, Any]:
         """
         供 Service 调用的发布执行入口 (核心)
+        支持Cookie持久化和自动重新登录
         """
         await self.start()
 
@@ -389,9 +452,9 @@ class PlaywrightManager:
 
             page = await context.new_page()
 
-            # 执行发布逻辑
+            # 执行发布逻辑（传递 context 以支持更新 storage_state）
             logger.info(f"🚀 [Publish] 开始执行发布: {account.platform} - {article.title}")
-            result = await publisher.publish(page, article, account)
+            result = await publisher.publish(page, article, account, context, self)
 
             return result
 

@@ -20,8 +20,8 @@ class N8nConfig:
     WEBHOOK_BASE = "http://localhost:5678/webhook"
 
     # 超时配置
-    TIMEOUT_SHORT = 45.0  # 蒸馏、分析等任务稍微加长一点
-    TIMEOUT_LONG = 300.0  # 长文章生成
+    TIMEOUT_SHORT = 60.0  # 蒸馏、分析等任务稍微加长一点
+    TIMEOUT_LONG = 900.0  # 长文章生成 (15分钟，适配深度长文生成)
 
     # 重试配置
     MAX_RETRIES = 1

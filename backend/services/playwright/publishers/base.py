@@ -23,7 +23,7 @@ class BasePublisher(ABC):
         self.color = config.get("color", "#333333")
 
     @abstractmethod
-    async def publish(self, page: Page, article: Any, account: Any) -> Dict[str, Any]:
+    async def publish(self, page: Page, article: Any, account: Any, context: BrowserContext = None, mgr: Any = None) -> Dict[str, Any]:
         """
         发布文章到目标平台
 
@@ -31,6 +31,8 @@ class BasePublisher(ABC):
             page: Playwright Page对象
             article: 文章对象（title, content等）
             account: 账号对象
+            context: 浏览器上下文（可选，用于更新 storage_state）
+            mgr: PlaywrightManager 实例（可选，用于更新账号状态）
 
         Returns:
             发布结果：{
