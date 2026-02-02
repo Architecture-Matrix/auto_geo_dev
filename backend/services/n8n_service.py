@@ -94,6 +94,33 @@ class N8nService:
         if self._client and not self._client.is_closed:
             await self._client.aclose()
 
+    async def call(
+            self,
+            endpoint: str,
+            payload: Dict[str, Any],
+            timeout: Optional[float] = None
+    ) -> Dict[str, Any]:
+        """通用调用入口：返回 KeywordService 兼容的 dict 结构"""
+        res = await self._call_webhook(endpoint, payload, timeout=timeout)
+        if res.status == "error":
+            return {
+                "status": "error",
+                "message": res.error or "n8n调用失败",
+                "data": res.data
+            }
+
+        data = res.data
+        message: Optional[str] = None
+        if isinstance(data, dict):
+            message = data.get("message")
+            data = data.get("data", data)
+
+        return {
+            "status": "success",
+            "data": data,
+            "message": message
+        }
+
     async def _call_webhook(
             self,
             endpoint: str,
