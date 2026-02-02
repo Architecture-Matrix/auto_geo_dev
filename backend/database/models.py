@@ -240,7 +240,7 @@ class ScheduledTask(Base):
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
 
     def __repr__(self):
-        return f"<Task {self.name} : {self.cron_expression}>" # 保留你本地的正确repr
+        return f"<Task {self.name} : {self.cron_expression}>"
 
 
 # ==================== AI招聘候选人相关表 ====================
