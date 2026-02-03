@@ -9,6 +9,7 @@
 
 import axios, { type AxiosInstance, type AxiosRequestConfig, type AxiosResponse } from 'axios'
 import { ElMessage } from 'element-plus'
+import type { FunnelData, KPIData, ArticleStats } from '@/types'
 
 // API 基础地址
 const BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api'
@@ -137,14 +138,62 @@ export const indexCheckApi = {
 
 // ==================== 5. 报表 API ====================
 export const reportsApi = {
-  // 概览数据
-  getOverview: () => get('/reports/overview'),
-  
-  // 趋势图数据 (Monitor.vue 使用)
+  // 获取总览数据
+  getOverview: () => get<any>('/reports/overview'),
+
+  // 获取全面数据概览（新增：包含文章、发布、收录等）
+  getComprehensiveOverview: (params?: { project_id?: number }) =>
+    get<any>('/reports/comprehensive', params),
+
+  // 获取每日趋势数据（新增：包含文章生成、发布、收录趋势）
+  getDailyTrends: (params?: { project_id?: number; days?: number }) =>
+    get<any>('/reports/daily-trends', params),
+
+  // 获取收录趋势 (Monitor.vue 使用)
   getTrends: (days: number = 30) => get('/reports/trends', { days }),
-  
-  // 旧版兼容
-  getIndexTrend: (params?: any) => get('/reports/trend/index', params)
+
+  // 获取收录趋势 (旧版兼容)
+  getIndexTrend: (params?: { project_id?: number; days?: number }) =>
+    get<any>('/reports/trend/index', params),
+
+  // 获取平台分布
+  getPlatformDistribution: (params?: { project_id?: number }) =>
+    get<any>('/reports/distribution/platform', params),
+
+  // 获取关键词排名
+  getKeywordRanking: (params?: { project_id?: number; limit?: number }) =>
+    get<any>('/reports/ranking/keywords', params),
+
+  // 获取项目统计
+  getProjectStats: (projectId: number) => get<any>(`/reports/stats/project/${projectId}`),
+
+  // 获取平台对比分析（新增）
+  getPlatformComparison: (params?: { project_id?: number; days?: number }) =>
+    get<any>('/reports/platform-comparison', params),
+
+  // 获取项目对比分析（新增）
+  getProjectComparison: (params?: { project_ids?: string; days?: number }) =>
+    get<any>('/reports/project-comparison', params),
+
+  // 获取TOP项目排行榜（新增）
+  getTopProjects: (params?: { project_id?: number; limit?: number }) =>
+    get<any>('/reports/top-projects', params),
+
+  // 获取TOP文章排行榜（新增）
+  getTopArticles: (params?: { project_id?: number; limit?: number }) =>
+    get<any>('/reports/top-articles', params),
+
+  // 获取漏斗图数据（新增）
+  getFunnelData: (params?: { project_id?: number; days?: number }) =>
+    get<FunnelData>('/reports/funnel-data', params),
+
+  // 获取KPI卡片数据（新增）
+  getKpiCards: (params?: { project_id?: number }) =>
+    get<KPIData>('/reports/kpi-cards', params),
+
+  // 获取文章统计数据（新增）
+  getArticleStats: (params?: { project_id?: number }) =>
+    get<ArticleStats>('/reports/article-stats', params),
 }
 
 // ==================== 6. 定时任务 API ====================
