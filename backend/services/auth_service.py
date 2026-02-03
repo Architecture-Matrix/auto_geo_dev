@@ -382,14 +382,22 @@ class AuthService:
                         # 豆包平台只有在页面加载完成且检测到成功元素时才认为登录成功
                         if page_loaded and has_doubao_success and not has_error:
                             logger.info(f"检测到豆包登录成功")
+                            # 统一逻辑：不在这里提前结束循环，而是设置标志位，
+                            # 让代码继续执行到外层的 "if login_successful:" 块，
+                            # 从而使用统一的 save_session 调用
                             login_successful = True
+                            
+                            # 这里不再需要break，while循环会在下面检测到 login_successful 为 True 后
+                            # 执行统一的保存逻辑并 return
                         else:
                             # 豆包平台继续等待
                             logger.info(f"豆包平台继续等待: 页面加载={page_loaded}, 成功元素={has_doubao_success}, 错误={has_error}")
                             # 等待更长时间
                             await asyncio.sleep(5)
                             elapsed_time += 5
-                            continue
+                            # 这里需要 continue 避免进入下方通用逻辑的判断
+                            if not login_successful:
+                                continue
                     else:
                         # 其他平台的正常处理
                         if page_loaded and not has_login_elements and not has_error:
@@ -408,9 +416,10 @@ class AuthService:
                         logger.info(f"检测到登录成功: platform={platform}")
                         storage_state = await context.storage_state()
                         
-                        # 保存会话
+                        # 保存会话 (标记为新登录)
+                        # 注意：这里需要确保所有路径都设置 is_new_login=True
                         save_result = await secure_session_manager.save_session(
-                            user_id, project_id, platform, storage_state
+                            user_id, project_id, platform, storage_state, is_new_login=True
                         )
                         
                         if save_result:

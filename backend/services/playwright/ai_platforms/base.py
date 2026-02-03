@@ -155,6 +155,7 @@ class AIPlatformChecker(ABC):
     async def navigate_to_page(self, page: Page) -> bool:
         """
         增强的导航到AI平台页面
+        优化：减少等待时间，使用智能元素等待
 
         Returns:
             是否成功导航
@@ -165,17 +166,23 @@ class AIPlatformChecker(ABC):
             # 使用更灵活的等待策略
             await page.goto(
                 self.url, 
-                wait_until="load",  # 改为load，更快速
-                timeout=60000  # 增加超时时间
+                wait_until="domcontentloaded",  # 改为domcontentloaded，显著加快速度
+                timeout=60000
             )
 
-            # 等待页面稳定
-            await page.wait_for_load_state("networkidle", timeout=30000)
+            # 智能等待关键元素，替代死等
+            # 尝试等待输入框、聊天区域或登录按钮
+            try:
+                await page.wait_for_selector(
+                    "textarea, input[type='text'], [contenteditable='true'], [class*='chat'], [class*='login'], button", 
+                    timeout=8000,
+                    state="visible"
+                )
+            except Exception:
+                # 即使超时也不报错，继续后续检查
+                pass
             
             self._log("info", f"页面加载完成: {self.name}")
-
-            # 增加页面稳定等待时间
-            await asyncio.sleep(3)
             
             # 检查是否需要登录（通过检测常见的登录元素）
             login_indicators = [
@@ -190,8 +197,9 @@ class AIPlatformChecker(ABC):
             has_login = False
             for indicator in login_indicators:
                 try:
-                    elements = await page.query_selector_all(indicator)
-                    if elements:
+                    # 使用 query_selector 而不是 query_selector_all，并检查可见性
+                    element = await page.query_selector(indicator)
+                    if element and await element.is_visible():
                         has_login = True
                         break
                 except Exception:
@@ -202,8 +210,7 @@ class AIPlatformChecker(ABC):
                 # 给用户30秒时间完成登录
                 await asyncio.sleep(30)
                 # 重新等待页面稳定
-                await page.wait_for_load_state("networkidle", timeout=30000)
-                await asyncio.sleep(2)
+                await page.wait_for_load_state("domcontentloaded", timeout=30000)
 
             return True
         except Exception as e:
@@ -218,6 +225,7 @@ class AIPlatformChecker(ABC):
     ) -> tuple:
         """
         增强的智能等待选择器出现（支持多个备选选择器）
+        优化：并行等待所有选择器，而不是分批次
 
         Args:
             page: Playwright Page对象
@@ -241,40 +249,99 @@ class AIPlatformChecker(ABC):
             "[id*='input']",
             "[name*='input']"
         ]
-
-        # 分批次等待，每批3个选择器
-        batch_size = 3
-        for i in range(0, len(enhanced_selectors), batch_size):
-            batch_selectors = enhanced_selectors[i:i+batch_size]
-            batch_timeout = timeout // (len(enhanced_selectors) // batch_size + 1)
-            
-            self._log("debug", f"尝试选择器批次: {batch_selectors}")
-            
-            for selector in batch_selectors:
-                try:
-                    self._log("debug", f"尝试选择器: {selector}")
-                    
-                    # 先检查元素是否存在
-                    elements = await page.query_selector_all(selector)
-                    if elements:
-                        self._log("info", f"选择器匹配成功: {selector}")
-                        return True, selector
-                    
-                    # 再等待元素出现
-                    await page.wait_for_selector(selector, timeout=batch_timeout)
-                    
-                    self._log("info", f"选择器匹配成功: {selector}")
+        
+        # 去重
+        unique_selectors = []
+        seen = set()
+        for s in enhanced_selectors:
+            if s not in seen:
+                unique_selectors.append(s)
+                seen.add(s)
+        
+        # 1. 快速检查是否已经存在
+        for selector in unique_selectors:
+            try:
+                element = await page.query_selector(selector)
+                if element and await element.is_visible():
+                    self._log("info", f"选择器快速匹配成功: {selector}")
                     return True, selector
+            except Exception:
+                continue
+                
+        # 2. 并行等待策略
+        # 创建一个复合选择器，用逗号分隔，这样只要任意一个出现就会触发
+        # Playwright 支持逗号分隔的选择器列表
+        combined_selector = ", ".join(unique_selectors)
+        
+        try:
+            self._log("debug", f"尝试并行等待选择器组合")
+            # 等待任意一个选择器出现
+            element = await page.wait_for_selector(
+                combined_selector, 
+                state="visible", 
+                timeout=timeout
+            )
+            
+            if element:
+                # 找出具体是哪个选择器匹配了（反向查找略复杂，这里只要确认匹配即可）
+                # 为了返回具体的selector，我们再次遍历检查哪个是可见的
+                for selector in unique_selectors:
+                    try:
+                        el = await page.query_selector(selector)
+                        if el and await el.is_visible():
+                            self._log("info", f"选择器匹配成功: {selector}")
+                            return True, selector
+                    except Exception:
+                        continue
+                
+                # 如果找不到具体的，就返回组合选择器或第一个
+                self._log("info", f"选择器组合匹配成功")
+                return True, unique_selectors[0]
+                
+        except Exception as e:
+            elapsed_time = (time.time() - start_time) * 1000
+            self._log("warning", f"等待选择器超时或失败: {e}, 耗时: {elapsed_time:.0f}ms")
+            
+            # 最后的兜底策略：查找任意可见的 textarea 或 contenteditable
+            # 这可以解决因页面更新导致特定选择器失效的问题
+            try:
+                self._log("info", "尝试兜底策略：查找页面上任意可见的输入框")
+                fallback_element = await page.evaluate_handle("""() => {
+                    // 1. 查找所有 textarea
+                    const textareas = Array.from(document.querySelectorAll('textarea'));
+                    for (const el of textareas) {
+                        const style = window.getComputedStyle(el);
+                        if (style.display !== 'none' && style.visibility !== 'hidden' && el.offsetParent !== null) {
+                            return el;
+                        }
+                    }
+                    
+                    // 2. 查找 contenteditable
+                    const editables = Array.from(document.querySelectorAll('[contenteditable="true"]'));
+                    for (const el of editables) {
+                        const style = window.getComputedStyle(el);
+                        if (style.display !== 'none' && style.visibility !== 'hidden' && el.offsetParent !== null) {
+                            return el;
+                        }
+                    }
+                    return null;
+                }""")
+                
+                if fallback_element:
+                    # 获取该元素的 CSS 选择器（简化版）
+                    fallback_selector = await page.evaluate("""(el) => {
+                        if (el.id) return '#' + el.id;
+                        if (el.className) return el.tagName.toLowerCase() + '.' + el.className.split(' ').join('.');
+                        return el.tagName.toLowerCase();
+                    }""", fallback_element)
+                    
+                    self._log("info", f"兜底策略成功，找到输入框: {fallback_selector}")
+                    return True, fallback_selector
+            except Exception as fallback_e:
+                self._log("warning", f"兜底策略失败: {fallback_e}")
+            
+            return False, None
 
-                except Exception as e:
-                    self._log("debug", f"选择器 {selector} 未找到: {e}")
-                    continue
-
-            # 批次之间短暂休息
-            await asyncio.sleep(0.5)
-
-        elapsed_time = (time.time() - start_time) * 1000
-        self._log("warning", f"所有选择器都未找到, 耗时: {elapsed_time:.0f}ms")
         return False, None
 
     async def wait_for_answer_generation(
@@ -303,8 +370,8 @@ class AIPlatformChecker(ABC):
         start_time = time.time()
         last_content = initial_content
         stable_count = 0
-        required_stable_checks = 3
-        min_content_length = 50
+        required_stable_checks = 5  # 增加稳定检查次数，防止回答还在生成中就截断
+        min_content_length = 100    # 增加最小内容长度要求
 
         while (time.time() - start_time) < timeout / 1000:
             try:
@@ -425,15 +492,74 @@ class AIPlatformChecker(ABC):
         if not answer_text:
             self._log("warning", "标准选择器未找到回答, 尝试备用方法")
 
+            # 获取页面所有文本
             page_text = await page.inner_text("body")
+            
+            # 分割成行
             lines = [line.strip() for line in page_text.split('\n') if line.strip()]
+            
+            # 过滤掉常见的菜单和无关内容
+            ignored_keywords = [
+                "AI回答", "豆包", "新对话", "帮我写作", "AI 创作", "云盘", "更多", "历史对话",
+                "登录", "注册", "关于", "帮助", "设置", "退出", "反馈", "Terms", "Privacy",
+                "最近对话", "对话分组", "我的空间", "手机版", "下载", "APP", "智能体", "发现",
+                "深度思考", "联网搜索", "重新生成", "复制", "点赞", "点踩", "分享"
+            ]
+            
+            potential_answers = []
+            current_block = []
+            
+            for line in lines:
+                # 过滤极短行
+                if len(line) < 5:
+                    continue
+                    
+                is_ignored = False
+                # 只有短行才检查忽略关键词，防止误伤长文中的正常词汇
+                if len(line) < 100:  
+                    for keyword in ignored_keywords:
+                        if keyword in line:
+                            is_ignored = True
+                            break
+                
+                if is_ignored:
+                    # 如果遇到忽略词，仅跳过该行，不要轻易打断当前文本块
+                    # 除非连续遇到多个忽略行，或者忽略行具有明显的分割性质（如"新对话"）
+                    # 这里简化处理：直接跳过，尽可能合并上下文
+                    continue
+                    
+                # 过滤掉包含问题的行（避免把问题当成回答）
+                if question in line:
+                    continue
+                
+                # 将连续的非忽略行视为一个块
+                current_block.append(line)
+            
+            # 添加最后一个块
+            if current_block:
+                potential_answers.append("\n".join(current_block))
+            
+            # 尝试寻找最长的一段文本
+            # 改进：排除看起来像侧边栏菜单的块（多行且每行都很短）
+            longest_block = ""
+            for block in potential_answers:
+                # 检查是否为疑似菜单/侧边栏
+                lines_in_block = block.split('\n')
+                if len(lines_in_block) > 5:
+                    # 计算平均行长
+                    avg_len = sum(len(l) for l in lines_in_block) / len(lines_in_block)
+                    # 如果平均行长很短（例如小于30字符），且包含多个换行，极大概率是侧边栏列表
+                    if avg_len < 30:
+                        self._log("debug", f"跳过疑似侧边栏块: 行数={len(lines_in_block)}, 平均长度={avg_len:.1f}")
+                        continue
 
-            for line in reversed(lines):
-                if len(line) > 100 and question not in line[:30]:
-                    answer_text = line
-                    matched_selector = "body-text-fallback"
-                    self._log("info", f"使用备用方法找到回答, 长度: {len(answer_text)}")
-                    break
+                if len(block) > len(longest_block):
+                    longest_block = block
+            
+            if len(longest_block) > 100:
+                answer_text = longest_block
+                matched_selector = "body-text-filtered"
+                self._log("info", f"使用过滤后的备用方法找到回答, 长度: {len(answer_text)}")
 
         if answer_text:
             self._log("info", f"成功获取回答内容, 长度: {len(answer_text)} 字符")
@@ -563,8 +689,99 @@ class AIPlatformChecker(ABC):
         """
         return self.operation_log.copy()
 
-    def clear_operation_log(self):
+    async def clear_operation_log(self):
         """
         清空操作日志
         """
         self.operation_log.clear()
+
+    async def submit_question(
+        self,
+        page: Page,
+        question: str,
+        input_selector: str,
+        submit_button_selector: str = None
+    ) -> bool:
+        """
+        稳健的提问提交方法
+        优化：优先使用模拟键盘输入，解决React/Vue组件状态同步问题
+        
+        Args:
+            page: Playwright页面对象
+            question: 问题内容
+            input_selector: 输入框选择器
+            submit_button_selector: 提交按钮选择器（可选）
+            
+        Returns:
+            是否成功提交
+        """
+        try:
+            self._log("info", f"开始输入问题，长度: {len(question)}")
+            
+            # 1. 聚焦并点击输入框 (确保激活)
+            try:
+                await page.focus(input_selector)
+                await page.click(input_selector)
+                await asyncio.sleep(0.5)
+            except Exception as e:
+                self._log("warning", f"聚焦/点击输入框失败: {e}")
+            
+            # 2. 模拟真实键盘输入 (最稳健的方式)
+            # 避免使用 fill，因为它可能不会触发某些前端框架的 change 事件
+            try:
+                # 先尝试清空内容 (如果是 input/textarea)
+                await page.evaluate(f"""(selector) => {{
+                    const el = document.querySelector(selector);
+                    if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA')) {{
+                        el.value = '';
+                    }} else if (el) {{
+                        el.innerText = '';
+                    }}
+                }}""", input_selector)
+                
+                # 模拟打字
+                await page.keyboard.type(question, delay=30)
+                
+            except Exception as e:
+                self._log("error", f"模拟输入失败: {e}")
+                return False
+                
+            # 3. 验证输入结果
+            input_value = await page.evaluate(f"""(selector) => {{
+                const el = document.querySelector(selector);
+                if (!el) return null;
+                return el.value || el.innerText || el.textContent;
+            }}""", input_selector)
+            
+            if not input_value or len(input_value.strip()) == 0:
+                self._log("warning", "检测到输入框为空，尝试使用 fill 作为回退方案")
+                await page.fill(input_selector, question)
+            
+            await asyncio.sleep(0.5)
+            self._log("info", "问题输入完成，准备提交")
+            
+            # 4. 提交
+            submitted = False
+            
+            # 方案A: 点击发送按钮 (如果存在且可见)
+            if submit_button_selector:
+                try:
+                    # 使用 wait_for_selector 确保按钮出现 (短超时)
+                    btn = await page.wait_for_selector(submit_button_selector, state="visible", timeout=2000)
+                    if btn and await btn.is_enabled():
+                        self._log("info", "点击发送按钮提交")
+                        await btn.click()
+                        submitted = True
+                except Exception:
+                    self._log("debug", "发送按钮不可用或未找到")
+            
+            # 方案B: 回车提交
+            if not submitted:
+                self._log("info", "使用回车键提交")
+                await page.press(input_selector, "Enter")
+                
+            return True
+            
+        except Exception as e:
+            self._log("error", f"提问提交失败: {e}")
+            return False

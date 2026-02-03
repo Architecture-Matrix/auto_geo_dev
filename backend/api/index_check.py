@@ -5,8 +5,9 @@
 """
 
 from typing import List, Optional
+from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
-from pydantic import BaseModel
+from pydantic import BaseModel, field_serializer
 from sqlalchemy.orm import Session
 
 from backend.database import get_db
@@ -53,6 +54,10 @@ class RecordResponse(BaseModel):
     keyword_found: Optional[bool]
     company_found: Optional[bool]
     check_time: str
+
+    @field_serializer('check_time')
+    def serialize_check_time(self, dt: datetime) -> str:
+        return dt.isoformat() if dt else ""
 
     class Config:
         from_attributes = True
@@ -142,21 +147,81 @@ async def batch_check_index(
         return ApiResponse(success=False, message=f"批量检测失败: {str(e)}")
 
 
-@router.get("/records", response_model=List[RecordResponse])
+@router.get("/records")
 async def get_records(
     keyword_id: Optional[int] = Query(None, description="关键词ID筛选"),
     platform: Optional[str] = Query(None, description="平台筛选"),
-    limit: int = Query(100, ge=1, le=500),
+    limit: int = Query(15, ge=1, le=500),
+    skip: int = Query(0, ge=0),
+    keyword_found: Optional[bool] = Query(None, description="关键词命中筛选"),
+    company_found: Optional[bool] = Query(None, description="公司名命中筛选"),
+    start_date: Optional[str] = Query(None, description="开始时间 YYYY-MM-DD"),
+    end_date: Optional[str] = Query(None, description="结束时间 YYYY-MM-DD"),
+    question: Optional[str] = Query(None, description="问题搜索"),
     db: Session = Depends(get_db)
 ):
     """
-    获取检测记录
-
-    注意：返回值按检测时间倒序！
+    获取检测记录（支持分页和筛选）
     """
+    try:
+        service = IndexCheckService(db)
+        
+        # 处理日期
+        start_dt = None
+        end_dt = None
+        if start_date:
+            start_dt = datetime.strptime(start_date, "%Y-%m-%d")
+        if end_date:
+            end_dt = datetime.strptime(end_date, "%Y-%m-%d").replace(hour=23, minute=59, second=59)
+
+        records, total = service.get_check_records(
+            keyword_id=keyword_id,
+            platform=platform,
+            limit=limit,
+            skip=skip,
+            keyword_found=keyword_found,
+            company_found=company_found,
+            start_date=start_dt,
+            end_date=end_dt,
+            question=question
+        )
+        
+        result = []
+        for record in records:
+            record_dict = {
+                "id": record.id,
+                "keyword_id": record.keyword_id,
+                "platform": record.platform,
+                "question": record.question,
+                "answer": record.answer,
+                "keyword_found": record.keyword_found,
+                "company_found": record.company_found,
+                "check_time": record.check_time.isoformat() if record.check_time else ""
+            }
+            result.append(record_dict)
+        
+        return {
+            "total": total,
+            "items": result,
+            "limit": limit,
+            "skip": skip
+        }
+    except Exception as e:
+        logger.error(f"获取检测记录失败: {e}")
+        return {"total": 0, "items": []}
+
+class BatchDeleteRequest(BaseModel):
+    record_ids: List[int]
+
+@router.post("/records/batch-delete", response_model=ApiResponse)
+async def batch_delete_records(
+    request: BatchDeleteRequest,
+    db: Session = Depends(get_db)
+):
+    """批量删除记录"""
     service = IndexCheckService(db)
-    records = service.get_check_records(keyword_id, platform, limit)
-    return records
+    count = service.batch_delete_records(request.record_ids)
+    return ApiResponse(success=True, message=f"已删除 {count} 条记录")
 
 
 @router.get("/keywords/{keyword_id}/hit-rate", response_model=HitRateResponse)

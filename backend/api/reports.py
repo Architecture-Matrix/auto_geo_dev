@@ -167,24 +167,32 @@ async def get_platform_stats(db: Session = Depends(get_db)):
 @router.get("/trends", response_model=List[TrendDataPoint])
 async def get_trends(
     days: int = Query(30, ge=1, le=90, description="统计天数"),
+    platform: Optional[str] = Query(None, description="平台筛选"),
     db: Session = Depends(get_db)
 ):
     """
     获取收录趋势数据
-
+    
     注意：用于绘制趋势图表！
     """
     start_date = datetime.now() - timedelta(days=days)
-
-    # 按日期分组统计
-    trends = db.query(
+    
+    # 构建查询
+    query = db.query(
         func.date(IndexCheckRecord.check_time).label("date"),
         func.sum(case((IndexCheckRecord.keyword_found == True, 1), else_=0)).label("keyword_found"),
         func.sum(case((IndexCheckRecord.company_found == True, 1), else_=0)).label("company_found"),
         func.count().label("total_checks")
     ).filter(
         IndexCheckRecord.check_time >= start_date
-    ).group_by(
+    )
+    
+    # 增加平台筛选
+    if platform:
+        query = query.filter(IndexCheckRecord.platform == platform)
+        
+    # 按日期分组统计
+    trends = query.group_by(
         func.date(IndexCheckRecord.check_time)
     ).order_by(
         func.date(IndexCheckRecord.check_time)

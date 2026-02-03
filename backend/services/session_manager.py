@@ -55,7 +55,8 @@ class SecureSessionManager:
         user_id: int, 
         project_id: int, 
         platform: str, 
-        storage_state: Dict[str, Any]
+        storage_state: Dict[str, Any],
+        is_new_login: bool = False
     ) -> bool:
         """
         保存会话状态（加密）
@@ -65,6 +66,7 @@ class SecureSessionManager:
             project_id: 项目ID
             platform: AI平台标识
             storage_state: Playwright存储状态
+            is_new_login: 是否为新登录（如果是，将强制更新created_at）
 
         Returns:
             是否保存成功
@@ -76,8 +78,17 @@ class SecureSessionManager:
                 return False
 
             # 添加/更新会话时间戳
-            storage_state["last_modified"] = datetime.now().isoformat()
-            storage_state["created_at"] = storage_state.get("created_at", datetime.now().isoformat())
+            current_time = datetime.now().isoformat()
+            storage_state["last_modified"] = current_time
+            
+            # 如果是新登录，或者没有created_at，则更新/设置created_at
+            if is_new_login or "created_at" not in storage_state:
+                storage_state["created_at"] = current_time
+                logger.info(f"更新会话创建时间: platform={platform}, time={current_time}")
+            else:
+                # 确保已有created_at保留下来
+                # 注意：如果storage_state是全新的对象且不包含created_at，上面的if会处理它
+                pass
 
             # 序列化存储状态
             storage_json = json.dumps(storage_state, ensure_ascii=False)
@@ -290,6 +301,15 @@ class SecureSessionManager:
                         "button*='Sign in'"
                     ]
 
+                    # 针对特定平台的额外检测
+                    if platform == 'doubao':
+                        login_indicators.extend([
+                            "[class*='login-btn']",
+                            "[class*='login-button']",
+                            "[href*='login']",
+                            "[class*='account']"
+                        ])
+
                     has_login = False
                     for indicator in login_indicators:
                         try:
@@ -317,6 +337,71 @@ class SecureSessionManager:
             logger.error(f"心跳检测异常: {e}, platform={platform}")
             return False
 
+    async def get_session_status_fast(
+        self, 
+        user_id: int, 
+        project_id: int, 
+        platform: str
+    ) -> Dict[str, Any]:
+        """
+        快速获取会话状态（仅检查文件，不执行浏览器验证）
+        
+        Args:
+            user_id: 用户ID
+            project_id: 项目ID
+            platform: AI平台标识
+            
+        Returns:
+            会话状态详情
+        """
+        try:
+            # 检查会话文件是否存在
+            file_path = self._get_session_file_path(user_id, project_id, platform)
+            exists = file_path.exists()
+            
+            status = "invalid"
+            age_info = {}
+            
+            if exists:
+                # 文件存在，暂定为valid，具体需要通过validate_session进一步验证
+                # 但为了快速响应，这里返回valid或expiring
+                status = "valid"
+                
+                # 尝试读取文件获取时间信息
+                try:
+                    # 获取文件修改时间作为最后修改时间
+                    mtime = datetime.fromtimestamp(file_path.stat().st_mtime)
+                    now = datetime.now()
+                    age = now - mtime
+                    
+                    # 简单的时间检查
+                    if age > timedelta(days=7):
+                        status = "invalid"
+                    elif age > timedelta(days=5):
+                        status = "expiring"
+                        
+                    age_info = {
+                        "last_modified": mtime.isoformat(),
+                        "age_hours": round(age.total_seconds() / 3600, 1)
+                    }
+                except Exception:
+                    pass
+            
+            return {
+                "status": status,
+                "exists": exists,
+                "age_info": age_info,
+                "platform": platform,
+                "is_fast_check": True
+            }
+        except Exception as e:
+            logger.error(f"快速获取会话状态失败: {e}")
+            return {
+                "status": "invalid",
+                "exists": False,
+                "error": str(e)
+            }
+
     async def get_session_status(
         self, 
         user_id: int, 
@@ -324,7 +409,7 @@ class SecureSessionManager:
         platform: str
     ) -> Dict[str, Any]:
         """
-        获取会话状态详情
+        获取会话状态详情（执行完整验证）
 
         Args:
             user_id: 用户ID

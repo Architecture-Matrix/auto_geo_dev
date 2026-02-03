@@ -47,9 +47,6 @@
               <el-tag :type="getStatusType(platform.status)">
                 {{ getStatusText(platform.status) }}
               </el-tag>
-              <div v-if="platform.age_info && (platform.age_info.created_at || platform.age_info.last_modified)" class="age-info">
-                上次授权: {{ formatDate(platform.age_info.created_at || platform.age_info.last_modified) }}
-              </div>
             </div>
           </div>
           <div class="platform-actions">
@@ -124,10 +121,63 @@
     <div class="section">
       <div class="section-header">
         <h2 class="section-title">检测记录</h2>
-        <el-button @click="loadRecords">
-          <el-icon><Refresh /></el-icon>
-          刷新
-        </el-button>
+        <div class="header-actions">
+          <el-button 
+            type="danger" 
+            :disabled="selectedRecords.length === 0"
+            @click="batchDelete"
+          >
+            <el-icon><Delete /></el-icon>
+            批量删除
+          </el-button>
+          <el-button @click="loadRecords">
+            <el-icon><Refresh /></el-icon>
+            刷新
+          </el-button>
+        </div>
+      </div>
+
+      <!-- 筛选工具栏 -->
+      <div class="filter-toolbar">
+        <el-form :inline="true" :model="filterForm" class="filter-form">
+          <el-form-item label="平台">
+            <el-select v-model="filterForm.platform" placeholder="全部平台" clearable style="width: 140px">
+              <el-option label="全部" value="" />
+              <el-option label="豆包" value="doubao" />
+              <el-option label="通义千问" value="qianwen" />
+              <el-option label="DeepSeek" value="deepseek" />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="命中状态">
+            <el-select v-model="filterForm.hitStatus" placeholder="全部状态" clearable style="width: 140px">
+              <el-option label="全部" value="" />
+              <el-option label="关键词命中" value="keyword_found" />
+              <el-option label="公司名命中" value="company_found" />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="时间范围">
+            <el-select v-model="filterForm.timeRange" placeholder="全部时间" clearable style="width: 140px">
+              <el-option label="全部" value="" />
+              <el-option label="近三天" value="3days" />
+              <el-option label="本周" value="week" />
+              <el-option label="本月" value="month" />
+            </el-select>
+          </el-form-item>
+          <el-form-item>
+            <el-input
+              v-model="filterForm.question"
+              placeholder="搜索检测问题"
+              prefix-icon="Search"
+              clearable
+              style="width: 200px"
+              @keyup.enter="handleFilter"
+            />
+          </el-form-item>
+          <el-form-item>
+            <el-button type="primary" @click="handleFilter">筛选</el-button>
+            <el-button @click="resetFilter">重置</el-button>
+          </el-form-item>
+        </el-form>
       </div>
 
       <el-table
@@ -135,7 +185,9 @@
         :data="records"
         stripe
         style="width: 100%"
+        @selection-change="handleSelectionChange"
       >
+        <el-table-column type="selection" width="55" />
         <el-table-column prop="question" label="检测问题" min-width="250" show-overflow-tooltip />
         <el-table-column prop="platform" label="平台" width="120">
           <template #default="{ row }">
@@ -163,19 +215,55 @@
             {{ formatDate(row.check_time) }}
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="100" fixed="right">
+        <el-table-column label="操作" width="180" fixed="right">
           <template #default="{ row }">
             <el-button type="primary" size="small" link @click="viewAnswer(row)">
-              查看回答
+              查看
             </el-button>
+            <el-popconfirm
+              title="确定要删除这条记录吗？"
+              @confirm="deleteRecord(row)"
+            >
+              <template #reference>
+                <el-button type="danger" size="small" link>
+                  删除
+                </el-button>
+              </template>
+            </el-popconfirm>
           </template>
         </el-table-column>
       </el-table>
+
+      <!-- 分页 -->
+      <div class="pagination-container">
+        <el-pagination
+          v-model:current-page="pagination.currentPage"
+          v-model:page-size="pagination.pageSize"
+          :page-sizes="[15, 30, 50, 100]"
+          layout="total, sizes, prev, pager, next, jumper"
+          :total="pagination.total"
+          @size-change="handleSizeChange"
+          @current-change="handleCurrentChange"
+        />
+      </div>
     </div>
 
     <!-- 命中率趋势图表 -->
     <div class="section">
-      <h2 class="section-title">命中率趋势</h2>
+      <div class="section-header">
+        <h2 class="section-title">命中率趋势</h2>
+        <el-select 
+          v-model="trendPlatform" 
+          placeholder="全平台" 
+          style="width: 150px"
+          @change="loadTrendChart"
+        >
+          <el-option label="全平台" value="" />
+          <el-option label="豆包" value="doubao" />
+          <el-option label="通义千问" value="qianwen" />
+          <el-option label="DeepSeek" value="deepseek" />
+        </el-select>
+      </div>
       <div ref="chartRef" class="chart-container" />
     </div>
 
@@ -210,11 +298,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ref, computed, onMounted, onUnmounted, nextTick, reactive } from 'vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   Search,
   Refresh,
+  Delete
 } from '@element-plus/icons-vue'
 import * as echarts from 'echarts'
 import { geoKeywordApi, indexCheckApi, reportsApi } from '@/services/api'
@@ -247,6 +336,7 @@ interface CheckRecord {
 const projects = ref<Project[]>([])
 const keywords = ref<Keyword[]>([])
 const records = ref<CheckRecord[]>([])
+const selectedRecords = ref<CheckRecord[]>([])
 const stats = ref({
   total_keywords: 0,
   keyword_found: 0,
@@ -259,8 +349,24 @@ const checking = ref(false)
 
 const currentRecord = ref<CheckRecord | null>(null)
 
+// 分页配置
+const pagination = reactive({
+  currentPage: 1,
+  pageSize: 15,
+  total: 0
+})
+
+// 筛选表单
+const filterForm = reactive({
+  platform: '',
+  hitStatus: '',
+  timeRange: '',
+  question: ''
+})
+
 // 对话框状态
 const showAnswerDialog = ref(false)
+const trendPlatform = ref('')
 
 // 检测表单
 const checkForm = ref({
@@ -276,7 +382,6 @@ interface Platform {
   url: string
   color: string
   status?: string
-  age_info?: any
 }
 
 const platformStatuses = ref<Platform[]>([])
@@ -325,12 +430,126 @@ const onProjectChange = async () => {
 const loadRecords = async () => {
   recordsLoading.value = true
   try {
-    const result = await indexCheckApi.getRecords({ limit: 100 })
-    records.value = result || []
+    // 处理日期范围
+    let startDate: string | undefined
+    let endDate: string | undefined
+    
+    if (filterForm.timeRange) {
+      const now = new Date()
+      const end = new Date()
+      let start = new Date()
+      
+      if (filterForm.timeRange === '3days') {
+        start.setDate(now.getDate() - 3)
+      } else if (filterForm.timeRange === 'week') {
+        start.setDate(now.getDate() - 7)
+      } else if (filterForm.timeRange === 'month') {
+        start.setMonth(now.getMonth() - 1)
+      }
+      
+      startDate = start.toISOString().split('T')[0]
+      endDate = end.toISOString().split('T')[0]
+    }
+
+    const result = await indexCheckApi.getRecords({
+      limit: pagination.pageSize,
+      skip: (pagination.currentPage - 1) * pagination.pageSize,
+      platform: filterForm.platform || undefined,
+      keyword_found: filterForm.hitStatus === 'keyword_found' ? true : undefined,
+      company_found: filterForm.hitStatus === 'company_found' ? true : undefined,
+      start_date: startDate,
+      end_date: endDate,
+      question: filterForm.question || undefined
+    })
+    
+    // 兼容后端返回格式 (可能返回数组或带分页信息的对象)
+    if (Array.isArray(result)) {
+      records.value = result
+      // 如果后端只返回数组，无法得知总数，暂时用当前数量代替（或者需要后端调整）
+      // 这里假设后端已调整，返回 { total, items }
+    } else if (result && result.items) {
+      records.value = result.items
+      pagination.total = result.total
+    } else {
+      records.value = []
+      pagination.total = 0
+    }
   } catch (error) {
     console.error('加载记录失败:', error)
+    records.value = []
   } finally {
     recordsLoading.value = false
+  }
+}
+
+// 筛选操作
+const handleFilter = () => {
+  pagination.currentPage = 1
+  loadRecords()
+}
+
+const resetFilter = () => {
+  filterForm.platform = ''
+  filterForm.hitStatus = ''
+  filterForm.timeRange = ''
+  filterForm.question = ''
+  handleFilter()
+}
+
+// 分页操作
+const handleSizeChange = (val: number) => {
+  pagination.pageSize = val
+  loadRecords()
+}
+
+const handleCurrentChange = (val: number) => {
+  pagination.currentPage = val
+  loadRecords()
+}
+
+// 选择操作
+const handleSelectionChange = (val: CheckRecord[]) => {
+  selectedRecords.value = val
+}
+
+// 删除单条记录
+const deleteRecord = async (row: CheckRecord) => {
+  try {
+    await indexCheckApi.deleteRecord(row.id)
+    ElMessage.success('删除成功')
+    loadRecords()
+  } catch (error) {
+    console.error('删除失败:', error)
+    ElMessage.error('删除失败')
+  }
+}
+
+// 批量删除
+const batchDelete = async () => {
+  if (selectedRecords.value.length === 0) return
+  
+  try {
+    await ElMessageBox.confirm(
+      `确定要删除选中的 ${selectedRecords.value.length} 条记录吗？此操作不可恢复。`,
+      '批量删除确认',
+      {
+        confirmButtonText: '确定',
+        cancelButtonText: '取消',
+        type: 'warning',
+      }
+    )
+    
+    const ids = selectedRecords.value.map(item => item.id)
+    await indexCheckApi.batchDeleteRecords(ids)
+    
+    ElMessage.success('批量删除成功')
+    selectedRecords.value = [] // 清空选择
+    loadRecords()
+  } catch (error) {
+    if (error !== 'cancel') {
+      console.error('批量删除失败:', error)
+      ElMessage.error('批量删除失败')
+    }
   }
 }
 
@@ -408,18 +627,32 @@ const getPlatformName = (platform: string) => {
 }
 
 // 获取平台标签类型
-const getPlatformType = (platform: string): 'success' | 'primary' | 'warning' | 'info' | 'danger' => {
-  const types: Record<string, 'success' | 'primary' | 'warning' | 'info'> = {
+const getPlatformType = (platform: string) => {
+  const types: Record<string, string> = {
     doubao: 'primary',
     qianwen: 'warning',
     deepseek: 'success',
   }
-  return types[platform] || 'info'
+  return (types[platform] || 'info') as 'primary' | 'success' | 'warning' | 'danger' | 'info'
 }
 
 // 格式化日期
 const formatDate = (dateStr: string) => {
-  return new Date(dateStr).toLocaleString('zh-CN')
+  if (!dateStr) return ''
+  // 后端现在直接返回北京时间字符串，例如 "2026-02-02 23:39:00"
+  // 我们直接解析并显示，不再做时区转换
+  const date = new Date(dateStr)
+  if (isNaN(date.getTime())) return dateStr
+  
+  return date.toLocaleString('zh-CN', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false
+  })
 }
 
 // 初始化图表
@@ -437,7 +670,10 @@ const initChart = async () => {
 // 加载趋势数据
 const loadTrendData = async () => {
   try {
-    const result = await reportsApi.getIndexTrend({ days: 30 })
+    const result = await reportsApi.getIndexTrend({ 
+      days: 30,
+      platform: trendPlatform.value || undefined
+    })
     return result || []
   } catch (error) {
     console.error('加载趋势数据失败:', error)
@@ -453,16 +689,40 @@ const renderChart = (data: any[]) => {
   const safeData = Array.isArray(data) ? data : []
   
   const dates = safeData.map(d => d.date || '')
-  const keywordFound = safeData.map(d => d.keyword_found_count || 0)
-  const companyFound = safeData.map(d => d.company_found_count || 0)
+  
+  // 计算命中率，如果总检测数为0，则命中率为null（断开连接）
   const totalChecks = safeData.map(d => d.total_checks || 0)
+  
+  const keywordRates = safeData.map(d => {
+    const total = d.total_checks || 0
+    if (total === 0) return null
+    return parseFloat(((d.keyword_found_count || 0) / total * 100).toFixed(1))
+  })
+  
+  const companyRates = safeData.map(d => {
+    const total = d.total_checks || 0
+    if (total === 0) return null
+    return parseFloat(((d.company_found_count || 0) / total * 100).toFixed(1))
+  })
 
   const option = {
     tooltip: {
       trigger: 'axis',
+      formatter: function(params: any) {
+        let result = params[0].name + '<br/>'
+        params.forEach((item: any) => {
+          let value = item.value
+          if (value === null || value === undefined) value = '-'
+          else if (item.seriesName.includes('率')) value += '%'
+          else value += ' 次'
+          
+          result += item.marker + item.seriesName + ': ' + value + '<br/>'
+        })
+        return result
+      }
     },
     legend: {
-      data: ['关键词命中', '公司名命中', '总检测数'],
+      data: ['总检测数', '关键词命中率', '公司名命中率'],
       textStyle: {
         color: 'var(--text-secondary)',
       },
@@ -475,52 +735,80 @@ const renderChart = (data: any[]) => {
     },
     xAxis: {
       type: 'category',
-      boundaryGap: false,
+      boundaryGap: true, // 柱状图需要true
       data: dates.length > 0 ? dates : ['无数据'],
       axisLabel: {
         color: 'var(--text-secondary)',
       },
     },
-    yAxis: {
-      type: 'value',
-      axisLabel: {
-        color: 'var(--text-secondary)',
+    yAxis: [
+      {
+        type: 'value',
+        name: '数量 (次)',
+        position: 'left',
+        axisLine: { show: true },
+        axisLabel: {
+          color: 'var(--text-secondary)',
+          formatter: '{value}'
+        },
+        splitLine: {
+          show: true,
+          lineStyle: {
+            type: 'dashed',
+            color: 'var(--border)'
+          }
+        }
       },
-    },
+      {
+        type: 'value',
+        name: '命中率 (%)',
+        position: 'right',
+        min: 0,
+        max: 100,
+        axisLine: { show: true },
+        axisLabel: {
+          color: 'var(--text-secondary)',
+          formatter: '{value} %'
+        },
+        splitLine: { show: false }
+      }
+    ],
     series: [
       {
-        name: '关键词命中',
-        type: 'line',
-        data: keywordFound.length > 0 ? keywordFound : [0],
-        smooth: true,
-        itemStyle: { color: '#67c23a' },
-        areaStyle: {
-          color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-            { offset: 0, color: 'rgba(103, 194, 58, 0.3)' },
-            { offset: 1, color: 'rgba(103, 194, 58, 0.05)' },
-          ]),
-        },
-      },
-      {
-        name: '公司名命中',
-        type: 'line',
-        data: companyFound.length > 0 ? companyFound : [0],
-        smooth: true,
-        itemStyle: { color: '#409eff' },
-        areaStyle: {
-          color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-            { offset: 0, color: 'rgba(64, 158, 255, 0.3)' },
-            { offset: 1, color: 'rgba(64, 158, 255, 0.05)' },
-          ]),
-        },
-      },
-      {
         name: '总检测数',
-        type: 'line',
+        type: 'bar',
+        yAxisIndex: 0,
         data: totalChecks.length > 0 ? totalChecks : [0],
-        smooth: true,
-        itemStyle: { color: '#e6a23c' },
+        itemStyle: { 
+          color: 'rgba(230, 162, 60, 0.4)',
+          borderRadius: [4, 4, 0, 0]
+        },
+        barMaxWidth: 30
       },
+      {
+        name: '关键词命中率',
+        type: 'line',
+        yAxisIndex: 1,
+        data: keywordRates.length > 0 ? keywordRates : [null],
+        smooth: true,
+        connectNulls: false, // 关键：断开空数据
+        itemStyle: { color: '#67c23a' },
+        lineStyle: { width: 3 },
+        symbol: 'circle',
+        symbolSize: 6
+      },
+      {
+        name: '公司名命中率',
+        type: 'line',
+        yAxisIndex: 1,
+        data: companyRates.length > 0 ? companyRates : [null],
+        smooth: true,
+        connectNulls: false, // 关键：断开空数据
+        itemStyle: { color: '#409eff' },
+        lineStyle: { width: 3 },
+        symbol: 'circle',
+        symbolSize: 6
+      }
     ],
   }
 
@@ -543,7 +831,7 @@ const handleResize = () => {
 // ==================== 平台授权状态相关方法 ====================
 
 // 加载平台授权状态
-const loadPlatformStatuses = async () => {
+const loadPlatformStatuses = async (forceRefresh = false) => {
   // 总是显示加载状态，确保用户知道正在刷新
   platformStatusesLoading.value = true
   
@@ -556,8 +844,7 @@ const loadPlatformStatuses = async () => {
     // 构建基本平台状态列表，使用默认状态
     const initialStatuses = availablePlatforms.value.map(platform => ({
       ...platform,
-      status: 'invalid',
-      age_info: null
+      status: 'invalid'
     }))
     
     // 立即显示初始状态，减少用户等待时间
@@ -566,11 +853,9 @@ const loadPlatformStatuses = async () => {
     }
 
     // 并行执行所有请求，提高效率
-    const [_, ...statusResponses] = await Promise.all([
+    const [sessionsResponse, ...statusResponses] = await Promise.all([
       // 获取所有会话状态
-      get('/auth/sessions', { user_id, project_id }, { 
-        headers: { 'Cache-Control': 'no-cache' } 
-      }).catch((err: any) => {
+      get('/auth/sessions', { user_id, project_id }).catch((err: any) => {
         console.error('获取会话列表失败:', err)
         return { success: false, data: { sessions: [] } }
       }),
@@ -579,9 +864,8 @@ const loadPlatformStatuses = async () => {
         get('/auth/session/status', {
           user_id,
           project_id,
-          platform: platform.id
-        }, {
-          headers: { 'Cache-Control': 'no-cache' }
+          platform: platform.id,
+          fast: !forceRefresh // 默认使用快速检查，只有点击刷新时才进行完整检查
         }).catch((err: any) => {
           console.error(`获取${platform.name}状态失败:`, err)
           return { success: false, data: { status: 'invalid' } }
@@ -592,19 +876,16 @@ const loadPlatformStatuses = async () => {
     // 更新平台状态
     const updatedStatuses = availablePlatforms.value.map((platform, index) => {
       let status = 'invalid'
-      let age_info = null
 
       // 从平台状态响应中获取更详细的状态（优先使用这个，因为包含心跳检测结果）
       const statusResponse = statusResponses[index]
       if (statusResponse.success && statusResponse.data) {
         status = statusResponse.data.status
-        age_info = statusResponse.data.age_info
       }
 
       return {
         ...platform,
-        status,
-        age_info
+        status
       }
     })
 
@@ -619,7 +900,7 @@ const loadPlatformStatuses = async () => {
 
 // 刷新平台授权状态
 const refreshPlatformStatuses = () => {
-  loadPlatformStatuses()
+  loadPlatformStatuses(true) // 传递 true 表示强制刷新（完整检查）
 }
 
 // 开始平台授权流程
@@ -674,11 +955,6 @@ const startSinglePlatformAuth = async (authSessionId: string, platform: string) 
       
       // 不自动检查授权状态，让用户手动刷新
       // 这样可以避免浏览器窗口被过早关闭
-      
-      // 但在授权流程结束后，提示用户刷新状态
-      setTimeout(() => {
-        ElMessage.info('授权完成后请点击"刷新状态"按钮获取最新授权状态')
-      }, 10000) // 10秒后提示
     } else {
       ElMessage.error(response.error || '开始平台授权失败')
     }
@@ -687,7 +963,32 @@ const startSinglePlatformAuth = async (authSessionId: string, platform: string) 
   }
 }
 
+// 检查平台授权状态
+const checkPlatformAuthStatus = async (authSessionId: string, platform: string) => {
+  try {
+    // 调用后端API完成平台授权
+    const response = await post(`/auth/complete-platform/${authSessionId}`, {}, {
+      params: { platform }
+    })
 
+    if (response.success) {
+      // 授权成功后刷新平台状态
+      await loadPlatformStatuses()
+      
+      // 检查刷新后的状态
+      const updatedPlatform = platformStatuses.value.find(p => p.id === platform)
+      if (updatedPlatform && updatedPlatform.status === 'valid') {
+        ElMessage.success(`${availablePlatforms.value.find(p => p.id === platform)?.name}平台授权成功`)
+      } else {
+        ElMessage.warning(`${availablePlatforms.value.find(p => p.id === platform)?.name}平台授权可能未完成，请手动刷新状态检查`)
+      }
+    } else {
+      ElMessage.error(response.error || '完成平台授权失败')
+    }
+  } catch (err: any) {
+    ElMessage.error(`请求失败: ${err.message || '未知错误'}`)
+  }
+}
 
 // 获取状态文本
 const getStatusText = (status: string | undefined) => {
@@ -701,14 +1002,14 @@ const getStatusText = (status: string | undefined) => {
 }
 
 // 获取状态标签类型
-const getStatusType = (status: string | undefined): 'success' | 'primary' | 'warning' | 'info' | 'danger' => {
-  const typeMap: Record<string, 'success' | 'primary' | 'warning' | 'info' | 'danger'> = {
+const getStatusType = (status: string | undefined) => {
+  const typeMap: Record<string, string> = {
     'valid': 'success',
     'expiring': 'success', // 即将过期也使用成功标签
     'invalid': 'danger',
     'error': 'danger'
   }
-  return typeMap[status || ''] || 'info'
+  return (typeMap[status || ''] || 'info') as 'primary' | 'success' | 'warning' | 'danger' | 'info'
 }
 
 
@@ -796,6 +1097,11 @@ onUnmounted(() => {
     justify-content: space-between;
     align-items: center;
     margin-bottom: 16px;
+    
+    .header-actions {
+      display: flex;
+      gap: 12px;
+    }
   }
 }
 
@@ -803,6 +1109,30 @@ onUnmounted(() => {
   display: flex;
   flex-wrap: wrap;
   gap: 12px;
+}
+
+// 筛选工具栏样式
+.filter-toolbar {
+  margin-bottom: 16px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border);
+  
+  .filter-form {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    
+    .el-form-item {
+      margin-bottom: 8px;
+      margin-right: 12px;
+    }
+  }
+}
+
+.pagination-container {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 16px;
 }
 
 .chart-container {
@@ -946,11 +1276,6 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   gap: 12px;
-}
-
-.age-info {
-  font-size: 12px;
-  color: var(--text-secondary);
 }
 
 .platform-actions {

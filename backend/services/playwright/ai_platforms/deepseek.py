@@ -20,25 +20,127 @@ class DeepSeekChecker(AIPlatformChecker):
 
     SELECTORS = {
         "input_box": [
+            "textarea[id='chat-input']",
+            "textarea[placeholder*='Message']",
+            "textarea[placeholder*='DeepSeek']",
             "textarea[placeholder*='输入']",
-            "textarea[data-placeholder*='输入']",
-            "textarea[class*='input']",
-            "textarea[class*='chat-input']",
-            "textarea[role='textbox']"
+            "textarea",
+            "[contenteditable='true']"
         ],
         "submit_button": [
-            "button[type='submit']",
-            "button[aria-label*='发送']",
-            "button[class*='send']",
-            "[class*='submit'] button"
+            "div[class*='ds-button']",
+            "[class*='send-button']",
+            "button[type='submit']"
         ],
         "new_chat": [
-            "[class*='new-chat']",
-            "[class*='new-conversation']",
-            "[class*='new-dialog']",
-            "[class*='create-chat']"
+            "div[class*='new-chat']",
+            "[class*='new-chat']"
         ]
     }
+
+    async def navigate_to_page(self, page: Page) -> bool:
+        """
+        DeepSeek特殊导航逻辑
+        优化：减少等待时间
+
+        Returns:
+            是否成功导航
+        """
+        try:
+            url = "https://chat.deepseek.com"
+            self._log("info", f"正在导航到DeepSeek页面: {url}")
+
+            await page.goto(
+                url, 
+                wait_until="domcontentloaded",
+                timeout=60000
+            )
+            
+            # 使用基类的智能等待
+            try:
+                indicators = [
+                    "textarea[placeholder*='输入']",
+                    "[class*='login']",
+                    "button*='登录'"
+                ]
+                await self.wait_for_selector(page, indicators, timeout=10000)
+            except Exception:
+                pass
+
+            # 检查登录
+            login_indicators = [
+                "[class*='login']",
+                "button*='登录'",
+                "[class*='auth']"
+            ]
+            
+            has_login = False
+            for indicator in login_indicators:
+                try:
+                    element = await page.query_selector(indicator)
+                    if element and await element.is_visible():
+                        has_login = True
+                        break
+                except Exception:
+                    continue
+
+            if has_login:
+                self._log("info", "检测到登录页面，请手动完成登录")
+                await asyncio.sleep(30)
+                await page.wait_for_load_state("domcontentloaded", timeout=30000)
+
+            return True
+        except Exception as e:
+            self._log("error", f"DeepSeek导航失败: {e}")
+            return False
+
+    async def get_answer_content(
+        self,
+        page: Page,
+        question: str
+    ) -> Dict[str, Any]:
+        """
+        DeepSeek专用的回答提取逻辑
+        """
+        self._log("info", "使用DeepSeek专用逻辑获取回答")
+        
+        # DeepSeek的回答容器选择器（基于观察）
+        deepseek_selectors = [
+            "[class*='ds-message']",
+            "[class*='chat-response']",
+            "[class*='assistant-message']",
+            "[class*='markdown']"
+        ]
+        
+        answer_text = ""
+        matched_selector = None
+        
+        for selector in deepseek_selectors:
+            try:
+                elements = await page.query_selector_all(selector)
+                if elements:
+                    # 获取最后一个非用户消息
+                    for element in reversed(elements):
+                        text = await element.inner_text()
+                        if len(text) > 50 and question not in text[:50]:
+                            answer_text = text
+                            matched_selector = selector
+                            break
+                    if answer_text:
+                        break
+            except Exception:
+                continue
+                
+        if answer_text:
+            return {
+                "success": True,
+                "answer": answer_text[:5000],
+                "selector": matched_selector,
+                "length": len(answer_text)
+            }
+            
+        # 如果专用选择器失败，回退到基类逻辑
+        return await super().get_answer_content(page, question)
 
     async def check(
         self,
@@ -108,14 +210,20 @@ class DeepSeekChecker(AIPlatformChecker):
 
             self._log("info", f"找到输入框: {matched_selector}")
 
-            await page.fill(matched_selector, question)
-            await asyncio.sleep(0.5)
-            self._log("info", f"已输入问题: {question[:30]}...")
+            # 使用基类稳健的提交方法
+            submit_selectors = self.SELECTORS.get("submit_button", [])
+            submit_btn = submit_selectors[0] if submit_selectors else None
+            
+            await self.submit_question(
+                page=page,
+                question=question,
+                input_selector=matched_selector,
+                submit_button_selector=submit_btn
+            )
+            
+            self._log("info", "已提交问题")
 
             initial_content = await page.inner_text("body")
-
-            await page.keyboard.press("Enter")
-            self._log("info", "已提交问题")
 
             wait_result = await self.wait_for_answer_generation(
                 page,

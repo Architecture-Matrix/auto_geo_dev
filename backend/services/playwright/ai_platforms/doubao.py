@@ -18,28 +18,237 @@ class DoubaoChecker(AIPlatformChecker):
     URL: https://www.doubao.com
     """
 
+    async def navigate_to_page(self, page: Page) -> bool:
+        """
+        豆包平台特殊导航逻辑
+        优化：直接导航到聊天页面，减少等待时间
+        
+        Returns:
+            是否成功导航
+        """
+        try:
+            # 直接导航到聊天页面
+            chat_url = "https://www.doubao.com/chat"
+            self._log("info", f"正在导航到豆包聊天页面: {chat_url}")
+
+            # 使用 domcontentloaded 代替 load/networkidle，加快响应速度
+            await page.goto(
+                chat_url, 
+                wait_until="domcontentloaded",
+                timeout=60000
+            )
+
+            # 使用基类的 wait_for_selector 等待关键元素
+            # 这样可以复用并行等待逻辑，而不是死等
+            try:
+                # 豆包的登录元素或输入框
+                indicators = [
+                    "textarea[placeholder*='输入']",
+                    "[data-testid*='input']",
+                    "[class*='login-btn']",
+                    "button*='登录'",
+                    "[class*='account']"
+                ]
+                await self.wait_for_selector(page, indicators, timeout=10000)
+            except Exception:
+                pass
+
+            # 豆包特殊的登录状态检测
+            doubao_login_indicators = [
+                "[class*='login-btn']",
+                "[class*='login-button']",
+                "[href*='login']",
+                "[class*='account']",
+                "[class*='login']",
+                "[id*='login']",
+                "button*='登录'",
+                "button*='Sign in'"
+            ]
+
+            has_login = False
+            # 快速扫描登录元素
+            for indicator in doubao_login_indicators:
+                try:
+                    # 使用较短的超时时间
+                    element = await page.query_selector(indicator)
+                    if element and await element.is_visible():
+                        has_login = True
+                        break
+                except Exception:
+                    continue
+
+            if has_login:
+                self._log("info", "检测到豆包登录页面，请手动完成登录")
+                # 给用户30秒时间完成登录
+                await asyncio.sleep(30)
+                # 重新等待页面稳定
+                await page.wait_for_load_state("domcontentloaded", timeout=30000)
+            
+            self._log("info", "豆包平台导航完成")
+            return True
+        except Exception as e:
+            self._log("error", f"豆包导航失败: {e}")
+            return False
+
     SELECTORS = {
         "input_box": [
+            "div[contenteditable='true']",
+            "textarea[placeholder*='发消息']",
             "textarea[placeholder*='输入']",
-            "textarea[data-placeholder*='输入']",
-            "textarea[class*='input']",
-            "textarea[class*='chat-input']",
-            "textarea[role='textbox']"
+            "textarea[data-testid*='input']",
+            "[class*='ProseMirror']",  # 常见的富文本编辑器类名
+            "[class*='editor']",
+            "[role='textbox']"
         ],
         "submit_button": [
-            "button[type='submit']",
-            "button[aria-label*='发送']",
+            "button[data-testid*='send']",
             "button[class*='send']",
-            "[class*='submit'] button"
+            "[class*='submit']",
+            "button[type='submit']"
         ],
         "new_chat": [
+            "button[data-testid*='new-chat']",
             "[class*='new-chat']",
-            "[class*='new-conversation']",
-            "[class*='new-dialog']",
-            "a[href='/chat']",
-            "[class*='create-chat']"
+            "[href='/chat']"
         ]
     }
+
+    async def get_answer_content(
+        self,
+        page: Page,
+        question: str
+    ) -> Dict[str, Any]:
+        """
+        豆包专用的回答提取逻辑 - 增强版
+        绝不回退到全文抓取，而是通过DOM遍历寻找最佳候选
+        """
+        self._log("info", "使用豆包专用逻辑获取回答")
+        
+        # 1. 尝试标准选择器
+        doubao_selectors = [
+            "div[data-testid='message-card']", 
+            "div[class*='message-card']",
+            "div[class*='message-item']",
+            "div[class*='bubble-content']",
+            "div[class*='markdown-body']"
+        ]
+        
+        for selector in doubao_selectors:
+            try:
+                elements = await page.query_selector_all(selector)
+                if elements:
+                    # 从后往前找，找到第一个符合条件的
+                    for element in reversed(elements):
+                        text = await element.inner_text()
+                        if self._is_valid_answer(text, question):
+                            return {
+                                "success": True,
+                                "answer": self._clean_text(text),
+                                "selector": selector,
+                                "length": len(text)
+                            }
+            except Exception:
+                continue
+
+        # 2. 如果标准选择器失败，进行智能DOM遍历
+        # 查找所有文本长度足够的 div，然后通过位置和内容排除侧边栏
+        self._log("info", "标准选择器失败，尝试智能DOM遍历")
+        try:
+            # 获取页面主要区域的文本块
+            # 排除侧边栏常见的容器 class 或 id 关键词
+            candidates = await page.evaluate('''() => {
+                const results = [];
+                const blacklist = ['sidebar', 'menu', 'nav', 'history', 'input', 'toolbar'];
+                const divs = document.querySelectorAll('div');
+                
+                for (const div of divs) {
+                    // 简单的可见性检查
+                    if (div.offsetParent === null) continue;
+                    
+                    const text = div.innerText;
+                    if (text.length < 50) continue;
+                    
+                    // 检查 class 是否包含黑名单词
+                    const className = (div.className || '').toLowerCase();
+                    if (blacklist.some(w => className.includes(w))) continue;
+                    
+                    results.push({
+                        text: text,
+                        length: text.length,
+                        hasSidebarKeywords: text.includes('历史对话') || text.includes('新对话') || text.includes('帮我写作')
+                    });
+                }
+                return results;
+            }''')
+            
+            # 在 Python 端进行过滤和择优
+            best_candidate = ""
+            for item in candidates:
+                text = item['text']
+                # 排除包含明显侧边栏关键词的块
+                if item['hasSidebarKeywords']:
+                    continue
+                    
+                # 排除包含大量换行的短文本块（可能是菜单列表）
+                lines = text.split('\n')
+                if len(lines) > 5:
+                    avg_len = sum(len(l) for l in lines) / len(lines)
+                    if avg_len < 20: # 菜单项通常很短
+                        continue
+
+                if self._is_valid_answer(text, question):
+                    # 这里的策略：我们想要最长的那个，且不是全页文本
+                    # 通常回答是页面中第二长的块（第一长可能是 body）
+                    # 但为了安全，如果这个块比当前最佳块长，且不超过 5000 字（避免选中整个 body），就选它
+                    if len(text) > len(best_candidate) and len(text) < 5000:
+                        best_candidate = text
+            
+            if best_candidate:
+                return {
+                    "success": True,
+                    "answer": self._clean_text(best_candidate),
+                    "selector": "smart-dom-traversal",
+                    "length": len(best_candidate)
+                }
+                
+        except Exception as e:
+            self._log("warning", f"智能DOM遍历失败: {e}")
+
+        self._log("warning", "豆包所有提取手段均失败")
+        return {
+            "success": False,
+            "answer": "",
+            "selector": None,
+            "length": 0
+        }
+
+    def _is_valid_answer(self, text: str, question: str) -> bool:
+        """检查文本是否为有效回答"""
+        if not text or len(text) < 50:
+            return False
+            
+        # 排除包含侧边栏关键词的文本
+        sidebar_keywords = ["历史对话", "新对话", "帮我写作", "AI 创作", "云盘", "手机版"]
+        if any(k in text[:100] for k in sidebar_keywords): # 只检查开头
+            return False
+            
+        # 排除纯问题复述
+        if text.strip() == question.strip():
+            return False
+            
+        return True
+
+    def _clean_text(self, text: str) -> str:
+        """清理回答文本"""
+        # 移除底部的工具栏文本
+        if "深度思考" in text and "PPT 生成" in text:
+            # 尝试截断到工具栏之前
+            # 这里简单处理，如果发现这些词出现在末尾，就切掉
+            pass
+            
+        # 移除"内容由 AI 生成"
+        text = text.replace("内容由 AI 生成", "")
+        return text.strip()
 
     async def check(
         self,
@@ -58,9 +267,25 @@ class DoubaoChecker(AIPlatformChecker):
         self._log("info", f"目标关键词: {keyword}, 公司: {company}")
 
         try:
-            # 跳过导航操作，使用已经打开的页面
-            self._log("info", "跳过导航操作，使用已经打开的页面")
-            nav_result = {"success": True}
+            async def navigate_operation():
+                if await self.navigate_to_page(page):
+                    return {"success": True}
+                return {"success": False, "error_msg": "导航失败"}
+
+            nav_result = await self._retry_operation(
+                navigate_operation,
+                "导航到豆包",
+                max_retries=2
+            )
+
+            if not nav_result["success"]:
+                return {
+                    "success": False,
+                    "answer": None,
+                    "keyword_found": False,
+                    "company_found": False,
+                    "error_msg": nav_result.get("error_msg", "导航失败")
+                }
 
             async def clear_operation():
                 if await self.clear_chat_history(page):
@@ -93,14 +318,20 @@ class DoubaoChecker(AIPlatformChecker):
 
             self._log("info", f"找到输入框: {matched_selector}")
 
-            await page.fill(matched_selector, question)
-            await asyncio.sleep(0.5)
-            self._log("info", f"已输入问题: {question[:30]}...")
+            # 使用基类稳健的提交方法
+            submit_selectors = self.SELECTORS.get("submit_button", [])
+            submit_btn = submit_selectors[0] if submit_selectors else None
+            
+            await self.submit_question(
+                page=page,
+                question=question,
+                input_selector=matched_selector,
+                submit_button_selector=submit_btn
+            )
+            
+            self._log("info", "已提交问题")
 
             initial_content = await page.inner_text("body")
-
-            await page.keyboard.press("Enter")
-            self._log("info", "已提交问题")
 
             wait_result = await self.wait_for_answer_generation(
                 page,
