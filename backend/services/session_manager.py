@@ -457,6 +457,71 @@ class SecureSessionManager:
                 "error": str(e)
             }
 
+    async def get_session_status_fast(
+        self, 
+        user_id: int, 
+        project_id: int, 
+        platform: str
+    ) -> Dict[str, Any]:
+        """
+        快速获取会话状态（仅检查文件，不执行浏览器验证）
+        
+        Args:
+            user_id: 用户ID
+            project_id: 项目ID
+            platform: AI平台标识
+            
+        Returns:
+            会话状态详情
+        """
+        try:
+            # 检查会话文件是否存在
+            file_path = self._get_session_file_path(user_id, project_id, platform)
+            exists = file_path.exists()
+            
+            status = "invalid"
+            age_info = {}
+            
+            if exists:
+                # 文件存在，暂定为valid，具体需要通过validate_session进一步验证
+                # 但为了快速响应，这里返回valid或expiring
+                status = "valid"
+                
+                # 尝试读取文件获取时间信息
+                try:
+                    # 获取文件修改时间作为最后修改时间
+                    mtime = datetime.fromtimestamp(file_path.stat().st_mtime)
+                    now = datetime.now()
+                    age = now - mtime
+                    
+                    # 简单的时间检查
+                    if age > timedelta(days=7):
+                        status = "invalid"
+                    elif age > timedelta(days=5):
+                        status = "expiring"
+                        
+                    age_info = {
+                        "last_modified": mtime.isoformat(),
+                        "age_hours": round(age.total_seconds() / 3600, 1)
+                    }
+                except Exception:
+                    pass
+            
+            return {
+                "status": status,
+                "exists": exists,
+                "age_info": age_info,
+                "platform": platform,
+                "is_fast_check": True
+            }
+        except Exception as e:
+            logger.error(f"快速获取会话状态失败: {e}")
+            return {
+                "status": "invalid",
+                "exists": False,
+                "error": str(e)
+            }
+
     async def get_session_status(
         self, 
         user_id: int, 

@@ -213,9 +213,6 @@ class AIPlatformChecker(ABC):
                 # 重新等待页面稳定
                 await page.wait_for_load_state("domcontentloaded", timeout=30000)
 
-=======
-            # 增加页面稳定等待时间
-            await asyncio.sleep(3)
             
             # 检查是否需要登录（通过检测常见的登录元素）
             login_indicators = [
@@ -230,8 +227,9 @@ class AIPlatformChecker(ABC):
             has_login = False
             for indicator in login_indicators:
                 try:
-                    elements = await page.query_selector_all(indicator)
-                    if elements:
+                    # 使用 query_selector 而不是 query_selector_all，并检查可见性
+                    element = await page.query_selector(indicator)
+                    if element and await element.is_visible():
                         has_login = True
                         break
                 except Exception:
@@ -242,8 +240,7 @@ class AIPlatformChecker(ABC):
                 # 给用户30秒时间完成登录
                 await asyncio.sleep(30)
                 # 重新等待页面稳定
-                await page.wait_for_load_state("networkidle", timeout=30000)
-                await asyncio.sleep(2)
+                await page.wait_for_load_state("domcontentloaded", timeout=30000)
 
 >>>>>>> 3cf4b56 (feat(auth): 添加AI平台授权系统)
             return True

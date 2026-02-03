@@ -139,9 +139,6 @@
               <el-tag :type="getStatusType(platform.status)">
                 {{ getStatusText(platform.status) }}
               </el-tag>
-              <div v-if="platform.age_info && (platform.age_info.created_at || platform.age_info.last_modified)" class="age-info">
-                上次授权: {{ formatDate(platform.age_info.created_at || platform.age_info.last_modified) }}
-              </div>
             </div>
           </div>
           <div class="platform-actions">
@@ -216,10 +213,63 @@
     <div class="section">
       <div class="section-header">
         <h2 class="section-title">检测记录</h2>
-        <el-button @click="loadRecords">
-          <el-icon><Refresh /></el-icon>
-          刷新
-        </el-button>
+        <div class="header-actions">
+          <el-button 
+            type="danger" 
+            :disabled="selectedRecords.length === 0"
+            @click="batchDelete"
+          >
+            <el-icon><Delete /></el-icon>
+            批量删除
+          </el-button>
+          <el-button @click="loadRecords">
+            <el-icon><Refresh /></el-icon>
+            刷新
+          </el-button>
+        </div>
+      </div>
+
+      <!-- 筛选工具栏 -->
+      <div class="filter-toolbar">
+        <el-form :inline="true" :model="filterForm" class="filter-form">
+          <el-form-item label="平台">
+            <el-select v-model="filterForm.platform" placeholder="全部平台" clearable style="width: 140px">
+              <el-option label="全部" value="" />
+              <el-option label="豆包" value="doubao" />
+              <el-option label="通义千问" value="qianwen" />
+              <el-option label="DeepSeek" value="deepseek" />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="命中状态">
+            <el-select v-model="filterForm.hitStatus" placeholder="全部状态" clearable style="width: 140px">
+              <el-option label="全部" value="" />
+              <el-option label="关键词命中" value="keyword_found" />
+              <el-option label="公司名命中" value="company_found" />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="时间范围">
+            <el-select v-model="filterForm.timeRange" placeholder="全部时间" clearable style="width: 140px">
+              <el-option label="全部" value="" />
+              <el-option label="近三天" value="3days" />
+              <el-option label="本周" value="week" />
+              <el-option label="本月" value="month" />
+            </el-select>
+          </el-form-item>
+          <el-form-item>
+            <el-input
+              v-model="filterForm.question"
+              placeholder="搜索检测问题"
+              prefix-icon="Search"
+              clearable
+              style="width: 200px"
+              @keyup.enter="handleFilter"
+            />
+          </el-form-item>
+          <el-form-item>
+            <el-button type="primary" @click="handleFilter">筛选</el-button>
+            <el-button @click="resetFilter">重置</el-button>
+          </el-form-item>
+        </el-form>
       </div>
 
       <el-table
@@ -227,7 +277,9 @@
         :data="records"
         stripe
         style="width: 100%"
+        @selection-change="handleSelectionChange"
       >
+        <el-table-column type="selection" width="55" />
         <el-table-column prop="question" label="检测问题" min-width="250" show-overflow-tooltip />
         <el-table-column prop="platform" label="平台" width="120">
           <template #default="{ row }">
@@ -255,19 +307,55 @@
             {{ formatDate(row.check_time) }}
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="100" fixed="right">
+        <el-table-column label="操作" width="180" fixed="right">
           <template #default="{ row }">
             <el-button type="primary" size="small" link @click="viewAnswer(row)">
-              查看回答
+              查看
             </el-button>
+            <el-popconfirm
+              title="确定要删除这条记录吗？"
+              @confirm="deleteRecord(row)"
+            >
+              <template #reference>
+                <el-button type="danger" size="small" link>
+                  删除
+                </el-button>
+              </template>
+            </el-popconfirm>
           </template>
         </el-table-column>
       </el-table>
+
+      <!-- 分页 -->
+      <div class="pagination-container">
+        <el-pagination
+          v-model:current-page="pagination.currentPage"
+          v-model:page-size="pagination.pageSize"
+          :page-sizes="[15, 30, 50, 100]"
+          layout="total, sizes, prev, pager, next, jumper"
+          :total="pagination.total"
+          @size-change="handleSizeChange"
+          @current-change="handleCurrentChange"
+        />
+      </div>
     </div>
 
     <!-- 命中率趋势图表 -->
     <div class="section">
-      <h2 class="section-title">命中率趋势</h2>
+      <div class="section-header">
+        <h2 class="section-title">命中率趋势</h2>
+        <el-select 
+          v-model="trendPlatform" 
+          placeholder="全平台" 
+          style="width: 150px"
+          @change="loadTrendChart"
+        >
+          <el-option label="全平台" value="" />
+          <el-option label="豆包" value="doubao" />
+          <el-option label="通义千问" value="qianwen" />
+          <el-option label="DeepSeek" value="deepseek" />
+        </el-select>
+      </div>
       <div ref="chartRef" class="chart-container" />
     </div>
 
@@ -486,6 +574,7 @@ import {
   Refresh,
   Delete
 } from '@element-plus/icons-vue'
+>>>>>>> 0515147 (备份-合并后状态-20260203-1600)
 import * as echarts from 'echarts'
 import { geoKeywordApi, indexCheckApi, reportsApi } from '@/services/api'
 import { get, post } from '@/services/api'
@@ -718,6 +807,7 @@ const batchDelete = async () => {
 }
 
 // 加载统计数据
+>>>>>>> 0515147 (备份-合并后状态-20260203-1600)
 const loadStats = async () => {
   try {
     const res = await reportsApi.getOverview()
@@ -1005,6 +1095,172 @@ const handleResize = () => {
   }
 }
 
+const refreshAllData = async () => {
+=======
+    const result = await reportsApi.getIndexTrend({ days: 30 })
+=======
+// 加载趋势数据
+const loadTrendData = async () => {
+  try {
+    const result = await reportsApi.getIndexTrend({ 
+      days: 30,
+      platform: trendPlatform.value || undefined
+    })
+>>>>>>> b4f4500 (备份-合并后状态-20260203-1600)
+    return result || []
+  } catch (error) {
+    console.error('加载趋势数据失败:', error)
+    return []
+  }
+}
+
+// 渲染图表
+const renderChart = (data: any[]) => {
+  if (!chartInstance) return
+
+  // 处理空数据
+  const safeData = Array.isArray(data) ? data : []
+  
+  const dates = safeData.map(d => d.date || '')
+  
+  // 计算命中率，如果总检测数为0，则命中率为null（断开连接）
+  const totalChecks = safeData.map(d => d.total_checks || 0)
+  
+  const keywordRates = safeData.map(d => {
+    const total = d.total_checks || 0
+    if (total === 0) return null
+    return parseFloat(((d.keyword_found_count || 0) / total * 100).toFixed(1))
+  })
+  
+  const companyRates = safeData.map(d => {
+    const total = d.total_checks || 0
+    if (total === 0) return null
+    return parseFloat(((d.company_found_count || 0) / total * 100).toFixed(1))
+  })
+
+  const option = {
+    tooltip: {
+      trigger: 'axis',
+      formatter: function(params: any) {
+        let result = params[0].name + '<br/>'
+        params.forEach((item: any) => {
+          let value = item.value
+          if (value === null || value === undefined) value = '-'
+          else if (item.seriesName.includes('率')) value += '%'
+          else value += ' 次'
+          
+          result += item.marker + item.seriesName + ': ' + value + '<br/>'
+        })
+        return result
+      }
+    },
+    legend: {
+      data: ['总检测数', '关键词命中率', '公司名命中率'],
+      textStyle: {
+        color: 'var(--text-secondary)',
+      },
+    },
+    grid: {
+      left: '3%',
+      right: '4%',
+      bottom: '3%',
+      containLabel: true,
+    },
+    xAxis: {
+      type: 'category',
+      boundaryGap: true, // 柱状图需要true
+      data: dates.length > 0 ? dates : ['无数据'],
+      axisLabel: {
+        color: 'var(--text-secondary)',
+      },
+    },
+    yAxis: [
+      {
+        type: 'value',
+        name: '数量 (次)',
+        position: 'left',
+        axisLine: { show: true },
+        axisLabel: {
+          color: 'var(--text-secondary)',
+          formatter: '{value}'
+        },
+        splitLine: {
+          show: true,
+          lineStyle: {
+            type: 'dashed',
+            color: 'var(--border)'
+          }
+        }
+      },
+      {
+        type: 'value',
+        name: '命中率 (%)',
+        position: 'right',
+        min: 0,
+        max: 100,
+        axisLine: { show: true },
+        axisLabel: {
+          color: 'var(--text-secondary)',
+          formatter: '{value} %'
+        },
+        splitLine: { show: false }
+      }
+    ],
+    series: [
+      {
+        name: '总检测数',
+        type: 'bar',
+        yAxisIndex: 0,
+        data: totalChecks.length > 0 ? totalChecks : [0],
+        itemStyle: { 
+          color: 'rgba(230, 162, 60, 0.4)',
+          borderRadius: [4, 4, 0, 0]
+        },
+        barMaxWidth: 30
+      },
+      {
+        name: '关键词命中率',
+        type: 'line',
+        yAxisIndex: 1,
+        data: keywordRates.length > 0 ? keywordRates : [null],
+        smooth: true,
+        connectNulls: false, // 关键：断开空数据
+        itemStyle: { color: '#67c23a' },
+        lineStyle: { width: 3 },
+        symbol: 'circle',
+        symbolSize: 6
+      },
+      {
+        name: '公司名命中率',
+        type: 'line',
+        yAxisIndex: 1,
+        data: companyRates.length > 0 ? companyRates : [null],
+        smooth: true,
+        connectNulls: false, // 关键：断开空数据
+        itemStyle: { color: '#409eff' },
+        lineStyle: { width: 3 },
+        symbol: 'circle',
+        symbolSize: 6
+      }
+    ],
+  }
+
+  chartInstance.setOption(option)
+}
+
+// 加载并刷新图表
+const loadTrendChart = async () => {
+  const trendData = await loadTrendData()
+  renderChart(trendData)
+}
+
+// 窗口大小变化时重绘图表
+const handleResize = () => {
+  if (chartInstance) {
+    chartInstance.resize()
+  }
+}
+
 // ==================== 平台授权状态相关方法 ====================
 
 // 加载平台授权状态
@@ -1187,283 +1443,6 @@ const getStatusType = (status: string | undefined) => {
     'error': 'danger'
   }
   return (typeMap[status || ''] || 'info') as 'primary' | 'success' | 'warning' | 'danger' | 'info'
-}
-
-// 统一刷新方法
-const refreshAllData = async () => {
-=======
-    const result = await reportsApi.getIndexTrend({ days: 30 })
-    return result || []
-  } catch (error) {
-    console.error('加载趋势数据失败:', error)
-    return []
-  }
-}
-
-// 渲染图表
-const renderChart = (data: any[]) => {
-  if (!chartInstance) return
-
-  // 处理空数据
-  const safeData = Array.isArray(data) ? data : []
-  
-  const dates = safeData.map(d => d.date || '')
-  const keywordFound = safeData.map(d => d.keyword_found_count || 0)
-  const companyFound = safeData.map(d => d.company_found_count || 0)
-  const totalChecks = safeData.map(d => d.total_checks || 0)
-
-  const option = {
-    tooltip: {
-      trigger: 'axis',
-    },
-    legend: {
-      data: ['关键词命中', '公司名命中', '总检测数'],
-      textStyle: {
-        color: 'var(--text-secondary)',
-      },
-    },
-    grid: {
-      left: '3%',
-      right: '4%',
-      bottom: '3%',
-      containLabel: true,
-    },
-    xAxis: {
-      type: 'category',
-      boundaryGap: false,
-      data: dates.length > 0 ? dates : ['无数据'],
-      axisLabel: {
-        color: 'var(--text-secondary)',
-      },
-    },
-    yAxis: {
-      type: 'value',
-      axisLabel: {
-        color: 'var(--text-secondary)',
-      },
-    },
-    series: [
-      {
-        name: '关键词命中',
-        type: 'line',
-        data: keywordFound.length > 0 ? keywordFound : [0],
-        smooth: true,
-        itemStyle: { color: '#67c23a' },
-        areaStyle: {
-          color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-            { offset: 0, color: 'rgba(103, 194, 58, 0.3)' },
-            { offset: 1, color: 'rgba(103, 194, 58, 0.05)' },
-          ]),
-        },
-      },
-      {
-        name: '公司名命中',
-        type: 'line',
-        data: companyFound.length > 0 ? companyFound : [0],
-        smooth: true,
-        itemStyle: { color: '#409eff' },
-        areaStyle: {
-          color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-            { offset: 0, color: 'rgba(64, 158, 255, 0.3)' },
-            { offset: 1, color: 'rgba(64, 158, 255, 0.05)' },
-          ]),
-        },
-      },
-      {
-        name: '总检测数',
-        type: 'line',
-        data: totalChecks.length > 0 ? totalChecks : [0],
-        smooth: true,
-        itemStyle: { color: '#e6a23c' },
-      },
-    ],
-  }
-
-  chartInstance.setOption(option)
-}
-
-// 加载并刷新图表
-const loadTrendChart = async () => {
-  const trendData = await loadTrendData()
-  renderChart(trendData)
-}
-
-// 窗口大小变化时重绘图表
-const handleResize = () => {
-  if (chartInstance) {
-    chartInstance.resize()
-  }
-}
-
-// ==================== 平台授权状态相关方法 ====================
-
-// 加载平台授权状态
-const loadPlatformStatuses = async () => {
-  // 总是显示加载状态，确保用户知道正在刷新
-  platformStatusesLoading.value = true
-  
-  try {
-    // 这里应该从当前登录用户获取user_id，从路由参数或store获取project_id
-    // 暂时使用固定值，实际应用中需要从上下文中获取
-    const user_id = 1 // 示例值
-    const project_id = 1 // 示例值
-
-    // 构建基本平台状态列表，使用默认状态
-    const initialStatuses = availablePlatforms.value.map(platform => ({
-      ...platform,
-      status: 'invalid',
-      age_info: null
-    }))
-    
-    // 立即显示初始状态，减少用户等待时间
-    if (platformStatuses.value.length === 0) {
-      platformStatuses.value = initialStatuses
-    }
-
-    // 并行执行所有请求，提高效率
-    const [_, ...statusResponses] = await Promise.all([
-      // 获取所有会话状态
-      get('/auth/sessions', { user_id, project_id }, { 
-        headers: { 'Cache-Control': 'no-cache' } 
-      }).catch((err: any) => {
-        console.error('获取会话列表失败:', err)
-        return { success: false, data: { sessions: [] } }
-      }),
-      // 并行获取每个平台的状态
-      ...availablePlatforms.value.map(platform => 
-        get('/auth/session/status', {
-          user_id,
-          project_id,
-          platform: platform.id
-        }, {
-          headers: { 'Cache-Control': 'no-cache' }
-        }).catch((err: any) => {
-          console.error(`获取${platform.name}状态失败:`, err)
-          return { success: false, data: { status: 'invalid' } }
-        })
-      )
-    ])
-
-    // 更新平台状态
-    const updatedStatuses = availablePlatforms.value.map((platform, index) => {
-      let status = 'invalid'
-      let age_info = null
-
-      // 从平台状态响应中获取更详细的状态（优先使用这个，因为包含心跳检测结果）
-      const statusResponse = statusResponses[index]
-      if (statusResponse.success && statusResponse.data) {
-        status = statusResponse.data.status
-        age_info = statusResponse.data.age_info
-      }
-
-      return {
-        ...platform,
-        status,
-        age_info
-      }
-    })
-
-    platformStatuses.value = updatedStatuses
-  } catch (err: any) {
-    console.error('加载平台状态失败:', err)
-    // 出错时不显示错误提示，避免影响用户体验
-  } finally {
-    platformStatusesLoading.value = false
-  }
-}
-
-// 刷新平台授权状态
-const refreshPlatformStatuses = () => {
-  loadPlatformStatuses()
-}
-
-// 开始平台授权流程
-const startPlatformAuthFlow = async (platformId: string) => {
-  try {
-    // 这里应该从当前登录用户获取user_id，从路由参数或store获取project_id
-    // 暂时使用固定值，实际应用中需要从上下文中获取
-    const user_id = 1 // 示例值
-    const project_id = 1 // 示例值
-
-    // 开始授权流程，只授权指定平台
-    const platforms = [platformId]
-    
-    // 调用后端API开始授权流程
-    const response = await post('/auth/start-flow', {
-      user_id,
-      project_id,
-      platforms
-    })
-
-    if (response.success) {
-      const authSessionId = response.auth_session_id
-      
-      if (authSessionId) {
-        const platformName = availablePlatforms.value.find(p => p.id === platformId)?.name
-        ElMessage.success(`${platformName}平台授权流程已开始，请检查浏览器弹出的窗口`)
-        
-        // 开始该平台的授权
-        await startSinglePlatformAuth(authSessionId, platformId)
-      } else {
-        ElMessage.error('开始授权流程失败：未返回授权会话ID')
-      }
-    } else {
-      ElMessage.error(response.error || '开始授权流程失败')
-    }
-  } catch (err: any) {
-    ElMessage.error(`请求失败: ${err.message || '未知错误'}`)
-  }
-}
-
-// 开始单个平台的授权
-const startSinglePlatformAuth = async (authSessionId: string, platform: string) => {
-  try {
-    // 调用后端API开始单个平台的授权
-    const response = await post(`/auth/start-platform/${authSessionId}`, {}, {
-      params: { platform }
-    })
-
-    if (response.success) {
-      // 后端现在直接打开授权窗口，不需要前端打开窗口
-      ElMessage.success(`授权窗口已打开，请完成登录操作`)
-      
-      // 不自动检查授权状态，让用户手动刷新
-      // 这样可以避免浏览器窗口被过早关闭
-      
-      // 但在授权流程结束后，提示用户刷新状态
-      setTimeout(() => {
-        ElMessage.info('授权完成后请点击"刷新状态"按钮获取最新授权状态')
-      }, 10000) // 10秒后提示
-    } else {
-      ElMessage.error(response.error || '开始平台授权失败')
-    }
-  } catch (err: any) {
-    ElMessage.error(`请求失败: ${err.message || '未知错误'}`)
-  }
-}
-
-
-
-// 获取状态文本
-const getStatusText = (status: string | undefined) => {
-  const statusMap: Record<string, string> = {
-    'valid': '已授权',
-    'expiring': '已授权', // 即将过期也视为已授权
-    'invalid': '未授权',
-    'error': '错误'
-  }
-  return statusMap[status || ''] || '未知'
-}
-
-// 获取状态标签类型
-const getStatusType = (status: string | undefined): 'success' | 'primary' | 'warning' | 'info' | 'danger' => {
-  const typeMap: Record<string, 'success' | 'primary' | 'warning' | 'info' | 'danger'> = {
-    'valid': 'success',
-    'expiring': 'success', // 即将过期也使用成功标签
-    'invalid': 'danger',
-    'error': 'danger'
-  }
-  return typeMap[status || ''] || 'info'
 }
 
 

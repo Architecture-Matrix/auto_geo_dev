@@ -267,11 +267,26 @@ class DoubaoChecker(AIPlatformChecker):
         self._log("info", f"目标关键词: {keyword}, 公司: {company}")
 
         try:
-            # 跳过导航操作，使用已经打开的页面
-            self._log("info", "跳过导航操作，使用已经打开的页面")
-            nav_result = {"success": True}
+            async def navigate_operation():
+                if await self.navigate_to_page(page):
+                    return {"success": True}
+                return {"success": False, "error_msg": "导航失败"}
 
-<<<<<<< HEAD
+            nav_result = await self._retry_operation(
+                navigate_operation,
+                "导航到豆包",
+                max_retries=2
+            )
+
+            if not nav_result["success"]:
+                return {
+                    "success": False,
+                    "answer": None,
+                    "keyword_found": False,
+                    "company_found": False,
+                    "error_msg": nav_result.get("error_msg", "导航失败")
+                }
+
             async def clear_operation():
                 if await self.clear_chat_history(page):
                     return {"success": True}
@@ -302,28 +317,6 @@ class DoubaoChecker(AIPlatformChecker):
                 }
 
             self._log("info", f"找到输入框: {matched_selector}")
-=======
-            # 2. 清理聊天历史
-            await self.clear_chat_history(page)
-
-            # 3. 等待输入框加载
-            input_selector = self.SELECTORS["input_box"]
-            if not await self.wait_for_selector(page, input_selector, 15000):
-                # 尝试其他选择器
-                input_selector = "textarea"
-                if not await self.wait_for_selector(page, input_selector, 10000):
-                    return {
-                        "success": False,
-                        "answer": None,
-                        "keyword_found": False,
-                        "company_found": False,
-                        "error_msg": "输入框未找到"
-                    }
-
-            # 4. 输入问题
-            await page.fill(input_selector, question)
-            await asyncio.sleep(0.5)
-            logger.info(f"豆包已输入问题: {question[:30]}...")
 
             # 5. 记录当前页面状态，用于智能等待
             initial_content = await page.inner_text("body")
@@ -398,10 +391,6 @@ class DoubaoChecker(AIPlatformChecker):
                 answer_text = await page.inner_text("body")
                 self._log("info", f"使用页面全文作为回答, 长度: {len(answer_text)}")
 
-<<<<<<< HEAD
-=======
-            # 9. 检测关键词和公司名
->>>>>>> 38d2541 (feat: 收录查询功能开发中-保存当前进度)
             check_result = self.check_keywords_in_text(answer_text, keyword, company)
 
             self._log("info", "检测完成")

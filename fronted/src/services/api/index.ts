@@ -175,24 +175,38 @@ export const indexCheckApi = {
 
   // 批量检测
   batchCheck: (data: { project_id?: number; keyword_ids?: number[]; company_name?: string }) =>
-    post<any>('/index-check/batch-check', data),
+    post<any>('/index-check/batch/check', data),
 
   // 获取检测记录
   getRecords: (params?: {
     keyword_id?: number
-    project_id?: number
     platform?: string
     limit?: number
-    offset?: number
+    skip?: number
+    keyword_found?: boolean
+    company_found?: boolean
+    start_date?: string
+    end_date?: string
+    question?: string
   }) => get<any>('/index-check/records', params),
+
+  // 删除单条记录
+  deleteRecord: (id: number) => del<any>(`/index-check/records/${id}`),
+
+  // 批量删除记录
+  batchDeleteRecords: (recordIds: number[]) => post<any>('/index-check/records/batch-delete', { record_ids: recordIds }),
 
   // 获取关键词趋势
   getKeywordTrend: (keywordId: number, days?: number) =>
-    get<any>(`/index-check/trend/${keywordId}`, { days }),
+    get<any>(`/index-check/keywords/${keywordId}/trend`, { days }),
 
   // 获取项目统计
+<<<<<<< HEAD
   getProjectStats: (projectId: number) => get<any>(`/index-check/stats/project/${projectId}`),
 >>>>>>> db82301 (feat(auth): 添加AI平台授权系统)
+=======
+  getProjectStats: (projectId: number) => get<any>(`/index-check/projects/${projectId}/analytics`),
+>>>>>>> b4f4500 (备份-合并后状态-20260203-1600)
 }
 
 // ==================== 5. 报表 API ====================

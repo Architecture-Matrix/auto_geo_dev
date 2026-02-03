@@ -65,6 +65,12 @@ class PlatformStatsResponse(BaseModel):
     company_found: int
     keyword_hit_rate: float
     company_hit_rate: float
+@router.get("/overview")
+async def get_overview(db: Session = Depends(get_db)):
+    """获取顶部统计卡片"""
+    # 统计监测记录表
+    total_checks = db.query(IndexCheckRecord).count()
+>>>>>>> 0515147 (备份-合并后状态-20260203-1600)
 
 # ==================== 报表API ====================
 

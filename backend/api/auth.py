@@ -236,12 +236,8 @@ async def list_sessions(
 async def get_session_status(
     user_id: int = Query(..., description="用户ID"),
     project_id: int = Query(..., description="项目ID"),
-<<<<<<< HEAD
     platform: str = Query(..., description="平台标识"),
     fast: bool = Query(False, description="是否快速检查（仅检查文件存在性）")
-=======
-    platform: str = Query(..., description="平台标识")
->>>>>>> 3cf4b56 (feat(auth): 添加AI平台授权系统)
 ):
     """
     获取单个平台的会话状态
@@ -250,16 +246,12 @@ async def get_session_status(
         user_id: 用户ID
         project_id: 项目ID
         platform: 平台标识
-<<<<<<< HEAD
         fast: 是否快速检查
-=======
->>>>>>> 3cf4b56 (feat(auth): 添加AI平台授权系统)
         
     Returns:
         会话状态详情
     """
     try:
-<<<<<<< HEAD
         if fast:
             result = await secure_session_manager.get_session_status_fast(
                 user_id=user_id,
@@ -272,13 +264,6 @@ async def get_session_status(
                 project_id=project_id,
                 platform=platform
             )
-=======
-        result = await secure_session_manager.get_session_status(
-            user_id=user_id,
-            project_id=project_id,
-            platform=platform
-        )
->>>>>>> 3cf4b56 (feat(auth): 添加AI平台授权系统)
         
         return JSONResponse(content={
             "success": True,

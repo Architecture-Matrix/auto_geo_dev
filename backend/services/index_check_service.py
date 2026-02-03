@@ -32,6 +32,7 @@ from backend.config import AI_PLATFORMS
 from backend.services.playwright.ai_platforms import DoubaoChecker, QianwenChecker, DeepSeekChecker
 =======
 from sqlalchemy import and_
+
 from backend.database.models import IndexCheckRecord, Keyword, QuestionVariant, GeoArticle, Project
 from backend.config import AI_PLATFORMS
 from backend.services.playwright.ai_platforms import DoubaoChecker, QianwenChecker, DeepSeekChecker
@@ -571,38 +572,6 @@ class IndexCheckService:
         return all_results
 >>>>>>> 38d2541 (feat: 收录查询功能开发中-保存当前进度)
 
-    async def _execute_checks(
-        self,
-        keyword_id: int,
-        keyword_obj: Keyword,
-        questions: List[QuestionVariant],
-        company_name: str,
-        platforms: List[str]
-    ) -> List[Dict[str, Any]]:
-        """
-        执行检测的通用方法
-        """
-        results = []
-
-        async with async_playwright() as p:
-            browser = await p.chromium.launch(headless=True, args=["--no-sandbox"])
-            context = await browser.new_context()
-            page = await context.new_page()
-
-            try:
-                results = await self._execute_checks_for_single_keyword(
-                    keyword_id=keyword_id,
-                    keyword_obj=keyword_obj,
-                    questions=questions,
-                    company_name=company_name,
-                    platforms=platforms,
-                    page=page
-                )
-            finally:
-                await browser.close()
-
-        return results
-
     async def _execute_checks_for_single_keyword(
         self,
         keyword_id: int,
@@ -633,7 +602,6 @@ class IndexCheckService:
             检测结果列表
         """
         results = []
-        max_retries = 2
 
 >>>>>>> 38d2541 (feat: 收录查询功能开发中-保存当前进度)
         for platform_id in platforms:
@@ -661,7 +629,7 @@ class IndexCheckService:
                 success = False
                 check_result = None
 
-                while retry_count <= max_retries and not success:
+                while retry_count <= 2 and not success:
                     try:
                         # 调用检测器
                         check_result = await checker.check(
@@ -677,7 +645,7 @@ class IndexCheckService:
                             break
 
                         retry_count += 1
-                        logger.warning(f"检测失败，正在重试 ({retry_count}/{max_retries}): {check_result.get('error_msg', '未知错误')}")
+                        logger.warning(f"检测失败，正在重试 ({retry_count}/2): {check_result.get('error_msg', '未知错误')}")
 
                         # 重试前清理聊天记录和等待
                         await checker.clear_chat_history(page)
@@ -685,7 +653,7 @@ class IndexCheckService:
 
                     except Exception as e:
                         retry_count += 1
-                        logger.error(f"检测异常，正在重试 ({retry_count}/{max_retries}): {str(e)}")
+                        logger.error(f"检测异常，正在重试 ({retry_count}/2): {str(e)}")
 
                         # 重试前等待
                         await asyncio.sleep(5)
