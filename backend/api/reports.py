@@ -72,7 +72,6 @@ async def get_overview(db: Session = Depends(get_db)):
     total_checks = db.query(IndexCheckRecord).count()
 >>>>>>> 0515147 (备份-合并后状态-20260203-1600)
 
-# ==================== 报表API ====================
 
 @router.get("/projects", response_model=List[ProjectStatsResponse])
 async def get_project_stats(db: Session = Depends(get_db)):
@@ -191,11 +190,11 @@ async def get_trends(
 ):
     """
     获取收录趋势数据
-    
+
     注意：用于绘制趋势图表！
     """
     start_date = datetime.now() - timedelta(days=days)
-    
+
     # 构建查询
     query = db.query(
         func.date(IndexCheckRecord.check_time).label("date"),
@@ -205,11 +204,11 @@ async def get_trends(
     ).filter(
         IndexCheckRecord.check_time >= start_date
     )
-    
+
     # 增加平台筛选
     if platform:
         query = query.filter(IndexCheckRecord.platform == platform)
-        
+
     # 按日期分组统计
     trends = query.group_by(
         func.date(IndexCheckRecord.check_time)
@@ -398,44 +397,3 @@ async def get_overview(
     }
 
 
-# ==================== 收录检测相关API ====================
-
-class BatchCheckRequest(BaseModel):
-    """批量收录检测请求"""
-    project_id: int
-    platforms: Optional[List[str]] = None
-
-
-@router.post("/run-check", response_model=ApiResponse)
-async def run_check(
-    request: BatchCheckRequest,
-    background_tasks: BackgroundTasks,
-    db: Session = Depends(get_db)
-):
-    """
-    在数据报表页面执行项目收录收录检测
-    复用 IndexCheckService.check_project_keywords() 方法
-    """
-    from backend.services.index_check_service import IndexCheckService
-
-    # 验证项目存在
-    project = db.query(Project).filter(Project.id == request.project_id).first()
-    if not project:
-        return ApiResponse(success=False, message="项目不存在")
-
-    service = IndexCheckService(db)
-
-    # 执行批量检测（复用收录查询的服务逻辑）
-    try:
-        results = await service.check_project_keywords(
-            project_id=request.project_id,
-            platforms=request.platforms
-        )
-
-        return ApiResponse(
-            success=True,
-            message=f"收录检测完成，共生成 {len(results)} 条检测记录"
-        )
-    except Exception as e:
-        logger.error(f"收录检测失败: {e}")
-        return ApiResponse(success=False, message=f"检测失败: {str(e)}")

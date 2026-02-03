@@ -201,12 +201,8 @@ export const indexCheckApi = {
     get<any>(`/index-check/keywords/${keywordId}/trend`, { days }),
 
   // 获取项目统计
-<<<<<<< HEAD
   getProjectStats: (projectId: number) => get<any>(`/index-check/stats/project/${projectId}`),
 >>>>>>> db82301 (feat(auth): 添加AI平台授权系统)
-=======
-  getProjectStats: (projectId: number) => get<any>(`/index-check/projects/${projectId}/analytics`),
->>>>>>> b4f4500 (备份-合并后状态-20260203-1600)
 }
 
 // ==================== 5. 报表 API ====================
