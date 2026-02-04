@@ -11,14 +11,14 @@ import axios, { type AxiosInstance, type AxiosRequestConfig, type AxiosResponse 
 import { ElMessage } from 'element-plus'
 
 // API 基础地址
-const BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api'
+const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8001/api'
 
 /**
  * 创建 axios 实例
  */
 const instance: AxiosInstance = axios.create({
   baseURL: BASE_URL,
-  timeout: 30000,
+  timeout: 300000, // 增加到5分钟超时，适应AI检测的长耗时
   headers: {
     'Content-Type': 'application/json',
   },
@@ -126,20 +126,67 @@ export const geoArticleApi = {
 
 // ==================== 4. 收录检测 API (监控页) ====================
 export const indexCheckApi = {
-  // 对应 Monitor.vue 的 runCheck
+  // 执行收录检测
+  checkKeyword: (data: { keyword_id: number; company_name: string; platforms?: string[] }) =>
+    post<any>('/index-check/check', data),
+
+  // 批量检测
+  batchCheck: (data: { project_id?: number; keyword_ids?: number[]; company_name?: string }) =>
+    post<any>('/index-check/batch/check', data),
+
+  // 获取检测记录
+  getRecords: (params?: {
+    keyword_id?: number
+    platform?: string
+    limit?: number
+    skip?: number
+    keyword_found?: boolean
+    company_found?: boolean
+    start_date?: string
+    end_date?: string
+    question?: string
+  }) => get<any>('/index-check/records', params),
+
+  // 删除单条记录
+  deleteRecord: (id: number) => del<any>(`/index-check/records/${id}`),
+
+  // 批量删除记录
+  batchDeleteRecords: (recordIds: number[]) => post<any>('/index-check/records/batch-delete', { record_ids: recordIds }),
+
+  // 获取关键词趋势
+  getKeywordTrend: (keywordId: number, days?: number) =>
+    get<any>(`/index-check/keywords/${keywordId}/trend`, { days }),
+
+  // 获取项目统计
+  getProjectStats: (projectId: number) => get<any>(`/index-check/projects/${projectId}/analytics`),
+
+  // 兼容 Monitor.vue 的 runCheck
   check: (data: { keyword_id: number; company_name: string; platforms?: string[] }) => 
     post('/index-check/check', data),
-    
-  getRecords: (params?: any) => get('/index-check/records', params),
   
   getTrend: (keywordId: number, days = 7) => get(`/index-check/trend/${keywordId}`, { days })
 }
 
 // ==================== 5. 报表 API ====================
 export const reportsApi = {
-  // 概览数据
-  getOverview: () => get('/reports/overview'),
-  
+  // 获取总览数据
+  getOverview: () => get<any>('/reports/overview'),
+
+  // 获取收录趋势
+  getIndexTrend: (params?: { project_id?: number; days?: number; platform?: string }) =>
+    get<any>('/reports/trends', params),
+
+  // 获取平台分布
+  getPlatformDistribution: (params?: { project_id?: number }) =>
+    get<any>('/reports/distribution/platform', params),
+
+  // 获取关键词排名
+  getKeywordRanking: (params?: { project_id?: number; limit?: number }) =>
+    get<any>('/reports/ranking/keywords', params),
+
+  // 获取项目统计
+  getProjectStats: (projectId: number) => get<any>(`/reports/stats/project/${projectId}`),
+
   // 趋势图数据 (Monitor.vue 使用)
   getTrends: (days: number = 30) => get('/reports/trends', { days }),
   
@@ -153,10 +200,7 @@ export const reportsApi = {
   getProjectLeaderboard: (params: { days?: number }) => get('/reports/project-leaderboard', params),
   
   // 🌟 [新增] 高贡献内容分析
-  getContentAnalysis: (params: { project_id?: number; days?: number }) => get('/reports/content-analysis', params),
-  
-  // 旧版兼容
-  getIndexTrend: (params?: any) => get('/reports/trend/index', params)
+  getContentAnalysis: (params: { project_id?: number; days?: number }) => get('/reports/content-analysis', params)
 }
 
 // ==================== 6. 定时任务 API ====================
@@ -166,4 +210,15 @@ export const schedulerApi = {
   stop: () => post('/scheduler/stop', {})
 }
 
+// 导出统一的api对象
+export const api = {
+  account: accountApi,
+  geoKeyword: geoKeywordApi,
+  geoArticle: geoArticleApi,
+  indexCheck: indexCheckApi,
+  reports: reportsApi,
+  scheduler: schedulerApi
+}
+
+// 导出默认实例
 export default instance

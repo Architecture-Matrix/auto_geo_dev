@@ -72,6 +72,8 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/settings/SettingsPage.vue'),
         meta: { title: '设置', icon: 'Setting' },
       },
+
+
       // ==================== GEO系统路由 ====================
       // 🌟 新增：数据概览（仪表盘）放在GEO的第一位
       {

@@ -299,6 +299,7 @@ class GeoArticle(Base):
     # 发布相关
     platform = Column(String(50), nullable=True, comment="目标发布平台")
     publish_status = Column(String(20), default="draft", comment="发布状态：draft=草稿 published=已发布 failed=发布失败")
+    publish_time = Column(DateTime, nullable=True, comment="发布时间")
 
     # 强壮性与重试 (Added back from v1)
     retry_count = Column(Integer, default=0)
@@ -379,6 +380,32 @@ class Knowledge(Base):
 
     def __repr__(self):
         return f"<Knowledge {self.title}>"
+
+
+# ==================== 用户相关表 ====================
+
+class User(Base):
+    """
+    用户表
+    存储系统用户信息
+    """
+    __tablename__ = "users"
+    __table_args__ = TABLE_ARGS
+
+    id = Column(Integer, primary_key=True, autoincrement=True, comment="主键ID")
+    username = Column(String(100), nullable=False, unique=True, comment="用户名")
+    email = Column(String(200), nullable=True, unique=True, comment="邮箱")
+    password_hash = Column(String(200), nullable=True, comment="密码哈希")
+    
+    # 状态
+    status = Column(Integer, default=1, comment="状态：1=活跃 0=禁用")
+    
+    # 时间戳
+    created_at = Column(DateTime, default=func.now(), comment="创建时间")
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now(), comment="更新时间")
+
+    def __repr__(self):
+        return f"<User {self.username}>"
 
 
 # ==================== 参考文章表（爆火文章收集）====================
