@@ -30,197 +30,8 @@ class Account(Base):
     created_at = Column(DateTime, default=func.now())
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
 
-    # 🌟 关联关系：一个账号可以有多个发布记录
-    # cascade="all, delete-orphan" 确保在 Python 层面删除账号时，关联对象也被清理
+    # 关联关系
     publish_records = relationship("PublishRecord", back_populates="account", cascade="all, delete-orphan")
-
-
-class Article(Base):
-    """普通文章表 (手动撰写)"""
-    __tablename__ = "articles"
-    __table_args__ = TABLE_ARGS
-
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    title = Column(String(200), nullable=False)
-    content = Column(Text, nullable=False)
-    tags = Column(String(500), nullable=True)
-    category = Column(String(100), nullable=True)
-    cover_image = Column(String(500), nullable=True)
-    status = Column(Integer, default=0)
-    view_count = Column(Integer, default=0)
-    created_at = Column(DateTime, default=func.now())
-    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
-    published_at = Column(DateTime, nullable=True)
-
-    # 关联关系
-    publish_records = relationship("PublishRecord", back_populates="article", cascade="all, delete-orphan")
-
-
-class PublishRecord(Base):
-    """发布记录表"""
-    __tablename__ = "publish_records"
-    __table_args__ = TABLE_ARGS
-
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    # 🌟 关键：ondelete="CASCADE" 确保数据库层面级联删除
-    article_id = Column(Integer, ForeignKey("articles.id", ondelete="CASCADE"), nullable=False)
-    account_id = Column(Integer, ForeignKey("accounts.id", ondelete="CASCADE"), nullable=False)
-
-    publish_status = Column(Integer, default=0)
-    platform_url = Column(String(500), nullable=True)
-    error_msg = Column(Text, nullable=True)
-    retry_count = Column(Integer, default=0)
-    created_at = Column(DateTime, default=func.now())
-    published_at = Column(DateTime, nullable=True)
-
-    # 关联关系
-    article = relationship("Article", back_populates="publish_records")
-    account = relationship("Account", back_populates="publish_records")
-
-
-# ==================== GEO相关表 ====================
-
-class Project(Base):
-    """项目表"""
-    __tablename__ = "projects"
-    __table_args__ = TABLE_ARGS
-
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    name = Column(String(200), nullable=False)
-    company_name = Column(String(200), nullable=False)
-    domain_keyword = Column(String(200), nullable=True)
-    description = Column(Text, nullable=True)
-    industry = Column(String(100), nullable=True)
-    status = Column(Integer, default=1)
-    created_at = Column(DateTime, default=func.now())
-    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
-
-    # 关联关系：项目删除时，级联删除下的关键词
-    keywords = relationship("Keyword", back_populates="project", cascade="all, delete-orphan")
-
-
-class Keyword(Base):
-    """关键词表"""
-    __tablename__ = "keywords"
-    __table_args__ = TABLE_ARGS
-
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
-    keyword = Column(String(200), nullable=False)
-    difficulty_score = Column(Integer, nullable=True)
-    status = Column(String(20), default="active")
-    created_at = Column(DateTime, default=func.now())
-
-    # 关联关系
-    project = relationship("Project", back_populates="keywords")
-    articles = relationship("GeoArticle", back_populates="keyword", cascade="all, delete-orphan")
-    question_variants = relationship("QuestionVariant", back_populates="keyword", cascade="all, delete-orphan")
-    index_records = relationship("IndexCheckRecord", back_populates="keyword", cascade="all, delete-orphan")
-
-
-class QuestionVariant(Base):
-    """问题变体表"""
-    __tablename__ = "question_variants"
-    __table_args__ = TABLE_ARGS
-
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    keyword_id = Column(Integer, ForeignKey("keywords.id", ondelete="CASCADE"), nullable=False)
-    question = Column(Text, nullable=False)
-    created_at = Column(DateTime, default=func.now())
-
-    # 关联关系
-    keyword = relationship("Keyword", back_populates="question_variants")
-
-
-class IndexCheckRecord(Base):
-    """收录检测记录表"""
-    __tablename__ = "index_check_records"
-    __table_args__ = TABLE_ARGS
-
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    keyword_id = Column(Integer, ForeignKey("keywords.id", ondelete="CASCADE"), nullable=False)
-    platform = Column(String(50), nullable=False)
-    question = Column(Text, nullable=False)
-    answer = Column(Text, nullable=True)
-    keyword_found = Column(Boolean, nullable=True)
-    company_found = Column(Boolean, nullable=True)
-    check_time = Column(DateTime, default=func.now())
-
-    # 关联关系
-    keyword = relationship("Keyword", back_populates="index_records")
-
-
-class GeoArticle(Base):
-    """
-    GEO文章表 - 核心业务表
-    """
-    __tablename__ = "geo_articles"
-    __table_args__ = TABLE_ARGS
-
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    keyword_id = Column(Integer, ForeignKey("keywords.id", ondelete="CASCADE"), nullable=False, index=True)
-    title = Column(Text, nullable=True)
-    content = Column(Text, nullable=False)
-
-    # 质检相关
-    quality_score = Column(Integer, nullable=True)
-    ai_score = Column(Integer, nullable=True)
-    readability_score = Column(Integer, nullable=True)
-    quality_status = Column(String(20), default="pending")
-
-    # 发布相关
-    platform = Column(String(50), nullable=True)
-    publish_status = Column(String(20), default="draft")
-    publish_time = Column(DateTime, nullable=True)
-
-    # 强壮性与重试
-    retry_count = Column(Integer, default=0)
-    error_msg = Column(Text, nullable=True)
-    publish_logs = Column(Text, nullable=True)
-    platform_url = Column(String(500), nullable=True)  # 发布成功后的链接
-
-    # 效果监测
-    index_status = Column(String(20), default="uncheck")
-    last_check_time = Column(DateTime, nullable=True)
-    index_details = Column(Text, nullable=True)
-
-    # 时间戳
-    created_at = Column(DateTime, default=func.now())
-    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
-
-    # 关联关系
-    keyword = relationship("Keyword", back_populates="articles")
-
-
-# ==================== 知识库相关表 ====================
-
-class KnowledgeCategory(Base):
-    __tablename__ = "knowledge_categories"
-    __table_args__ = TABLE_ARGS
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    name = Column(String(200), nullable=False)
-    industry = Column(String(100), nullable=True)
-    description = Column(Text, nullable=True)
-    status = Column(Integer, default=1)
-    created_at = Column(DateTime, default=func.now())
-    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
-
-    items = relationship("Knowledge", back_populates="category", cascade="all, delete-orphan")
-
-
-class Knowledge(Base):
-    __tablename__ = "knowledge_items"
-    __table_args__ = TABLE_ARGS
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    category_id = Column(Integer, ForeignKey("knowledge_categories.id", ondelete="CASCADE"), nullable=False)
-    title = Column(String(200), nullable=False)
-    content = Column(Text, nullable=False)
-    type = Column(String(50), default="other")
-    status = Column(Integer, default=1)
-    created_at = Column(DateTime, default=func.now())
-    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
-
-    category = relationship("KnowledgeCategory", back_populates="items")
 
 
 class ScheduledTask(Base):
@@ -240,10 +51,8 @@ class ScheduledTask(Base):
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
 
     def __repr__(self):
-        return f"<Task {self.name} : {self.cron_expression}>" # 保留你本地的正确repr
+        return f"<Task {self.name} : {self.cron_expression}>"
 
-
-# ==================== AI招聘候选人相关表 ====================
 
 class Candidate(Base):
     """
@@ -257,7 +66,7 @@ class Candidate(Base):
     uid = Column(String(100), unique=True, nullable=False, index=True, comment="候选人唯一标识（来自招聘平台）")
     detail = Column(Text, nullable=True, comment="候选人详细信息（JSON格式）")
 
-    # 附件相关（修复拼写：attached 不是 attatched）
+    # 附件相关
     attached = Column(Text, nullable=True, comment="附件信息（JSON格式，存储简历链接等）")
 
     # 发送状态
@@ -311,6 +120,9 @@ class Article(Base):
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now(), comment="更新时间")
     published_at = Column(DateTime, nullable=True, comment="首次发布时间")
 
+    # 关联关系
+    publish_records = relationship("PublishRecord", back_populates="article", cascade="all, delete-orphan")
+
     def __repr__(self):
         return f"<Article {self.title}>"
 
@@ -347,6 +159,10 @@ class PublishRecord(Base):
     created_at = Column(DateTime, default=func.now(), comment="创建时间")
     published_at = Column(DateTime, nullable=True, comment="实际发布时间")
 
+    # 关联关系
+    article = relationship("Article", back_populates="publish_records")
+    account = relationship("Account", back_populates="publish_records")
+
     def __repr__(self):
         return f"<PublishRecord article_id={self.article_id} account_id={self.account_id} status={self.publish_status}>"
 
@@ -375,6 +191,9 @@ class Project(Base):
     created_at = Column(DateTime, default=func.now(), comment="创建时间")
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now(), comment="更新时间")
 
+    # 关联关系
+    keywords = relationship("Keyword", back_populates="project", cascade="all, delete-orphan")
+
     def __repr__(self):
         return f"<Project {self.name}>"
 
@@ -398,6 +217,12 @@ class Keyword(Base):
     # 时间戳
     created_at = Column(DateTime, default=func.now(), comment="创建时间")
 
+    # 关联关系
+    project = relationship("Project", back_populates="keywords")
+    articles = relationship("GeoArticle", back_populates="keyword", cascade="all, delete-orphan")
+    question_variants = relationship("QuestionVariant", back_populates="keyword", cascade="all, delete-orphan")
+    index_records = relationship("IndexCheckRecord", back_populates="keyword", cascade="all, delete-orphan")
+
     def __repr__(self):
         return f"<Keyword {self.keyword}>"
 
@@ -416,6 +241,9 @@ class QuestionVariant(Base):
 
     # 时间戳
     created_at = Column(DateTime, default=func.now(), comment="创建时间")
+
+    # 关联关系
+    keyword = relationship("Keyword", back_populates="question_variants")
 
     def __repr__(self):
         return f"<QuestionVariant {self.question[:30]}...>"
@@ -441,6 +269,9 @@ class IndexCheckRecord(Base):
 
     # 时间戳
     check_time = Column(DateTime, default=func.now(), comment="检测时间")
+
+    # 关联关系
+    keyword = relationship("Keyword", back_populates="index_records")
 
     def __repr__(self):
         return f"<IndexCheckRecord keyword_id={self.keyword_id} platform={self.platform}>"
@@ -469,9 +300,23 @@ class GeoArticle(Base):
     platform = Column(String(50), nullable=True, comment="目标发布平台")
     publish_status = Column(String(20), default="draft", comment="发布状态：draft=草稿 published=已发布 failed=发布失败")
 
+    # 强壮性与重试 (Added back from v1)
+    retry_count = Column(Integer, default=0)
+    error_msg = Column(Text, nullable=True)
+    publish_logs = Column(Text, nullable=True)
+    platform_url = Column(String(500), nullable=True)
+
+    # 效果监测 (Added back from v1)
+    index_status = Column(String(20), default="uncheck")
+    last_check_time = Column(DateTime, nullable=True)
+    index_details = Column(Text, nullable=True)
+
     # 时间戳
     created_at = Column(DateTime, default=func.now(), comment="创建时间")
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now(), comment="更新时间")
+
+    # 关联关系
+    keyword = relationship("Keyword", back_populates="articles")
 
     def __repr__(self):
         return f"<GeoArticle id={self.id} keyword_id={self.keyword_id}>"
@@ -501,6 +346,9 @@ class KnowledgeCategory(Base):
     created_at = Column(DateTime, default=func.now(), comment="创建时间")
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now(), comment="更新时间")
 
+    # 关联关系
+    items = relationship("Knowledge", back_populates="category", cascade="all, delete-orphan")
+
     def __repr__(self):
         return f"<KnowledgeCategory {self.name}>"
 
@@ -525,6 +373,9 @@ class Knowledge(Base):
     # 时间戳
     created_at = Column(DateTime, default=func.now(), comment="创建时间")
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now(), comment="更新时间")
+
+    # 关联关系
+    category = relationship("KnowledgeCategory", back_populates="items")
 
     def __repr__(self):
         return f"<Knowledge {self.title}>"
