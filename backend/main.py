@@ -37,34 +37,20 @@ from backend.services.websocket_manager import ws_manager
 from backend.services.scheduler_service import get_scheduler_service
 from backend.services.n8n_service import get_n8n_service
 
-=======
-from backend.database import init_db, get_db, engine
-from backend.api import account, article, publish, keywords, geo, index_check, reports, notifications, scheduler, knowledge, upload, candidate, auth
-=======
-from backend.database import init_db, SessionLocal
-
-# 导入服务组件
-from backend.services.websocket_manager import ws_manager
-from backend.services.scheduler_service import get_scheduler_service
-from backend.services.n8n_service import get_n8n_service
-
-# 导入路由
-from backend.api import (
-    account, article, publish, keywords, geo,
-    index_check, reports, notifications, scheduler, knowledge
-)
->>>>>>> origin/master
 >>>>>>> b4f4500 (备份-合并后状态-20260203-1600)
 >>>>>>> 0515147 (备份-合并后状态-20260203-1600)
 
 >>>>>>> 3cf4b56 (feat(auth): 添加AI平台授权系统)
 
 # ==================== 🌟 日志拦截器 (核心监控功能) ====================
+=======
+>>>>>>> 3b3cc0c (完成了前后端对接，通过测试修复了代码的问题，完成了合并)
 
+# ==================== 日志拦截器 (核心监控功能) ====================
 def socket_log_sink(message):
     """
     Loguru 拦截器：将每一条日志通过 WebSocket 广播出去
-    这是前端控制台能看到“绿色日志”的关键！
+    这是前端控制台能看到"绿色日志"的关键！
     """
     try:
         record = message.record
@@ -182,19 +168,21 @@ app.include_router(candidate.router)  # 加上候选人管理路由！
 app.include_router(auth.router)  # 加上授权路由！
 app.include_router(article_collection.router)  # 加上文章收集路由！
 >>>>>>> 3cf4b56 (feat(auth): 添加AI平台授权系统)
-=======
+>>>>>>> b4f4500 (备份-合并后状态-20260203-1600)
+>>>>>>> 0515147 (备份-合并后状态-20260203-1600)
 =======
 app.include_router(publish.router)
 app.include_router(keywords.router)
 app.include_router(geo.router)
-app.include_router(index_check.router)  # 同事新增的收录监控
+app.include_router(index_check.router)  # 同时新增的收录监控
 app.include_router(reports.router)
 app.include_router(notifications.router)
 app.include_router(scheduler.router)
-app.include_router(knowledge.router)  # 同事新增的知识库
->>>>>>> origin/master
->>>>>>> b4f4500 (备份-合并后状态-20260203-1600)
->>>>>>> 0515147 (备份-合并后状态-20260203-1600)
+app.include_router(knowledge.router)  # 同时新增的知识库
+app.include_router(upload.router)  # 文件上传路由
+app.include_router(candidate.router)  # AI招聘候选人管理路由
+app.include_router(auth.router)  # AI平台授权路由
+>>>>>>> 3b3cc0c (完成了前后端对接，通过测试修复了代码的问题，完成了合并)
 
 
 # ==================== WebSocket 端点 ====================
