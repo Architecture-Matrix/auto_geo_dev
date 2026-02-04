@@ -122,6 +122,7 @@ async def get_summary_stats(
 async def get_platform_comparison(
     project_id: Optional[int] = Query(None),
     days: int = Query(7),
+    platform: Optional[str] = Query(None),
     db: Session = Depends(get_db)
 ):
     """AI平台对比分析"""
@@ -131,12 +132,15 @@ async def get_platform_comparison(
         func.count(IndexCheckRecord.id).label("total"),
         func.sum(cast(IndexCheckRecord.keyword_found, Integer)).label("kw_hits")
     ).filter(IndexCheckRecord.check_time >= start_date)
-    
+
     if project_id:
         query = query.join(Keyword).filter(Keyword.project_id == project_id)
-        
+
+    if platform:
+        query = query.filter(IndexCheckRecord.platform == platform)
+
     stats = query.group_by(IndexCheckRecord.platform).all()
-    
+
     return [
         PlatformStat(
             platform=s.platform,
@@ -189,24 +193,28 @@ async def get_project_leaderboard(days: int = Query(7), db: Session = Depends(ge
 async def get_content_analysis(
     project_id: Optional[int] = Query(None),
     days: int = Query(7),
+    platform: Optional[str] = Query(None),
     db: Session = Depends(get_db)
 ):
     """高贡献内容分析"""
     start_date = datetime.now() - timedelta(days=days)
-    
-    # 结合 GeoArticle 和收录情况
+
+    # 结合 Geo只看已发布的
     query = db.query(GeoArticle).filter(GeoArticle.created_at >= start_date)
     if project_id:
         query = query.join(Keyword).filter(Keyword.project_id == project_id)
-        
-    # 只看已发布的
+
+    if platform:
+        query = query.filter(GeoArticle.platform == platform)
+
     articles = query.filter(GeoArticle.publish_status == "published").order_by(desc(GeoArticle.created_at)).limit(10).all()
-    
+
     result = []
     for i, a in enumerate(articles):
-        # 简单模拟贡献度：如果是已收录，则贡献度高
+        # 根据收录状态计算贡献度
+        # 已收录90%，未收录10%
         contribution = 90.0 if a.index_status == "indexed" else 10.0
-        
+
         result.append(ContentAnalysis(
             rank=i + 1,
             title=a.title or "无标题",
@@ -214,5 +222,5 @@ async def get_content_analysis(
             ai_contribution=contribution,
             publish_time=a.publish_time.strftime("%Y-%m-%d %H:%M") if a.publish_time else None
         ))
-        
+
     return result

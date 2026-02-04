@@ -120,8 +120,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, nextTick } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import { InfoFilled, Refresh } from '@element-plus/icons-vue'
+import { ElMessage } from 'element-plus'
 import * as echarts from 'echarts'
 import { reportsApi, geoKeywordApi } from '@/services/api'
 
@@ -179,6 +180,7 @@ const loadData = async () => {
     contentAnalysis.value = analysisRes
   } catch (error) {
     console.error('加载报表数据失败:', error)
+    ElMessage.error('加载报表数据失败，请稍后重试')
   }
 }
 
@@ -236,6 +238,11 @@ const renderComparisonChart = (data: any[]) => {
   comparisonChart.setOption(option)
 }
 
+// 窗口调整处理函数
+const handleResize = () => {
+  comparisonChart?.resize()
+}
+
 onMounted(async () => {
   // 获取项目列表
   const projectsRes = await geoKeywordApi.getProjects()
@@ -244,9 +251,19 @@ onMounted(async () => {
   loadData()
 
   // 监听窗口调整
-  window.addEventListener('resize', () => {
-    comparisonChart?.resize()
-  })
+  window.addEventListener('resize', handleResize)
+})
+
+// 清理资源
+onUnmounted(() => {
+  // 移除事件监听器
+  window.removeEventListener('resize', handleResize)
+
+  // 销毁图表实例
+  if (comparisonChart) {
+    comparisonChart.dispose()
+    comparisonChart = null
+  }
 })
 </script>
 
@@ -277,11 +294,13 @@ onMounted(async () => {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
 
   .filter-left {
     display: flex;
     gap: 12px;
-    
+
     .project-select { width: 200px; }
     .time-select { width: 120px; }
   }
@@ -346,6 +365,45 @@ onMounted(async () => {
       opacity: 0.8;
       border-top: 1px solid rgba(255,255,255,0.2);
       padding-top: 12px;
+    }
+  }
+}
+
+/* 响应式设计 */
+@media (max-width: 1200px) {
+  .stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 768px) {
+  .filter-section {
+    flex-direction: column;
+    align-items: stretch;
+
+    .filter-left, .filter-right {
+      flex-direction: column;
+      width: 100%;
+    }
+
+    .project-select, .time-select {
+      width: 100%;
+    }
+  }
+
+  .stats-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .stat-card {
+    min-height: 140px;
+    .card-value { font-size: 28px; }
+  }
+
+  .dark-table {
+    :deep(.el-table__body-cell) {
+      padding: 8px 4px;
+      font-size: 12px;
     }
   }
 }
