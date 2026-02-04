@@ -353,34 +353,9 @@ class AuthService:
                     if platform == "doubao":
                         # 豆包平台需要特殊的加载时间
                         logger.info(f"豆包平台特殊处理: 页面加载状态={page_loaded}, 登录元素={has_login_elements}, 错误={has_error}")
-                        # 豆包平台只有在明确检测到登录成功时才关闭窗口
-                        # 这里需要更严格的条件
-                        doubao_specific_indicators = [
-                            "[class*='user']",
-                            "[id*='user']",
-                            "[class*='profile']",
-                            "[id*='profile']",
-                            "[class*='home']",
-                            "[id*='home']",
-                            "[class*='dashboard']",
-                            "[id*='dashboard']"
-                        ]
-                        
-                        has_doubao_success = False
-                        try:
-                            for selector in doubao_specific_indicators:
-                                try:
-                                    elements = await page.query_selector_all(selector)
-                                    if elements:
-                                        has_doubao_success = True
-                                        break
-                                except Exception:
-                                    continue
-                        except Exception as e:
-                            logger.error(f"检查豆包成功元素失败: {e}")
-                        
-                        # 豆包平台只有在页面加载完成且检测到成功元素时才认为登录成功
-                        if page_loaded and has_doubao_success and not has_error:
+                        # 简化豆包平台的检测逻辑，与其他平台一致
+                        # 当页面加载完成且没有登录元素且没有错误时，就认为登录成功
+                        if page_loaded and not has_login_elements and not has_error:
                             logger.info(f"检测到豆包登录成功")
                             # 统一逻辑：不在这里提前结束循环，而是设置标志位，
                             # 让代码继续执行到外层的 "if login_successful:" 块，
@@ -391,7 +366,7 @@ class AuthService:
                             # 执行统一的保存逻辑并 return
                         else:
                             # 豆包平台继续等待
-                            logger.info(f"豆包平台继续等待: 页面加载={page_loaded}, 成功元素={has_doubao_success}, 错误={has_error}")
+                            logger.info(f"豆包平台继续等待: 页面加载={page_loaded}, 登录元素={has_login_elements}, 错误={has_error}")
                             # 等待更长时间
                             await asyncio.sleep(5)
                             elapsed_time += 5

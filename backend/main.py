@@ -29,7 +29,7 @@ from backend.config import (
     CORS_ORIGINS, PLATFORMS
 )
 from backend.database import init_db, get_db, engine, SessionLocal
-from backend.api import account, article, publish, keywords, geo, index_check, reports, notifications, scheduler, knowledge, upload, candidate, auth
+from backend.api import account, article, publish, keywords, geo, index_check, reports, notifications, scheduler, knowledge, upload, candidate, auth, article_collection
 
 # 导入服务组件
 from backend.services.websocket_manager import ws_manager
@@ -155,6 +155,7 @@ app.include_router(knowledge.router)  # 加上知识库路由！
 app.include_router(upload.router)  # 加上文件上传路由！
 app.include_router(candidate.router)  # 加上候选人管理路由！
 app.include_router(auth.router)  # 加上授权路由！
+app.include_router(article_collection.router)  # 加上文章收集路由！
 
 
 # ==================== WebSocket 端点 ====================
@@ -217,6 +218,8 @@ async def global_exception_handler(request, exc):
 # ==================== 启动脚本 ====================
 if __name__ == "__main__":
     import uvicorn
+    import asyncio
+    import sys
 
     # Windows 下异步策略优化
     if sys.platform == "win32":
