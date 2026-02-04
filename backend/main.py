@@ -29,6 +29,7 @@ from backend.config import (
     CORS_ORIGINS, PLATFORMS
 )
 from backend.database import init_db, get_db, engine, SessionLocal
+from backend.scripts.fix_database import check_and_fix_database
 from backend.api import account, article, publish, keywords, geo, index_check, reports, notifications, scheduler, knowledge, upload, candidate, auth, article_collection
 
 # 导入服务组件
@@ -83,6 +84,8 @@ async def lifespan(app: FastAPI):
     # 1. 初始化数据库 (WAL模式)
     try:
         init_db()
+        # 自动执行数据库修复/迁移（确保新字段存在）
+        check_and_fix_database()
         logger.success("✅ 数据库初始化检查完成")
     except Exception as e:
         logger.error(f"数据库初始化失败: {e}")
