@@ -78,6 +78,11 @@ logger.remove()
 logger.add(sys.stdout, level="INFO", colorize=True)
 logger.add(socket_log_sink, level="INFO")
 
+# 导入服务组件
+from backend.services.websocket_manager import ws_manager
+from backend.services.scheduler_service import get_scheduler_service
+from backend.services.n8n_service import get_n8n_service
+
 
 # ==================== 应用生命周期管理 ====================
 @asynccontextmanager
