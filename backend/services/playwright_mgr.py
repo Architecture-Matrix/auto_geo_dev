@@ -242,16 +242,16 @@ class PlaywrightManager:
             # 2. 基础验证
             # 针对不同平台的关键 Cookie 检查 (支持多个备选Cookie，用|分隔)
             platform_checks = {
-                "zhihu": "z_cari0",
+                "zhihu": "z_c0|z_cari0",  # 知乎关键Cookie，增加 z_c0 作为备选
                 "baijiahao": "BDUSS|STOKEN",
                 "toutiao": "sessionid|sid_tt",
                 "wenku": "BDUSS|STOKEN",
-                "penguin": "uin|skey|p_skt",
-                "weixin": "xhs_web_session|webid",
+                "penguin": "uin|skey|p_sktkt",
+                "weixin": "pt2gguin|token|app_id|app_msgid",  # 微信公众号关键Cookie
                 "wangyi": "NTES_SESS|S_INFO",
                 "sohu": "ppinf|pprdig",
                 "zijie": "sessionid|sid_tt",
-                "xiaohongshu": "web_session|webId",
+                "xiaohongshu": "xhs_web_session|webid|web_session|webId",  # 小红书关键Cookie
                 "bilibili": "bili_jct|SESSDATA",
                 "36kr": "uid|ticket",
                 "huxiu": "huxiu_hash|huxiusessionid",
@@ -281,7 +281,7 @@ class PlaywrightManager:
                 "duoduo": "cookie2|p_token",
                 "weishi": "uin|skey",
                 "mango": "mgtv_complex_id",
-                "ximalaya": "device_id|token",
+                "ximalaya": "device_idudi|token",
                 "meituan": "token|userId",
                 "alipay": "euid|ALIPAY_JWT",
                 "douyin_company": "sessionid|passport_auth_id",
@@ -289,12 +289,19 @@ class PlaywrightManager:
             }
             key_cookie_str = platform_checks.get(task.platform)
 
+            # 🔍 调试：输出所有 Cookie
+            logger.info(f"[Auth] 平台: {task.platform}, Cookie数量: {len(cookies)}")
+            if cookies:
+                cookie_names = [c['name'] for c in cookies]
+                logger.info(f"[Auth] Cookie列表: {cookie_names}")
+            logger.info(f"[Auth] 需要的Cookie: {key_cookie_str}")
+
             # 验证逻辑：如果配置了检查项，则必须包含至少一个关键Cookie
             has_auth = True  # 默认为真，只对有检查要求的平台进行验证
             if key_cookie_str:
                 required_keys = key_cookie_str.split("|")
-                # 检查是否存在任意一个关键Cookie
-                has_auth = any(c['name'] in required_keys for c in cookies)
+                # 检查是否存在任意一个关键Cookie（不区分大小写）
+                has_auth = any(c['name'].lower() in [k.lower() for k in required_keys] for c in cookies)
 
                 # 特殊处理：企鹅号如果已经进入后台页面，视为成功
                 if task.platform == "penguin":
@@ -307,6 +314,23 @@ class PlaywrightManager:
                             logger.info(f"[Auth] 企鹅号授权成功，当前页面: {current_url}")
                         else:
                             has_auth = False
+
+                # 特殊处理：微信公众号 - 放宽验证，只要在公众号平台域名且不在登录页就
+                # 跳过严格的Cookie检查，因为微信公众号的Cookie结构复杂且多变
+                if task.platform == "weixin":
+                    current_url = task.page.url
+                    logger.info(f"[Auth] 微信公众号当前URL: {current_url}")
+                    # 微信公众号登录成功后会在公众号管理平台首页
+                    # 检查URL中是否包含公众号平台特征
+                    if "mp.weixin.qq.com" in current_url:
+                        # 如果在登录页面，则表示未登录成功
+                        if any(x in current_url for x in ["/login", "/bind", "/captcha", "/oauth"]):
+                            has_auth = False
+                            logger.warning(f"[Auth] 微信公众号仍在登录页，需要完成登录")
+                        else:
+                            # 已登录到公众号平台，直接视为成功，跳过Cookie检查
+                            has_auth = True
+                            logger.info(f"[Auth] 微信公众号授权成功，当前页面: {current_url}")
 
                 if not has_auth:
                     return json.dumps({"success": False, "message": f"未检测到登录凭证 (需要包含: {key_cookie_str})，请确认已登录"})
