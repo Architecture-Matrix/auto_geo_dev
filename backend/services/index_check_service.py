@@ -5,14 +5,12 @@
 用这个来检测AI平台的收录情况！
 """
 
-=======
-收录检测服务 - 工业加固版 v2.0
-负责调用 Playwright 模拟 AI 搜索并实时推送执行进度
 
-v2.0 更新：
-1. 整合批量检测、趋势分析、平台表现等功能
-2. 优化浏览器资源管理，使用独立 Context 模式
-3. 新增统计分析方法：get_hit_rate, get_keyword_trend, get_project_analytics, get_platform_performance
+v5.0 增强：
+1. 参考 toutiao.py 的物理模拟精神
+2. 详细 logger.info 用于 Electron 前端实时追踪
+3. 使用 secure_session_manager 从数据库加载存储状态
+4. 自动登录检测与提示
 """
 
 import asyncio
@@ -22,7 +20,6 @@ from typing import List, Dict, Any, Optional
 from datetime import datetime, timedelta
 from loguru import logger
 from sqlalchemy.orm import Session
-<<<<<<< HEAD
 from playwright.async_api import async_playwright, Browser
 import asyncio
 from datetime import datetime
@@ -30,16 +27,6 @@ from datetime import datetime
 from backend.database.models import IndexCheckRecord, Keyword, QuestionVariant, Project
 from backend.config import AI_PLATFORMS
 from backend.services.playwright.ai_platforms import DoubaoChecker, QianwenChecker, DeepSeekChecker
-=======
-from sqlalchemy import and_
-
-from backend.database.models import IndexCheckRecord, Keyword, QuestionVariant, GeoArticle, Project
-from backend.config import AI_PLATFORMS
-from backend.services.playwright.ai_platforms import DoubaoChecker, QianwenChecker, DeepSeekChecker
-
-# 模块化日志绑定
-chk_log = logger.bind(module="监测站")
->>>>>>> 38d2541 (feat: 收录查询功能开发中-保存当前进度)
 
 
 class IndexCheckService:
@@ -56,8 +43,6 @@ class IndexCheckService:
 
         Args:
             db: 数据库会话
-=======
-    整合了单关键词检测、批量检测、趋势分析、平台性能统计等功能
     """
 
     def __init__(self, db: Session):
@@ -129,11 +114,8 @@ class IndexCheckService:
                 question=f"什么是{keyword_obj.keyword}？推荐哪家公司？"
             )]
 =======
-        # 兜底：如果没有变体词，生成一个默认问题
-        query_texts = [q.question for q in questions] if questions else [
-            f"请推荐一些专业的{keyword_obj.keyword}服务商，{company_name}怎么样？"
-        ]
->>>>>>> 38d2541 (feat: 收录查询功能开发中-保存当前进度)
+            logger.info(f"[IndexCheck] 使用默认问题: {questions[0].question}")
+>>>>>>> 0c0b39e (feat(publish): 优化知乎物理注入逻辑 v6.5，实现零依赖图片注入并修复 session 校验)
 
         # 确定要检测的平台
         if platforms is None:
@@ -150,12 +132,14 @@ class IndexCheckService:
 
         logger.info(f"收录检测完成: 关键词ID={keyword_id}, 检测数={len(results)}")
         return results
-=======
-        # 3. 调用 playwright_mgr 执行检测（符合单例模式）
-        from backend.services.playwright_mgr import playwright_mgr
 
-        try:
-            await playwright_mgr.start()
+        results = await self._execute_checks(
+            keyword_id=keyword_id,
+            keyword_obj=keyword_obj,
+            questions=questions,
+            company_name=company_name,
+            platforms=platforms
+        )
 
             results = []
 
@@ -247,37 +231,28 @@ class IndexCheckService:
     ) -> List[Dict[str, Any]]:
         """
         批量检测项目下所有关键词的收录情况
-<<<<<<< HEAD
         
         Args:
             project_id: 项目ID
             platforms: 要检测的平台列表，默认全部
             
-=======
-
-        Args:
-            project_id: 项目ID
-            platforms: 要检测的平台列表，默认全部
-
->>>>>>> 38d2541 (feat: 收录查询功能开发中-保存当前进度)
         Returns:
             检测结果列表
         """
         # 获取项目信息
         project = self.db.query(Project).filter(Project.id == project_id).first()
         if not project:
-            logger.error(f"项目不存在: {project_id}")
+            logger.error(f"[IndexCheck] 项目不存在: {project_id}")
             return []
-<<<<<<< HEAD
             
 =======
+        logger.info(f"[IndexCheck] 开始检测项目: {project.name}, 公司: {project.company_name}")
 
->>>>>>> 38d2541 (feat: 收录查询功能开发中-保存当前进度)
+>>>>>>> 0c0b39e (feat(publish): 优化知乎物理注入逻辑 v6.5，实现零依赖图片注入并修复 session 校验)
         # 获取项目下所有关键词
         keywords = self.db.query(Keyword).filter(
             Keyword.project_id == project_id
         ).all()
-<<<<<<< HEAD
         
         if not keywords:
             logger.error(f"项目下没有关键词: {project_id}")
@@ -293,37 +268,15 @@ class IndexCheckService:
         async with async_playwright() as p:
             browser = await p.chromium.launch(headless=False, args=["--no-sandbox"])
             
-=======
-
-        if not keywords:
-            logger.error(f"项目下没有关键词: {project_id}")
-            return []
-
-        all_results = []
-
-        # 确定要检测的平台
-        if platforms is None:
-            platforms = list(self.checkers.keys())
-
-        # 使用单个 Playwright 实例处理所有关键词
-        from playwright.async_api import async_playwright
-        async with async_playwright() as p:
-            browser = await p.chromium.launch(headless=True, args=["--no-sandbox"])
-            context = await browser.new_context()
-            page = await context.new_page()
-
->>>>>>> 38d2541 (feat: 收录查询功能开发中-保存当前进度)
             try:
                 for keyword_obj in keywords:
+                    logger.info(f"[IndexCheck] 检测关键词 ({keywords.index(keyword_obj) + 1}/{len(keywords)}): {keyword_obj.keyword}")
+
                     # 获取关键词的问题变体
                     questions = self.db.query(QuestionVariant).filter(
                         QuestionVariant.keyword_id == keyword_obj.id
                     ).all()
-<<<<<<< HEAD
                     
-=======
-
->>>>>>> 38d2541 (feat: 收录查询功能开发中-保存当前进度)
                     if not questions:
                         # 如果没有问题变体，使用默认问题
                         questions = [QuestionVariant(
@@ -331,20 +284,13 @@ class IndexCheckService:
                             keyword_id=keyword_obj.id,
                             question=f"什么是{keyword_obj.keyword}？推荐哪家公司？"
                         )]
-<<<<<<< HEAD
                     
                     # 执行检测
                     results = await self._execute_checks(
-=======
-
-                    # 执行检测
-                    results = await self._execute_checks_for_single_keyword(
->>>>>>> 38d2541 (feat: 收录查询功能开发中-保存当前进度)
                         keyword_id=keyword_obj.id,
                         keyword_obj=keyword_obj,
                         questions=questions,
                         company_name=project.company_name,
-<<<<<<< HEAD
                         platforms=platforms
                     )
                     
@@ -353,17 +299,6 @@ class IndexCheckService:
                     # 短暂休息，避免被平台检测为自动化
                     await asyncio.sleep(2)
                     
-=======
-                        platforms=platforms,
-                        page=page
-                    )
-
-                    all_results.extend(results)
-
-                    # 短暂休息，避免被平台检测为自动化
-                    await asyncio.sleep(2)
-
->>>>>>> 38d2541 (feat: 收录查询功能开发中-保存当前进度)
             finally:
                 await context.close()
                 await browser.close()
@@ -482,7 +417,6 @@ class IndexCheckService:
         
         logger.info(f"开始检测平台: {checker.name}, 关键词: {keyword_obj.keyword}")
 
-<<<<<<< HEAD
         for qv in questions:
             retry_count = 0
             success = False
@@ -567,19 +501,15 @@ class IndexCheckService:
             await asyncio.sleep(1)
         
         return results
-=======
-        logger.info(f"项目关键词批量检测完成: 项目ID={project_id}, 关键词数={len(keywords)}, 检测数={len(all_results)}")
-        return all_results
->>>>>>> 38d2541 (feat: 收录查询功能开发中-保存当前进度)
 
-    async def _execute_checks_for_single_keyword(
+    async def _execute_checks(
         self,
         keyword_id: int,
         keyword_obj: Keyword,
         questions: List[QuestionVariant],
         company_name: str,
         platforms: List[str],
-        page: Any
+        browser: Optional[Browser] = None
     ) -> List[Dict[str, Any]]:
         """
 <<<<<<< HEAD
@@ -587,19 +517,11 @@ class IndexCheckService:
         """
         results = []
         
-=======
-        为单个关键词执行检测
 
-        Args:
-            keyword_id: 关键词ID
-            keyword_obj: 关键词对象
-            questions: 问题列表
-            company_name: 公司名称
-            platforms: 平台列表
-            page: Playwright Page 对象
-
-        Returns:
-            检测结果列表
+        v5.0 增强：
+        - 支持共享浏览器实例（提高效率）
+        - 物理模拟用户登录
+        - 详细日志追踪
         """
         results = []
 
@@ -621,82 +543,75 @@ class IndexCheckService:
                 page=page
             )
             results.extend(platform_results)
-=======
-            logger.info(f"开始检测平台: {checker.name}, 关键词: {keyword_obj.keyword}")
 
-            for qv in questions:
-                retry_count = 0
-                success = False
-                check_result = None
+        # 如果没有提供浏览器，创建新的
+        should_close_browser = browser is None
+        if browser is None:
+            p = await async_playwright().start()
+            browser = await p.chromium.launch(headless=False, args=["--no-sandbox"])
 
-                while retry_count <= 2 and not success:
-                    try:
-                        # 调用检测器
-                        check_result = await checker.check(
-                            page=page,
-                            question=qv.question,
-                            keyword=keyword_obj.keyword,
-                            company=company_name
-                        )
+        try:
+            # 为每个平台创建一个新的上下文和页面
+            for platform_id in platforms:
+                checker = self.checkers.get(platform_id)
+                if not checker:
+                    logger.warning(f"[IndexCheck] 未知的平台: {platform_id}")
+                    continue
 
-                        success = check_result.get("success", False)
-                        if success:
-                            logger.debug(f"检测成功: 平台={checker.name}, 问题={qv.question[:30]}...")
-                            break
+                logger.info(f"[IndexCheck] 开始检测平台: {checker.name}, 关键词: {keyword_obj.keyword}")
 
-                        retry_count += 1
-                        logger.warning(f"检测失败，正在重试 ({retry_count}/2): {check_result.get('error_msg', '未知错误')}")
+                # 加载平台的存储状态（授权状态）
+                logger.info(f"[IndexCheck] 加载平台 {checker.name} 的存储状态...")
+                storage_state = await secure_session_manager.load_session(
+                    user_id=user_id,
+                    project_id=project_id,
+                    platform=platform_id,
+                    validate=False
+                )
 
-                        # 重试前清理聊天记录和等待
-                        await checker.clear_chat_history(page)
-                        await asyncio.sleep(3)
+                if storage_state:
+                    logger.info(f"[IndexCheck] 成功加载平台 {checker.name} 的存储状态")
+                else:
+                    logger.warning(f"[IndexCheck] 未找到平台 {checker.name} 的存储状态，将使用新的会话")
 
-                    except Exception as e:
-                        retry_count += 1
-                        logger.error(f"检测异常，正在重试 ({retry_count}/2): {str(e)}")
-
-                        # 重试前等待
-                        await asyncio.sleep(5)
-
-                        # 尝试重新导航到页面
-                        if retry_count > 1:
-                            await checker.navigate_to_page(page)
-
-                if not check_result:
-                    check_result = {
-                        "success": False,
-                        "answer": None,
-                        "keyword_found": False,
-                        "company_found": False,
-                        "error_msg": "检测超时或多次失败"
-                    }
+                # 为每个平台创建新的上下文和页面
+                context = await browser.new_context(storage_state=storage_state)
+                page = await context.new_page()
 
                 try:
-                    # 保存检测结果
-                    record = IndexCheckRecord(
+                    # 执行单个平台的检测
+                    platform_results = await self._execute_checks_for_single_platform(
                         keyword_id=keyword_id,
-                        platform=platform_id,
-                        question=qv.question,
-                        answer=check_result.get("answer"),
-                        keyword_found=check_result.get("keyword_found", False),
-                        company_found=check_result.get("company_found", False)
+                        keyword_obj=keyword_obj,
+                        questions=questions,
+                        company_name=company_name,
+                        platform_id=platform_id,
+                        checker=checker,
+                        page=page
                     )
-                    self.db.add(record)
-                    self.db.commit()
-                except Exception as db_error:
-                    logger.error(f"保存检测结果失败: {str(db_error)}")
-                    self.db.rollback()
+                    results.extend(platform_results)
 
-                results.append({
-                    "keyword_id": keyword_id,
-                    "keyword": keyword_obj.keyword,
-                    "platform": checker.name,
-                    "question": qv.question,
-                    "keyword_found": check_result.get("keyword_found", False),
-                    "company_found": check_result.get("company_found", False),
-                    "success": check_result.get("success", False),
-                    "retry_count": retry_count
-                })
+                    # 保存更新后的会话状态（如果登录状态发生了变化）
+                    logger.info(f"[IndexCheck] 保存平台 {checker.name} 的更新会话状态...")
+                    updated_storage_state = await context.storage_state()
+                    # 保留原始会话中的时间戳信息
+                    if storage_state:
+                        updated_storage_state["created_at"] = storage_state.get("created_at")
+                        updated_storage_state["last_modified"] = storage_state.get("last_modified")
+                    save_result = await secure_session_manager.save_session(
+                        user_id=user_id,
+                        project_id=project_id,
+                        platform=platform_id,
+                        storage_state=updated_storage_state
+                    )
+                    if save_result:
+                        logger.info(f"[IndexCheck] 成功保存平台 {checker.name} 的更新会话状态")
+                    else:
+                        logger.warning(f"[IndexCheck] 保存平台 {checker.name} 的更新会话状态失败")
+                finally:
+                    # 等待一段时间后再关闭上下文，让用户有时间看到结果
+                    await asyncio.sleep(2)
+                    await context.close()
 
                 # 每个问题检测后短暂休息
                 await asyncio.sleep(1)
@@ -708,7 +623,6 @@ class IndexCheckService:
         self,
         keyword_id: Optional[int] = None,
         platform: Optional[str] = None,
-<<<<<<< HEAD
         limit: int = 100,
         skip: int = 0,
         keyword_found: Optional[bool] = None,
@@ -719,18 +633,11 @@ class IndexCheckService:
     ) -> tuple[List[IndexCheckRecord], int]:
         """
         获取检测记录（支持分页和多维筛选）
-=======
-        limit: int = 100
-    ) -> List[IndexCheckRecord]:
-        """
-        获取检测记录
->>>>>>> 38d2541 (feat: 收录查询功能开发中-保存当前进度)
 
         Args:
             keyword_id: 关键词ID筛选
             platform: 平台筛选
             limit: 返回数量限制
-<<<<<<< HEAD
             skip: 跳过数量
             keyword_found: 关键词命中筛选
             company_found: 公司名命中筛选
@@ -740,11 +647,6 @@ class IndexCheckService:
 
         Returns:
             (记录列表, 总记录数)
-=======
-
-        Returns:
-            检测记录列表
->>>>>>> 38d2541 (feat: 收录查询功能开发中-保存当前进度)
         """
         query = self.db.query(IndexCheckRecord)
 
@@ -753,7 +655,6 @@ class IndexCheckService:
 
         if platform:
             query = query.filter(IndexCheckRecord.platform == platform)
-<<<<<<< HEAD
         if keyword_found is not None:
             query = query.filter(IndexCheckRecord.keyword_found == keyword_found)
         if company_found is not None:
@@ -790,20 +691,11 @@ class IndexCheckService:
     def get_hit_rate(self, keyword_id: int) -> Dict[str, Any]:
         """
         计算关键词命中率
-=======
-
-        return query.order_by(IndexCheckRecord.check_time.desc()).limit(limit).all()
-
-    def get_hit_rate(self, keyword_id: int) -> Dict[str, Any]:
-        """
-        获取关键词命中率统计
->>>>>>> 38d2541 (feat: 收录查询功能开发中-保存当前进度)
 
         Args:
             keyword_id: 关键词ID
 
         Returns:
-<<<<<<< HEAD
             命中率统计
         """
         records = self.db.query(IndexCheckRecord).filter(
@@ -824,40 +716,6 @@ class IndexCheckService:
             "company_found": company_found
         }
     
-=======
-            命中率统计数据（v2.0 更新：与 trend 分析一致的格式）
-        """
-        records = self.db.query(IndexCheckRecord).filter(IndexCheckRecord.keyword_id == keyword_id).all()
-
-        if not records:
-            return {
-                "hit_rate": 0,
-                "total": 0,
-                "keyword_found": 0,
-                "company_found": 0,
-                "keyword_found_pct": 0,
-                "company_found_pct": 0
-            }
-
-        total = len(records)
-        kw_f = sum(1 for r in records if r.keyword_found)
-        co_f = sum(1 for r in records if r.company_found)
-
-        # v2.0 更新：使用与 get_keyword_trend 一致的计算方式
-        hit_rate = round((kw_f + co_f) / (total * 2) * 100, 2) if total > 0 else 0
-        keyword_found = kw_f
-        company_found = co_f
-
-        return {
-            "hit_rate": hit_rate,
-            "total": total,
-            "keyword_found": keyword_found,
-            "company_found": company_found,
-            "keyword_found_pct": round((keyword_found / total) * 100, 2) if total > 0 else 0,
-            "company_found_pct": round((company_found / total) * 100, 2) if total > 0 else 0
-        }
-
->>>>>>> 38d2541 (feat: 收录查询功能开发中-保存当前进度)
     def get_keyword_trend(
         self,
         keyword_id: int,
@@ -865,7 +723,6 @@ class IndexCheckService:
     ) -> Dict[str, Any]:
         """
         获取关键词收录趋势
-<<<<<<< HEAD
         
         Args:
             keyword_id: 关键词ID
@@ -909,45 +766,6 @@ class IndexCheckService:
             # 计算命中率
             hit_rate = round((keyword_found + company_found) / (total * 2) * 100, 2) if total > 0 else 0
             
-=======
-
-        Args:
-            keyword_id: 关键词ID
-            days: 统计天数
-
-        Returns:
-            趋势数据
-        """
-        start_date = datetime.now() - timedelta(days=days)
-
-        keyword = self.db.query(Keyword).filter(Keyword.id == keyword_id).first()
-        if not keyword:
-            return {"keyword": None, "trend": []}
-
-        trend_data = []
-
-        for day_offset in range(days, 0, -1):
-            day_start = datetime.now() - timedelta(days=day_offset)
-            day_end = day_start + timedelta(days=1)
-
-            records = self.db.query(IndexCheckRecord).filter(
-                and_(
-                    IndexCheckRecord.keyword_id == keyword_id,
-                    IndexCheckRecord.check_time >= day_start,
-                    IndexCheckRecord.check_time < day_end
-                )
-            ).all()
-
-            if not records:
-                continue
-
-            total = len(records)
-            keyword_found = sum(1 for r in records if r.keyword_found)
-            company_found = sum(1 for r in records if r.company_found)
-
-            hit_rate = round((keyword_found + company_found) / (total * 2) * 100, 2) if total > 0 else 0
-
->>>>>>> 38d2541 (feat: 收录查询功能开发中-保存当前进度)
             trend_data.append({
                 "date": day_start.strftime("%Y-%m-%d"),
                 "total": total,
@@ -957,21 +775,13 @@ class IndexCheckService:
                 "keyword_pct": round((keyword_found / total) * 100, 2) if total > 0 else 0,
                 "company_pct": round((company_found / total) * 100, 2) if total > 0 else 0
             })
-<<<<<<< HEAD
         
-=======
-
->>>>>>> 38d2541 (feat: 收录查询功能开发中-保存当前进度)
         return {
             "keyword": keyword.keyword,
             "trend": trend_data,
             "total_days": days
         }
-<<<<<<< HEAD
     
-=======
-
->>>>>>> 38d2541 (feat: 收录查询功能开发中-保存当前进度)
     def get_project_analytics(
         self,
         project_id: int,
@@ -979,7 +789,6 @@ class IndexCheckService:
     ) -> Dict[str, Any]:
         """
         获取项目的综合分析
-<<<<<<< HEAD
         
         Args:
             project_id: 项目ID
@@ -1001,29 +810,6 @@ class IndexCheckService:
             Keyword.status == "active"
         ).all()
         
-=======
-
-        Args:
-            project_id: 项目ID
-            days: 统计天数
-
-        Returns:
-            项目分析数据
-        """
-        start_date = datetime.now() - timedelta(days=days)
-
-        project = self.db.query(Project).filter(Project.id == project_id).first()
-        if not project:
-            return {"error": "项目不存在"}
-
-        keywords = self.db.query(Keyword).filter(
-            and_(
-                Keyword.project_id == project_id,
-                Keyword.status == "active"
-            )
-        ).all()
-
->>>>>>> 38d2541 (feat: 收录查询功能开发中-保存当前进度)
         if not keywords:
             return {
                 "project_name": project.name,
@@ -1037,19 +823,18 @@ class IndexCheckService:
                     "company_avg": 0
                 }
             }
-<<<<<<< HEAD
         
         start_date = datetime.now() - timedelta(days=days)
         
 =======
+        start_date = datetime.now() - timedelta(days=days)
 
->>>>>>> 38d2541 (feat: 收录查询功能开发中-保存当前进度)
+>>>>>>> 0c0b39e (feat(publish): 优化知乎物理注入逻辑 v6.5，实现零依赖图片注入并修复 session 校验)
         keyword_analytics = []
         total_checks = 0
         total_hit_rate = 0
         total_keyword_avg = 0
         total_company_avg = 0
-<<<<<<< HEAD
         
         for keyword in keywords:
             # 获取该关键词的检测记录
@@ -1069,28 +854,6 @@ class IndexCheckService:
             keyword_pct = round((keyword_found / total) * 100, 2) if total > 0 else 0
             company_pct = round((company_found / total) * 100, 2) if total > 0 else 0
             
-=======
-
-        for keyword in keywords:
-            records = self.db.query(IndexCheckRecord).filter(
-                and_(
-                    IndexCheckRecord.keyword_id == keyword.id,
-                    IndexCheckRecord.check_time >= start_date
-                )
-            ).all()
-
-            if not records:
-                continue
-
-            total = len(records)
-            keyword_found = sum(1 for r in records if r.keyword_found)
-            company_found = sum(1 for r in records if r.company_found)
-
-            hit_rate = round((keyword_found + company_found) / (total * 2) * 100, 2) if total > 0 else 0
-            keyword_pct = round((keyword_found / total) * 100, 2) if total > 0 else 0
-            company_pct = round((company_found / total) * 100, 2) if total > 0 else 0
-
->>>>>>> 38d2541 (feat: 收录查询功能开发中-保存当前进度)
             keyword_analytics.append({
                 "keyword_id": keyword.id,
                 "keyword": keyword.keyword,
@@ -1100,36 +863,25 @@ class IndexCheckService:
                 "company_pct": company_pct,
                 "status": "good" if hit_rate > 60 else "warning" if hit_rate > 30 else "critical"
             })
-<<<<<<< HEAD
             
             # 累计统计
 =======
-
->>>>>>> 38d2541 (feat: 收录查询功能开发中-保存当前进度)
+            # 累计统计
+>>>>>>> 0c0b39e (feat(publish): 优化知乎物理注入逻辑 v6.5，实现零依赖图片注入并修复 session 校验)
             total_checks += total
             total_hit_rate += hit_rate
             total_keyword_avg += keyword_pct
             total_company_avg += company_pct
-<<<<<<< HEAD
         
         # 计算平均值
         keyword_count = len(keyword_analytics)
-=======
-
-        keyword_count = len(keyword_analytics)
-
->>>>>>> 38d2541 (feat: 收录查询功能开发中-保存当前进度)
         summary = {
             "total_checks": total_checks,
             "avg_hit_rate": round(total_hit_rate / keyword_count, 2) if keyword_count > 0 else 0,
             "keyword_avg": round(total_keyword_avg / keyword_count, 2) if keyword_count > 0 else 0,
             "company_avg": round(total_company_avg / keyword_count, 2) if keyword_count > 0 else 0
         }
-<<<<<<< HEAD
         
-=======
-
->>>>>>> 38d2541 (feat: 收录查询功能开发中-保存当前进度)
         return {
             "project_name": project.name,
             "company_name": project.company_name,
@@ -1138,11 +890,7 @@ class IndexCheckService:
             "analytics": keyword_analytics,
             "summary": summary
         }
-<<<<<<< HEAD
     
-=======
-
->>>>>>> 38d2541 (feat: 收录查询功能开发中-保存当前进度)
     def get_platform_performance(
         self,
         project_id: Optional[int] = None,
@@ -1150,7 +898,6 @@ class IndexCheckService:
     ) -> Dict[str, Any]:
         """
         获取各平台的表现分析
-<<<<<<< HEAD
         
         Args:
             project_id: 项目ID（可选）
@@ -1169,21 +916,6 @@ class IndexCheckService:
         if project_id:
             # 通过关键词关联到项目
             from sqlalchemy import and_
-=======
-
-        Args:
-            project_id: 项目ID（可选）
-            days: 统计天数
-
-        Returns:
-            平台表现数据
-        """
-        start_date = datetime.now() - timedelta(days=days)
-
-        query = self.db.query(IndexCheckRecord)
-
-        if project_id:
->>>>>>> 38d2541 (feat: 收录查询功能开发中-保存当前进度)
             query = query.join(Keyword).filter(
                 and_(
                     IndexCheckRecord.check_time >= start_date,
@@ -1193,7 +925,6 @@ class IndexCheckService:
             )
         else:
             query = query.filter(IndexCheckRecord.check_time >= start_date)
-<<<<<<< HEAD
         
         records = query.all()
         
@@ -1203,16 +934,6 @@ class IndexCheckService:
         # 按平台分组统计
         platform_data = {}
         
-=======
-
-        records = query.all()
-
-        if not records:
-            return {"platforms": [], "summary": {"total_checks": 0}}
-
-        platform_data = {}
-
->>>>>>> 38d2541 (feat: 收录查询功能开发中-保存当前进度)
         for record in records:
             platform = record.platform
             if platform not in platform_data:
@@ -1223,11 +944,7 @@ class IndexCheckService:
                     "company_found": 0,
                     "success_count": 0
                 }
-<<<<<<< HEAD
             
-=======
-
->>>>>>> 38d2541 (feat: 收录查询功能开发中-保存当前进度)
             platform_data[platform]["total"] += 1
             if record.keyword_found:
                 platform_data[platform]["keyword_found"] += 1
@@ -1245,11 +962,11 @@ class IndexCheckService:
         total_success = 0
         
         for platform, data in platform_data.items():
-=======
             # 成功检测（有回答）
             if record.answer and record.answer.strip():
                 platform_data[platform]["success_count"] += 1
 
+        # 计算各平台的命中率和成功率
         platforms = []
         total_checks = 0
         total_success = 0
@@ -1260,20 +977,10 @@ class IndexCheckService:
             keyword_pct = round((data["keyword_found"] / data["total"]) * 100, 2) if data["total"] > 0 else 0
             company_pct = round((data["company_found"] / data["total"]) * 100, 2) if data["total"] > 0 else 0
             success_rate = round((data["success_count"] / data["total"]) * 100, 2) if data["total"] > 0 else 0
-<<<<<<< HEAD
             
             platforms.append({
                 "platform": platform,
                 "platform_name": self.checkers.get(platform, {}).name if platform in self.checkers else platform,
-=======
-
-            checker_info = self.checkers.get(platform_name, {})
-            platform_display_name = checker_info.name if platform_name in self.checkers else platform_name
-
-            platforms.append({
-                "platform": platform_name,
-                "platform_name": platform_display_name,
->>>>>>> 38d2541 (feat: 收录查询功能开发中-保存当前进度)
                 "total_checks": data["total"],
                 "hit_rate": hit_rate,
                 "keyword_pct": keyword_pct,
@@ -1281,7 +988,6 @@ class IndexCheckService:
                 "success_rate": success_rate,
                 "status": "good" if hit_rate > 60 else "warning" if hit_rate > 30 else "critical"
             })
-<<<<<<< HEAD
             
             total_checks += data["total"]
             total_success += data["success_count"]
@@ -1289,24 +995,12 @@ class IndexCheckService:
         # 按命中率排序
         platforms.sort(key=lambda x: x["hit_rate"], reverse=True)
         
-=======
-
-            total_checks += data["total"]
-            total_success += data["success_count"]
-
-        platforms.sort(key=lambda x: x["hit_rate"], reverse=True)
-
->>>>>>> 38d2541 (feat: 收录查询功能开发中-保存当前进度)
         summary = {
             "total_platforms": len(platforms),
             "total_checks": total_checks,
             "avg_success_rate": round((total_success / total_checks) * 100, 2) if total_checks > 0 else 0
         }
-<<<<<<< HEAD
         
-=======
-
->>>>>>> 38d2541 (feat: 收录查询功能开发中-保存当前进度)
         return {
             "platforms": platforms,
             "summary": summary
