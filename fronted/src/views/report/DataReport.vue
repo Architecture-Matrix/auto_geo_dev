@@ -3,7 +3,7 @@
     <!-- 1. 顶部筛选区 -->
     <div class="filter-section card-box">
       <div class="filter-left">
-        <el-select v-model="filters.project_id" placeholder="选择项目" clearable @change="loadData" class="project-select">
+        <el-select v-model="filters.project_id" placeholder="选择项目" clearable @change="loadData" class="project-select" size="default">
           <el-option
             v-for="item in projects"
             :key="item.id"
@@ -11,7 +11,7 @@
             :value="item.id"
           />
         </el-select>
-        <el-select v-model="filters.days" placeholder="时间范围" @change="loadData" class="time-select">
+        <el-select v-model="filters.days" placeholder="时间范围" @change="loadData" class="time-select" size="default">
           <el-option label="近7天" :value="7" />
           <el-option label="近30天" :value="30" />
         </el-select>
@@ -27,6 +27,10 @@
           <el-icon><Refresh /></el-icon>
           刷新
         </el-button>
+        <el-button type="primary" @click="runCheck" :loading="checkLoading">
+          <el-icon><Search /></el-icon>
+          执行收录检测
+        </el-button>
       </div>
     </div>
 
@@ -37,6 +41,9 @@
         <el-tooltip content="统计选定时间范围内的核心指标数据" placement="top">
           <el-icon class="info-icon"><InfoFilled /></el-icon>
         </el-tooltip>
+        <el-button type="text" @click="viewRecords" class="view-link">
+          查看检测记录 <el-icon><ArrowRight /></el-icon>
+        </el-button>
       </div>
       <div class="stats-grid">
         <div class="stat-card blue">
@@ -100,31 +107,21 @@
       </el-table>
     </div>
 
-    <!-- 5. 高贡献内容分析 -->
-    <div class="analysis-section card-box">
-      <h3 class="section-title">高贡献内容分析 (AI引用源)</h3>
-      <el-table :data="contentAnalysis" stripe style="width: 100%" class="dark-table">
-        <el-table-column prop="rank" label="排名" width="80" align="center" />
-        <el-table-column prop="title" label="文章标题" show-overflow-tooltip />
-        <el-table-column prop="platform" label="发布平台" width="120" />
-        <el-table-column prop="ai_contribution" label="AI引用贡献率" width="150" align="center">
-          <template #default="{ row }">{{ row.ai_contribution }}%</template>
-        </el-table-column>
-        <el-table-column prop="publish_time" label="发布时间" width="180" align="center" />
-        <template #empty>
-          <div class="empty-text">暂无数据</div>
-        </template>
-      </el-table>
-    </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue'
-import { InfoFilled, Refresh } from '@element-plus/icons-vue'
+import { useRouter } from 'vue-router'
+import { InfoFilled, Refresh, Search, ArrowRight } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import * as echarts from 'echarts'
 import { reportsApi, geoKeywordApi } from '@/services/api'
+
+const router = useRouter()
+
+// 检测加载状态
+const checkLoading = ref(false)
 
 // 筛选状态
 const filters = ref({
@@ -154,7 +151,6 @@ const stats = ref({
 
 // 排行榜数据
 const projectLeaderboard = ref<any[]>([])
-const contentAnalysis = ref<any[]>([])
 
 // 图表 DOM
 const comparisonChartRef = ref<HTMLElement | null>(null)
@@ -174,10 +170,6 @@ const loadData = async () => {
     // 加载项目排行
     const leaderboardRes = await reportsApi.getProjectLeaderboard({ days: filters.value.days })
     projectLeaderboard.value = leaderboardRes
-
-    // 加载内容分析
-    const analysisRes = await reportsApi.getContentAnalysis(filters.value)
-    contentAnalysis.value = analysisRes
   } catch (error) {
     console.error('加载报表数据失败:', error)
     ElMessage.error('加载报表数据失败，请稍后重试')
@@ -265,6 +257,63 @@ onUnmounted(() => {
     comparisonChart = null
   }
 })
+
+// 执行收录检测
+const runCheck = async () => {
+  if (!filters.value.project_id) {
+    ElMessage.warning('请先选择项目')
+    return
+  }
+
+  checkLoading.value = true
+  try {
+    // 转换平台筛选格式
+    const platforms = convertPlatformFilter(filters.value.platform)
+
+    await reportsApi.runCheck({
+      project_id: filters.value.project_id,
+      platforms: platforms.length > 0 ? platforms : undefined
+    })
+
+    ElMessage.success('收录检测已完成，3秒后自动刷新数据')
+
+    // 延迟期新，等待检测数据写入
+    setTimeout(() => {
+      loadData()
+    }, 3000)
+  } catch (error: any) {
+    console.error('检测失败:', error)
+    ElMessage.error(error.response?.data?.message || '检测失败，请稍后重试')
+  } finally {
+    checkLoading.value = false
+  }
+}
+
+// 平台筛选格式转换（将前端格式转换为后端格式）
+const convertPlatformFilter = (platform: string): string[] => {
+  const platformMap: Record<string, string> = {
+    'DeepSeek': 'deepseek',
+    '豆包': 'doubao',
+    '通义千问': 'qianwen'
+  }
+  return platform ? [platformMap[platform]] : []
+}
+
+// 跳转到收录查询页面查看详细记录
+const viewRecords = () => {
+  if (!filters.value.project_id) {
+    ElMessage.warning('请先选择项目')
+    return
+  }
+
+  router.push({
+    name: 'Monitor',
+    query: {
+      project_id: filters.value.project_id,
+      // 可以传递其他筛选参数
+    }
+  })
+}
 </script>
 
 <style scoped lang="scss">
@@ -299,16 +348,26 @@ onUnmounted(() => {
 
   .filter-left {
     display: flex;
+    align-items: center;
     gap: 12px;
 
-    .project-select { width: 200px; }
-    .time-select { width: 120px; }
+    .project-select {
+      width: 200px;
+    }
+    .time-select {
+      width: 120px;
+    }
   }
 
   .filter-right {
     display: flex;
     align-items: center;
     gap: 16px;
+
+    :deep(.el-radio-group),
+    :deep(.el-button) {
+      height: 32px;
+    }
 
     .refresh-btn {
       background: transparent;
@@ -331,6 +390,14 @@ onUnmounted(() => {
     margin-bottom: 20px;
     .section-title { margin-bottom: 0; }
     .info-icon { color: var(--text-secondary); cursor: help; }
+    .view-link {
+      margin-left: auto;
+      color: var(--primary);
+      font-size: 14px;
+      &:hover {
+        color: var(--primary-light);
+      }
+    }
   }
 
   .stats-grid {

@@ -56,7 +56,7 @@ class ErrorResponse(BaseModel):
 # ==================== 账号相关 ====================
 class AccountBase(BaseModel):
     """账号基础信息"""
-    platform: str = Field(..., description="平台ID", pattern="^(zhihu|baijiahao|sohu|toutiao)$")
+    platform: str = Field(..., description="平台ID", pattern="^(zhihu|baijiahao|sohu|toutiao|wenku|penguin|weixin|wangyi|zijie|xiaohongshu|bilibili|36kr|huxiu|woshipm|douyin|kuaishou|video_account|sohu_video|weibo|haokan|xigua|jianshu|iqiyi|dayu|acfun|tencent_video|yidian|pipixia|meipai|douban|kuai_chuan|dafeng|xueqiu|yiche|chejia|duoduo|weishi|mango|ximalaya|meituan|alipay|douyin_company|douyin_company_lead|custom)$")
     account_name: str = Field(..., min_length=1, max_length=100, description="账号备注名称")
     remark: Optional[str] = Field(None, description="备注信息")
 

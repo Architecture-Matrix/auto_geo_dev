@@ -189,18 +189,19 @@ export const reportsApi = {
 
   // 趋势图数据 (Monitor.vue 使用)
   getTrends: (days: number = 30) => get('/reports/trends', { days }),
-  
+
   // 🌟 [新增] 数据总览卡片
   getStats: (params: { project_id?: number; days?: number }) => get('/reports/stats', params),
-  
+
   // 🌟 [新增] AI 平台对比分析
   getPlatformComparison: (params: { project_id?: number; days?: number }) => get('/reports/platform-comparison', params),
-  
+
   // 🌟 [新增] 项目影响力排行榜
   getProjectLeaderboard: (params: { days?: number }) => get('/reports/project-leaderboard', params),
-  
-  // 🌟 [新增] 高贡献内容分析
-  getContentAnalysis: (params: { project_id?: number; days?: number }) => get('/reports/content-analysis', params)
+
+  // 🌟 [新增] 执行收录检测
+  runCheck: (data: { project_id: number; platforms?: string[] }) =>
+    post('/reports/run-check', data)
 }
 
 // ==================== 6. 定时任务 API ====================

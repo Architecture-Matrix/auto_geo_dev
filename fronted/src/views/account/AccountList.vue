@@ -4,10 +4,12 @@
     <div class="toolbar">
       <div class="toolbar-left">
         <el-select v-model="filterPlatform" placeholder="筛选平台" clearable style="width: 150px">
-          <el-option label="知乎" value="zhihu" />
-          <el-option label="百家号" value="baijiahao" />
-          <el-option label="今日头条" value="toutiao" />
-          <el-option label="搜狐号" value="sohu" />
+          <el-option
+            v-for="p in platformOptions"
+            :key="p.id"
+            :label="p.name"
+            :value="p.id"
+          />
         </el-select>
       </div>
       <div class="toolbar-right">
@@ -25,7 +27,7 @@
         class="account-card"
       >
         <div class="account-header">
-          <div class="platform-icon" :class="account.platform">
+          <div class="platform-icon" :style="{ backgroundColor: getPlatformColor(account.platform) }">
             {{ getPlatformName(account.platform).substring(0,1) }}
           </div>
           <div class="status-dot" :class="account.status === 1 ? 'online' : 'offline'"></div>
@@ -70,10 +72,12 @@
         <el-form :model="formData" label-width="80px">
           <el-form-item label="平台">
             <el-select v-model="formData.platform" placeholder="选择平台" :disabled="isEdit" style="width: 100%">
-              <el-option label="知乎" value="zhihu" />
-              <el-option label="百家号" value="baijiahao" />
-              <el-option label="今日头条" value="toutiao" />
-              <el-option label="搜狐号" value="sohu" />
+              <el-option
+                v-for="p in platformOptions"
+                :key="p.id"
+                :label="p.name"
+                :value="p.id"
+              />
             </el-select>
           </el-form-item>
           <el-form-item label="名称">
@@ -119,6 +123,7 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { Plus, Loading } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { accountApi } from '@/services/api' // 直接使用 API 避免 store 逻辑复杂化
+import { getEnabledPlatforms, getPlatformConfig } from '@/core/config/platform'
 
 // 状态
 const accounts = ref<any[]>([])
@@ -128,6 +133,9 @@ const isEdit = ref(false)
 const authStep = ref(false) // 是否处于授权等待阶段
 const loading = ref(false)
 const pollTimer = ref<any>(null)
+
+// 平台选项
+const platformOptions = computed(() => getEnabledPlatforms().map(p => ({ id: p.id, name: p.name })))
 
 const formData = ref({
   id: null as number | null,
@@ -309,7 +317,15 @@ const resetForm = () => {
 }
 
 // 工具函数
-const getPlatformName = (p: string) => ({ zhihu:'知乎', baijiahao:'百家号', toutiao:'头条', sohu:'搜狐' }[p] || p)
+const getPlatformName = (p: string) => {
+  const config = getPlatformConfig(p)
+  return config ? config.name : p
+}
+
+const getPlatformColor = (p: string) => {
+  const config = getPlatformConfig(p)
+  return config ? config.color : '#999'
+}
 
 onMounted(loadAccounts)
 onUnmounted(resetForm)
@@ -339,10 +355,6 @@ onUnmounted(resetForm)
   .platform-icon {
     width: 40px; height: 40px; border-radius: 8px; display: flex; align-items: center; justify-content: center;
     color: white; font-weight: bold; font-size: 18px;
-    &.zhihu { background: #0084FF; }
-    &.baijiahao { background: #2932e1; }
-    &.toutiao { background: #f85959; }
-    &.sohu { background: #ffc300; color: #000; }
   }
   .status-dot {
     width: 10px; height: 10px; border-radius: 50%;
