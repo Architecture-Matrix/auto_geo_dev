@@ -100,12 +100,18 @@ export const geoKeywordApi = {
   getProjects: () => get('/keywords/projects'),
   getProject: (id: number) => get(`/keywords/projects/${id}`),
   getProjectKeywords: (projectId: number) => get(`/keywords/projects/${projectId}/keywords`),
-  
+
+  // 🌟 [新增] 获取关键词的问题变体列表
+  getKeywordQuestions: (keywordId: number) => get(`/keywords/${keywordId}/questions`),
+
   createProject: (data: any) => post('/keywords/projects', data),
   createKeyword: (projectId: number, data: any) => post(`/keywords/projects/${projectId}/keywords`, data),
-  
+
   distill: (data: any) => post('/keywords/distill', data),
-  generateQuestions: (data: any) => post('/keywords/generate-questions', data)
+  generateQuestions: (data: any) => post('/keywords/generate-questions', data),
+
+  // 🌟 [新增] 删除关键词 (修复删除功能失效)
+  deleteKeyword: (id: number) => del(`/keywords/${id}`)
 }
 
 // ==================== 3. GEO 文章 API ====================

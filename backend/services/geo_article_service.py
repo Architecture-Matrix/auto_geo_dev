@@ -19,7 +19,7 @@ from backend.database.models import GeoArticle, Keyword, Account
 from backend.services.n8n_service import get_n8n_service
 from backend.services.playwright.publishers.base import get_publisher
 from backend.services.crypto import decrypt_storage_state
-from playwright.async_api import async_playwright
+from backend.services.playwright_mgr import playwright_mgr
 
 # 模块化日志绑定
 gen_log = logger.bind(module="生成器")
@@ -96,7 +96,11 @@ class GeoArticleService:
     async def execute_publish(self, article_id: int) -> bool:
         """
         执行真实发布动作
-        增加了严格的状态校验，防止 AI 未完成时抢跑
+
+        v6.1 修复：使用全局 Playwright 管理器，避免并发冲突
+        - 浏览器实例由 playwright_mgr 单例管理
+        - 每个发布任务创建独立的 BrowserContext
+        - Context 使用后立即关闭，但 Browser 实例保持运行
         """
         article = self.db.query(GeoArticle).filter(GeoArticle.id == article_id).first()
 
@@ -125,72 +129,46 @@ class GeoArticleService:
             self.db.commit()
             return False
 
-        # 2. 获取适配器
-        publisher = get_publisher(article.platform)
-        if not publisher:
-            pub_log.error(f"❌ 未找到平台适配器: {article.platform}")
-            return False
-
-        # 3. 解析 Session
-        try:
-            state_data = decrypt_storage_state(account.storage_state)
-            if not state_data:
-                state_data = json.loads(account.storage_state)
-        except Exception as e:
-            pub_log.error(f"❌ 账号 {account.account_name} 的 Session 解析失败: {e}")
-            article.publish_status = "failed"
-            article.error_msg = "Session解析失败，请重新授权"
-            self.db.commit()
-            return False
-
-        # 4. 模拟人工随机延迟
+        # 2. 模拟人工随机延迟
         wait_time = random.randint(10, 20)
         pub_log.info(f"⏳ 模拟人工：将在 {wait_time}s 后启动浏览器推送文章")
         await asyncio.sleep(wait_time)
 
-        # 5. 启动 Playwright 执行
-        async with async_playwright() as p:
-            # 调试阶段建议 headless=False
-            browser = await p.chromium.launch(headless=False)
-            try:
-                context = await browser.new_context(
-                    storage_state=state_data,
-                    viewport={"width": 1280, "height": 800}
-                )
-                page = await context.new_page()
+        # 3. 更新状态为发布中
+        pub_log.info(f"🚀 正在执行 {article.platform} 自动化发布脚本...")
+        article.publish_status = "publishing"
+        self.db.commit()
 
-                pub_log.info(f"🚀 正在执行 {article.platform} 自动化发布脚本...")
-                article.publish_status = "publishing"
-                self.db.commit()
+        # 4. 调用全局 Playwright 管理器执行发布
+        # v6.1 修复：使用单例模式管理浏览器，避免并发冲突
+        result = await playwright_mgr.execute_publish(article, account)
 
-                # 执行适配器逻辑
-                result = await publisher.publish(page, article, account)
+        # 5. 处理发布结果
+        if result.get("success"):
+            article.publish_status = "published"
+            article.publish_time = datetime.now()
+            article.platform_url = result.get("platform_url")
+            article.publish_logs = f"[{datetime.now()}] ✅ 发布成功\n"
+            pub_log.success(f"🎊 发布完成：{article.platform_url}")
+            success = True
+        else:
+            article.publish_status = "failed"
+            article.error_msg = result.get("error_msg")
+            article.retry_count += 1
+            pub_log.error(f"❌ 发布失败：{article.error_msg}")
+            success = False
 
-                if result.get("success"):
-                    article.publish_status = "published"
-                    article.publish_time = datetime.now()
-                    article.platform_url = result.get("platform_url")
-                    article.publish_logs = f"[{datetime.now()}] ✅ 发布成功\n"
-                    pub_log.success(f"🎊 发布完成：{article.platform_url}")
-                    success = True
-                else:
-                    article.publish_status = "failed"
-                    article.error_msg = result.get("error_msg")
-                    article.retry_count += 1
-                    pub_log.error(f"❌ 发布失败：{article.error_msg}")
-                    success = False
-
-                self.db.commit()
-                return success
-
-            except Exception as e:
-                pub_log.error(f"🚨 浏览器执行崩溃: {e}")
+            # 🌟 隔离机制：超过重试限制则进入隔离状态
+            if article.retry_count >= 3:
+                article.publish_status = "quarantined"
+                pub_log.error(f"🛑 文章 {article_id} 已达到最大重试次数，进入隔离状态")
+            else:
                 article.publish_status = "failed"
-                article.error_msg = f"执行异常: {str(e)}"
-                self.db.commit()
-                return False
-            finally:
-                await browser.close()
+                # updated_at 将由调度器用于计算指数退避时间
+                article.updated_at = datetime.now()
+
+        self.db.commit()
+        return success
 
     async def check_quality(self, article_id: int) -> Dict[str, Any]:
         """质检逻辑"""

@@ -4,7 +4,7 @@
 包含基础发布、GEO、监控、知识库及AI招聘所有表结构
 """
 
-from sqlalchemy import Column, Integer, String, Text, DateTime, Boolean, func, ForeignKey
+from sqlalchemy import Column, Integer, String, Text, DateTime, Boolean, func, ForeignKey, Float
 from sqlalchemy.orm import relationship
 from backend.database import Base
 
@@ -34,6 +34,50 @@ class Account(Base):
     publish_records = relationship("PublishRecord", back_populates="account", cascade="all, delete-orphan")
 
 
+class TaskExecutionLog(Base):
+    """
+    任务执行日志表
+    记录每次任务运行的详细情况，包括状态、耗时、结果和错误堆栈
+    """
+    __tablename__ = "task_execution_logs"
+    __table_args__ = TABLE_ARGS
+
+    id = Column(Integer, primary_key=True, autoincrement=True, comment="主键ID")
+    # 外键关联 scheduled_tasks 表
+    task_id = Column(Integer, ForeignKey("scheduled_tasks.id", ondelete="CASCADE"), nullable=True, index=True, comment="关联的任务ID")
+    # task_key 用于快速查询（冗余字段，但保留以便索引查询）
+    task_key = Column(String(50), nullable=False, index=True, comment="关联的任务标识符")
+    status = Column(String(20), nullable=False, comment="执行状态：running=运行中 success=成功 failed=失败")
+    start_time = Column(DateTime, nullable=False, comment="开始执行时间")
+    end_time = Column(DateTime, nullable=True, comment="结束执行时间")
+    duration = Column(Float, nullable=True, comment="耗时（秒）")
+    result = Column(Text, nullable=True, comment="成功时的简要结果（JSON/Text）")
+    error_traceback = Column(Text, nullable=True, comment="失败时的完整堆栈信息")
+
+    created_at = Column(DateTime, default=func.now(), comment="记录创建时间")
+
+    # 关联关系
+    task = relationship("ScheduledTask", back_populates="execution_logs")
+
+    def __repr__(self):
+        return f"<TaskExecutionLog task_key={self.task_key} status={self.status}>"
+
+    def to_dict(self):
+        """转换为字典，便于API返回"""
+        return {
+            "id": self.id,
+            "task_id": self.task_id,
+            "task_key": self.task_key,
+            "status": self.status,
+            "start_time": self.start_time.isoformat() if self.start_time else None,
+            "end_time": self.end_time.isoformat() if self.end_time else None,
+            "duration": self.duration,
+            "result": self.result,
+            "error_traceback": self.error_traceback,
+            "created_at": self.created_at.isoformat() if self.created_at else None
+        }
+
+
 class ScheduledTask(Base):
     """
     定时任务配置表
@@ -52,6 +96,20 @@ class ScheduledTask(Base):
 
     def __repr__(self):
         return f"<Task {self.name} : {self.cron_expression}>"
+
+    def to_dict(self):
+        """转换为字典，便于API返回"""
+        return {
+            "id": self.id,
+            "name": self.name,
+            "task_key": self.task_key,
+            "cron_expression": self.cron_expression,
+            "is_active": self.is_active,
+            "description": self.description,
+            "last_run_time": self.last_run_time.isoformat() if self.last_run_time else None,
+            "last_run_status": self.last_run_status,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None
+        }
 
 
 class Candidate(Base):

@@ -681,14 +681,16 @@ const generateQuestions = async () => {
 const deleteKeyword = async (keyword: Keyword) => {
   try {
     await ElMessageBox.confirm(
-      `确定要删除关键词"${keyword.keyword}"吗？`,
+      `确定要删除关键词"${keyword.keyword}"吗？\n删除后该关键词将隐藏，但已生成的文章和数据会保留。`,
       '确认删除',
       { type: 'warning', confirmButtonText: '确定删除', cancelButtonText: '取消' }
     )
 
+    console.log('正在删除关键词，ID为:', keyword.id)
     await geoKeywordApi.deleteKeyword(keyword.id)
-    keywords.value = keywords.value.filter(k => k.id !== keyword.id)
-    ElMessage.success('删除成功')
+    ElMessage.success('关键词已隐藏，关联文章已保留')
+    // 重新加载关键词列表
+    await loadProjectKeywords()
   } catch (error) {
     if (error !== 'cancel') {
       console.error('删除失败:', error)
