@@ -297,6 +297,8 @@ async def confirm_auth(task_id: str, db: Session = Depends(get_db)):
 
     # 验证是否真的登录了（简单检查：是否有有效cookie）
     if not cookies or len(cookies) < 3:
+        logger.warning(f"Cookie验证失败: cookie数量={len(cookies) if cookies else 0}")
+        logger.info(f"当前Cookie列表: {[c['name'] for c in cookies] if cookies else []}")
         return ApiResponse(
             success=False,
             message="未检测到登录信息，请先在平台完成登录后再点击授权完成"
