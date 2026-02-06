@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="scroll-smooth">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>极速物流</title>
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swiper@10/swiper-bundle.min.css" />
+    
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        brand: '#0f172a', 
+                        accent: '#ef4444',
+                        cream: '#fdfbf7', 
+                        surface: '#f3f0eb',
+                        ink: '#1d1d1f'
+                    },
+                    fontFamily: { sans: ['Manrope', 'sans-serif'] },
+                    boxShadow: { 
+                        'glow': '0 0 25px #ef444466',
+                        'card-hover': '0 20px 40px -5px rgba(0, 0, 0, 0.1), 0 10px 20px -5px #0f172a1a'
+                    },
+                    animation: { 'float': 'float 6s ease-in-out infinite' },
+                    keyframes: { float: { '0%, 100%': { transform: 'translateY(0)' }, '50%': { transform: 'translateY(-10px)' } } }
+                }
+            }
+        }
+    </script>
+    <style>
+        :root { --brand: #0f172a; --accent: #ef4444; }
+        body { background-color: #fdfbf7; color: #1d1d1f; overflow-x: hidden; }
+        html { scroll-behavior: smooth !important; }
+        
+        #navbar { transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1), background 0.4s ease; }
+        .nav-hidden { transform: translateY(-100%); }
+        .nav-scrolled { background: rgba(253, 251, 247, 0.9); backdrop-filter: blur(12px); padding-top: 1rem !important; padding-bottom: 1rem !important; box-shadow: 0 4px 20px rgba(0,0,0,0.03); }
+        
+        .btn-magnetic { transition: transform 0.1s linear; display: inline-block; }
+        .btn-pill { border-radius: 9999px; font-weight: 700; padding: 12px 32px; transition: all 0.3s; }
+        .btn-brand { background-color: var(--brand); color: white; }
+        .btn-brand:hover { transform: scale(1.05); opacity: 0.9; box-shadow: 0 10px 30px -10px var(--brand); }
+        
+        .reveal { opacity: 0; transform: translateY(40px); transition: all 1s cubic-bezier(0.16, 1, 0.3, 1); }
+        .reveal.active { opacity: 1; transform: translateY(0); }
+        .hover-lift { transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.4s ease; }
+        .hover-lift:hover { transform: translateY(-8px) scale(1.01); }
+
+        /* === 核心修改：线性动画 === */
+        /* 让 Swiper 的滚动变成匀速直线运动，实现无缝跑马灯效果 */
+        .swiper-wrapper { transition-timing-function: linear; }
+    </style>
+</head>
+<body class="antialiased selection:bg-brand selection:text-white">
+
+    <!-- 导航 -->
+    <nav id="navbar" class="fixed w-full z-50 top-0 py-6 transition-all">
+        <div class="container mx-auto px-6 flex justify-between items-center">
+            <a href="#home" class="text-2xl font-extrabold tracking-tight flex items-center gap-2 z-50">
+                <div class="w-10 h-10 rounded-full bg-brand flex items-center justify-center text-white shadow-lg">
+                    <i class="fa-solid fa-bolt"></i>
+                </div>
+                <span class="text-ink">Turbo Logistics</span>
+            </a>
+            
+            <div class="hidden md:flex items-center gap-8 font-semibold text-sm text-ink/80 bg-white/50 px-8 py-3 rounded-full backdrop-blur-md border border-white/20 shadow-sm">
+                <a href="#services" class="hover:text-brand transition">服务</a>
+                <a href="#cases" class="hover:text-brand transition">案例</a>
+                <a href="#about" class="hover:text-brand transition">关于</a>
+                <a href="#contact" class="text-brand">联系</a>
+            </div>
+
+            <a href="#contact" class="hidden md:inline-flex btn-pill bg-ink text-white px-6 py-2.5 text-sm font-bold hover:bg-brand transition-colors shadow-lg">
+                立即咨询
+            </a>
+        </div>
+    </nav>
+
+    <!-- 1. Hero -->
+    <section id="home" class="relative pt-40 pb-20 min-h-screen flex flex-col justify-center overflow-hidden">
+        <div class="container mx-auto px-6 text-center z-10 relative">
+            <div class="reveal inline-block px-4 py-1.5 rounded-full border border-ink/10 bg-white text-xs font-bold uppercase tracking-widest mb-8 shadow-sm">
+                Global Leader
+            </div>
+            
+            <h1 class="reveal text-5xl md:text-8xl font-extrabold leading-tight mb-8 text-ink tracking-tight">
+                连接全球<br>极速送达
+            </h1>
+            
+            <p class="reveal text-xl text-gray-500 max-w-2xl mx-auto mb-12 font-medium leading-relaxed">
+                提供比传统物流快 30% 的服务。
+            </p>
+            
+            <div class="reveal flex justify-center gap-4 mb-20">
+                <a href="#contact" class="btn-pill bg-brand text-white px-10 py-4 text-lg font-bold shadow-xl shadow-brand/20 hover:shadow-brand/40 transition-all">
+                    开始合作
+                </a>
+                <a href="#services" class="btn-pill bg-white text-ink border b

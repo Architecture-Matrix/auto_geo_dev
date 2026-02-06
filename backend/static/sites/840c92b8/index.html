@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="scroll-smooth">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>极速物流 - 全球领先服务商</title>
+    
+    <!-- 引入 Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- 引入 FontAwesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <!-- 1. 配置 Tailwind 主题色 -->
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        // primary: 用户选的主色 (用于首屏、案例背景)
+                        primary: '#0f172a', 
+                        // accent: 强调色 (用于按钮、高亮文字)
+                        accent: '#ef4444',
+                        // 固定商务色系 (不受用户影响，保证高级感)
+                        dark: '#0f172a',  // 接近黑色的深蓝
+                        light: '#f8fafc', // 极浅的灰
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
+                    },
+                    boxShadow: {
+                        'glass': '0 4px 30px rgba(0, 0, 0, 0.1)',
+                        'xl-soft': '0 20px 40px -10px rgba(0, 0, 0, 0.05)',
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        /* CSS 变量兜底 */
+        :root {
+            --primary: #0f172a;
+            --accent: #ef4444;
+        }
+
+        /* 1. 导航栏过渡动画 */
+        #navbar {
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        
+        /* 初始透明状态 (由 JS 控制移除) */
+        .nav-transparent {
+            background-color: transparent;
+            color: white;
+            padding-top: 1.5rem;
+            padding-bottom: 1.5rem;
+            box-shadow: none;
+        }
+
+        /* 下滑后的实色状态 */
+        .nav-scrolled {
+            background-color: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(12px);
+            color: #0f172a; /* Slate-900 */
+            padding-top: 1rem;
+            padding-bottom: 1rem;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+        }
+
+        /* 导航链接动效 */
+        .nav-link { position: relative; font-weight: 600; letter-spacing: 0.05em; }
+        .nav-link::after {
+            content: ''; position: absolute; width: 0; height: 2px;
+            bottom: -4px; left: 0; background-color: var(--accent);
+            transition: width 0.3s ease;
+        }
+        .nav-link:hover::after { width: 100%; }
+
+        /* 2. 滚动显现动画 (复刻第一版) */
+        .reveal { opacity: 0; transform: translateY(40px); transition: all 1s cubic-bezier(0.25, 0.46, 0.45, 0.94); }
+        .reveal.active { opacity: 1; transform: translateY(0); }
+
+        /* 3. 强制颜色覆盖 (防止 Tailwind 加载延迟) */
+        .bg-primary-force { background-color: var(--primary) !important; }
+        .text-accent-force { color: var(--accent) !important; }
+    </style>
+</head>
+<body class="font-sans text-slate-700 antialiased bg-white selection:bg-accent selection:text-white">
+
+    <!-- ================= 导航栏 (交互核心) ================= -->
+    <nav id="navbar" class="fixed w-full z-50 nav-transparent">
+        <div class="container mx-auto px-6 flex justify-between items-center">
+            <!-- Logo -->
+            <a href="#home" class="text-2xl font-extrabold tracking-tight flex items-center gap-3">
+                <i class="fa-solid fa-cube text-accent-force"></i> 
+                <span>Turbo Logistics</span>
+            </a>
+            
+            <!-- Desktop Menu -->
+            <div class="hidden md:flex space-x-10 text-xs font-bold uppercase tracking-widest">
+                <a href="#home" class="nav-link">首页</a>
+                <a href="#services" class="nav-link">核心服务</a>
+                <a href="#about" class="nav-link">关于我们</a>
+                <a href="#cases" class="nav-link">成功案例</a>
+                <a href="#contact" class="nav-link">联系我们</a>
+            </div>
+
+            <!-- Mobile Menu Btn -->
+            <button class="md:hidden text-2xl"><i class="fa-solid fa-bars"></i></button>
+        </div>
+    </nav>
+
+    <!-- ================= 1. 首屏 (沉浸式 + 品牌色遮罩) ================= -->
+    <section id="home" class="relative h-screen flex items-center justify-center overflow-hidden bg-primary-force">
+        <!-- 背景图 -->
+        <div class="absolute inset-0 z-0">
+            <!-- 核心：使用品牌色进行正片叠底 (Multiply)，让图片染上品牌色调 -->
+            <div class="absolute inset-0 bg-primary/80 mix-blend-multiply z-10"></div>
+            <div class="absolute inset-0 bg-black/30 z-10"></div> <!-- 增加黑色压暗，保证文字清晰 -->
+            <img src="https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d" class="w-full h-full object-cover object-center scale-105 animate-[pulse_30s_ease-in-out_infinite]">
+        </div>
+
+        <div class="container mx-auto px-6 relative z-20 text-white mt-16 text-center md:text-left">
+            <div class="max-w-4xl reveal active mx-auto md:mx-0">
+                <div class="inline-flex items-center gap-2 px-4 py-1.5 mb-8 border border-white/20 bg-white/10 rounded-full text-xs font-bold tracking-[0.2em] backdrop-blur-md uppercase">
+                    <span class="w-2 h-2 rounded-full bg-accent animate-pulse"></span>
+                    Global Leader
+                </div>
+                <h1 class="text-5xl md:text-7xl font-extrabold leading-tight mb-8 tracking-tight drop-shadow-2xl">
+                    连接全球<br>极速送达
+                </h1>
+                <p class="text-lg md:text-xl text-slate-100 mb-12 leading-relaxed max-w-2xl font-light opacity-90 mx-auto md:mx-0">
+                    利用 AI 驱动的路由算法，为您提供比传统物流快 30% 的跨境运输服务。
+                </p>
+                
+                <div class="flex flex-col sm:flex-row gap-5 justify-center md:justify-start">
+                    
+                    <a href="#services" class="px-10 py-4 bg-accent text-white font-bold rounded-lg hover:bg-white hover:text-primary transition-all duration-300 shadow-lg hover:shadow-accent/50 transform hover:-translate-y-1">
+                        探索服务
+                    </a>
+                    
+                    <a href="#contact" class="px-10 py-4 bg-white/10 border border-white/30 text-white font-bold rounded-lg hover:bg-white hover:text-dark transition-all duration-300 backdrop-blur-sm transform hover:-translate-y-1">
+                        立即咨询
+                    </a>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 下滑指示器 -->
+        <div class="absolute bottom-10 left-1/2 transform -translate-x-1/2 animate-bounce text-white/50">
+            <i class="fa-solid fa-chevron-down text-2xl"></i>
+        </div>
+    </section>
+
+    <!-- ================= 2. 实力数据 (回归经典深色，不随用户变色) ================= -->
+    <!-- 这里的背景改为固定的 slate-900，为了保证专业感，只有数字单位用 Accent 色 -->
+    
+    <section class="bg-slate-900 text-white py-20 relative z-30 shadow-2xl -mt-2">
+        <div class="container mx-auto px-6">
+            <div class="flex flex-wrap justify-center gap-16 md:gap-32 text-center divide-x-0 md:divide-x divide-white/10 reveal">
+                
+                <div class="flex-1 min-w-[150px] group">
+                    <div class="text-5xl md:text-6xl font-bold text-white mb-3 group-hover:text-accent transition-colors duration-500">
+                        15<span class="text-accent-force text-3xl ml-1 align-top">+</span>
+                    </div>
+                    <div class="text-xs text-slate-400 uppercase tracking-[0.2em] font-bold">年运营经验</div>
+                </div>
+                
+                <div class="flex-1 min-w-[150px] group">
+                    <div class="text-5xl md:text-6xl font-bold text-white mb-3 group-hover:text-accent transition-colors duration-500">
+                        200<span class="text-accent-force text-3xl ml-1 align-top">个</span>
+                    </div>
+                    <div class="text-xs text-slate-400 uppercase tracking-[0.2em] font-bold">覆盖国家</div>
+                </div>
+                
+                <div class="flex-1 min-w-[150px] group">
+                    <div class="text-5xl md:text-6xl font-bold text-white mb-3 group-hover:text-accent transition-colors duration-500">
+                        100%<span class="text-accent-force text-3xl ml-1 align-top"></span>
+                    </div>
+                    <div class="text-xs text-slate-400 uppercase tracking-[0.2em] font-bold">好评率</div>
+                </div>
+                
+            </div>
+        </div>
+    </section>
+    
+
+    <!-- ================= 3. 核心服务 (极简白底) ================= -->
+    
+    <section id="services" class="py-32 bg-slate-50">
+        <div class="container mx-auto px-6">
+            <div class="text-center mb-20 reveal">
+                <span class="text-accent font-bold tracking-widest uppercase text-xs mb-3 block">Our Expertise</span>
+                <h2 class="text-3xl md:text-4xl font-bold text-slate-900 mb-6">核心业务领域</h2>
+                <div class="w-20 h-1.5 bg-accent mx-auto rounded-full"></div>
+            </div>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-10">
+                
+                <div class="bg-white p-10 rounded-2xl shadow-[0_5px_30px_-10px_rgba(0,0,0,0.05)] hover:shadow-xl hover:shadow-accent/10 transition-all duration-500 group hover:-translate-y-2 border border-slate-100 reveal">
+                    <!-- 图标：默认淡色背景，悬浮变品牌色 -->
+                    <div class="w-16 h-16 bg-slate-100 rounded-2xl flex items-center justify-center text-slate-600 text-3xl mb-8 group-hover:bg-primary-force group-hover:text-white transition-all duration-500">
+                        <i class="fa-solid fa-robot"></i>
+                    </div>
+                    <h3 class="text-2xl font-bold text-slate-900 mb-4 group-hover:text-primary transition-colors">自动化仓储</h3>
+                    <p class="text-slate-500 leading-relaxed">全流程无人化操作方案</p>
+                    <div class="mt-6 w-8 h-1 bg-slate-200 group-hover:bg-accent group-hover:w-16 transition-all duration-500"></div>
+                </div>
+                
+                <div class="bg-white p-10 rounded-2xl shadow-[0_5px_30px_-10px_rgba(0,0,0,0.05)] hover:shadow-xl hover:shadow-accent/10 transition-all duration-500 group hover:-translate-y-2 border border-slate-100 reveal">
+                    <!-- 图标：默认淡色背景，悬浮变品牌色 -->
+                    <div class="w-16 h-16 bg-slate-100 rounded-2xl flex items-center justify-center text-slate-600 text-3xl mb-8 group-hover:bg-primary-force group-hover:text-white transition-all duration-500">
+                        <i class="fa-solid fa-plane"></i>
+                    </div>
+                    <h3 class="text-2xl font-bold text-slate-900 mb-4 group-hover:text-primary transition-colors">航空速运</h3>
+                    <p class="text-slate-500 leading-relaxed">全球次日达服务</p>
+                    <div class="mt-6 w-8 h-1 bg-slate-200 group-hover:bg-accent group-hover:w-16 transition-all duration-500"></div>
+                </div>
+                
+            </div>
+        </div>
+    </section>
+    
+
+    <!-- ================= 4. 关于我们 (白底 + 高级排版) ================= -->
+    
+    <section id="about" class="py-32 bg-white overflow-hidden border-t border-slate-100">
+        <div class="container mx-auto px-6">
+            <div class="flex flex-col md:flex-row items-center gap-20">
+                <!-- 文字区 -->
+                <div class="md:w-1/2 reveal">
+                    <span class="text-accent font-bold tracking-widest uppercase text-xs mb-3 block">About Us</span>
+                    <h2 class="text-4xl font-bold text-slate-900 mb-8 leading-tight">为什么选择 Turbo？</h2>
+                    <p class="text-slate-600 text-lg leading-8 whitespace-pre-line mb-10 border-l-4 border-slate-200 pl-6">
+                        我们在全球拥有超过 50 个自营仓储中心，累积服务超过 1000 万用户。
+                    </p>
+                    
+                    <!-- 简单的信任背书 -->
+                    <div class="flex items-center gap-6">
+                        <div class="flex -space-x-4">
+                            <div class="w-12 h-12 rounded-full bg-slate-200 border-4 border-white flex items-center justify-center text-xs font-bold text-slate-500">A</div>
+                            <div class="w-12 h-12 rounded-full bg-slate-300 border-4 border-white flex items-center justify-center text-xs font-bold text-slate-500">B</div>
+                            <div class="w-12 h-12 rounded-full bg-primary-force border-4 border-white flex items-center justify-center text-xs font-bold text-white">+</div>
+                        </div>
+                        <div>
+                            <div class="font-bold text-slate-900">值得信赖的伙伴</div>
+                            <div class="text-xs text-slate-500">行业领先企业的共同选择</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- 图片区 -->
+                <div class="md:w-1/2 relative reveal">
+                    <div class="absolute -top-10 -left-10 w-40 h-40 bg-accent/10 rounded-full blur-3xl"></div>
+                    <div class="absolute -bottom-10 -right-10 w-40 h-40 bg-primary/10 rounded-full blur-3xl"></div>
+                    <img src="https://images.unsplash.com/photo-1556761175-5973dc0f32e7" class="rounded-2xl shadow-2xl relative z-10 w-full object-cover h-[500px] transform rotate-2 hover:rotate-0 transition duration-700">
+                </div>
+            </div>
+        </div>
+    </section>
+    
+
+    <!-- ================= 5. 成功案例 (使用品牌色背景) ================= -->
+    
+    <section id="cases" class="py-32 bg-primary-force text-white relative overflow-hidden">
+        <!-- 装饰背景 -->
+        <div class="absolute top-0 right-0 w-1/2 h-full bg-white/5 skew-x-12 pointer-events-none"></div>
+
+        <div class="container mx-auto px-6 relative z-10">
+            <div class="flex flex-col md:flex-row justify-between items-end mb-20 reveal">
+                <div class="max-w-xl">
+                    <span class="text-accent-force font-bold tracking-widest uppercase text-xs mb-3 block">Selected Works</span>
+                    <h2 class="text-4xl font-bold mb-6">精选成功案例</h2>
+                    <p class="text-slate-300 text-lg">探索我们如何帮助各行各业的客户实现业务目标与技术升级。</p>
+                </div>
+                <div class="hidden md:block">
+                    <a href="#contact" class="text-white hover:text-accent font-bold flex items-center gap-2 transition">
+                        查看更多 <i class="fa-solid fa-arrow-right"></i>
+                    </a>
+                </div>
+            </div>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-12">
+                
+                <div class="group relative overflow-hidden rounded-2xl cursor-pointer reveal shadow-2xl bg-black h-[450px]">
+                    <!-- 图片 -->
+                    <img src="https://images.unsplash.com/photo-1566576912321-d58ddd7a6088" class="w-full h-full object-cover transition-transform duration-[1.5s] ease-in-out group-hover:scale-110 opacity-80 group-hover:opacity-60">
+                    
+                    <!-- 渐变遮罩 -->
+                    <div class="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent"></div>
+                    
+                    <!-- 文字内容 -->
+                    <div class="absolute bottom-0 left-0 p-10 w-full translate-y-4 group-hover:translate-y-0 transition-transform duration-500">
+                        <span class="inline-block px-3 py-1 bg-accent text-white text-xs font-bold uppercase rounded mb-4 shadow-lg tracking-wider">电商物流</span>
+                        <h3 class="text-3xl font-bold mb-3 text-white group-hover:text-accent transition-colors">某跨境电商黑五保障</h3>
+                        <div class="h-0 overflow-hidden group-hover:h-auto transition-all duration-500">
+                            <p class="text-slate-300 text-sm leading-relaxed border-l-2 border-accent pl-4 pt-1">
+                                订单量暴增 500% 依然保持 0 爆仓
+                            </p>
+                        </div>
+                    </div>
+                </div>
+                
+            </div>
+        </div>
+    </section>
+    
+
+    <!-- ================= 6. 页脚与联系 (使用品牌色深色变体 或 深黑) ================= -->
+    <!-- 按照您的要求，联系方式需要体现品牌色。我们将背景设为深色，但加入品牌色高亮 -->
+    <footer id="contact" class="bg-[#0b1120] text-white pt-32 pb-12 relative border-t border-white/5">
+        <div class="container mx-auto px-6 relative z-10">
+            
+            <!-- 巨大的 CTA 区域 -->
+            <div class="text-center mb-24 reveal">
+                <h2 class="text-4xl md:text-5xl font-bold mb-8">准备好开始了吗？</h2>
+                <p class="text-slate-400 mb-10 max-w-2xl mx-auto text-lg">
+                    立即联系我们，获取为您量身定制的解决方案。
+                </p>
+                <div class="flex flex-col md:flex-row justify-center gap-8 md:gap-16">
+                    <div class="flex items-center gap-4 justify-center group">
+                        <div class="w-12 h-12 rounded-full bg-slate-800 flex items-center justify-center group-hover:bg-accent transition-colors">
+                            <i class="fa-solid fa-phone text-xl"></i>
+                        </div>
+                        <div class="text-left">
+                            <div class="text-xs text-slate-500 uppercase tracking-wider">Call Us</div>
+                            <div class="text-xl font-bold font-mono">400-888-6666</div>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-4 justify-center group">
+                        <div class="w-12 h-12 rounded-full bg-slate-800 flex items-center justify-center group-hover:bg-accent transition-colors">
+                            <i class="fa-solid fa-envelope text-xl"></i>
+                        </div>
+                        <div class="text-left">
+                            <div class="text-xs text-slate-500 uppercase tracking-wider">Email Us</div>
+                            <div class="text-xl font-bold">support@turbo.com</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 分割线 -->
+            <div class="border-t border-white/10 my-12"></div>
+
+            <div class="flex flex-col md:flex-row justify-between items-center text-sm text-slate-500">
+                <div class="flex items-center gap-3 mb-4 md:mb-0">
+                    <span class="text-2xl font-bold text-white flex items-center gap-2">
+                        <i class="fa-solid fa-cube text-accent-force"></i> Turbo Logistics
+                    </span>
+                </div>
+                <div class="flex items-center gap-2">
+                    <i class="fa-solid fa-location-dot"></i> 上海市浦东新区物流大道88号
+                </div>
+                <div class="mt-4 md:mt-0">
+                    &copy; 2026 Turbo Logistics. All Rights Reserved.
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <!-- ================= 交互脚本 ================= -->
+    <script>
+        // 1. 滚动显现动画
+        function reveal(){
+            var reveals = document.querySelectorAll(".reveal");
+            for(var i=0; i<reveals.length; i++){
+                var windowHeight = window.innerHeight;
+                var elementTop = reveals[i].getBoundingClientRect().top;
+                if(elementTop < windowHeight - 100){
+                    reveals[i].classList.add("active");
+                }
+            }
+        }
+        window.addEventListener("scroll", reveal);
+        reveal(); // 初始化
+
+        // 2. 导航栏变色逻辑 (关键交互)
+        const navbar = document.getElementById('navbar');
+        window.addEventListener('scroll', () => {
+            if (window.scrollY > 50) {
+                // 下滑后：白底黑字，带阴影
+                navbar.classList.add('nav-scrolled');
+                navbar.classList.remove('nav-transparent');
+            } else {
+                // 顶部：透明底白字，无阴影
+                navbar.classList.add('nav-transparent');
+                navbar.classList.remove('nav-scrolled');
+            }
+        });
+    </script>
+</body>
+</html>

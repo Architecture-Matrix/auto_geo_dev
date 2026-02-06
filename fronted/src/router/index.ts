@@ -72,6 +72,14 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/settings/SettingsPage.vue'),
         meta: { title: '设置', icon: 'Setting' },
       },
+// ==================== [新增] 智能建站模块 ====================
+      {
+        path: 'site-builder',
+        name: 'SiteBuilder',
+        component: () => import('@/views/site-builder/ConfigWizard.vue'),
+        meta: { title: '智能建站', icon: 'Platform' }, // 图标建议用 Platform 或 Brush
+      },
+      // ===========================================================
 
 
       // ==================== GEO系统路由 ====================

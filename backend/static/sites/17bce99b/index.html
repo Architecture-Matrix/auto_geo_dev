@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="scroll-smooth">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>极速物流</title>
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#0f172a', 
+                        accent: '#ef4444',
+                        dark: '#0f172a',
+                    },
+                    fontFamily: { sans: ['Inter', 'system-ui', 'sans-serif'] },
+                    boxShadow: { 
+                        'glow': '0 0 30px #ef444455',
+                        'card': '0 20px 40px -10px rgba(0,0,0,0.1)' 
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        :root { --primary: #0f172a; --accent: #ef4444; }
+        
+        #navbar { transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1); }
+        .nav-transparent { background: transparent; color: white; padding: 1.5rem 0; }
+        .nav-scrolled { background: rgba(255,255,255,0.95); backdrop-filter: blur(12px); color: #0f172a; padding: 1rem 0; box-shadow: 0 4px 20px rgba(0,0,0,0.05); }
+        
+        .bg-primary-force { background-color: var(--primary) !important; }
+        .text-accent-force { color: var(--accent) !important; }
+        
+        /* 进场动画 */
+        .reveal { 
+            opacity: 0; 
+            transform: translateY(40px); 
+            transition: all 0.8s cubic-bezier(0.22, 1, 0.36, 1); 
+        }
+        .reveal.active { opacity: 1; transform: translateY(0); }
+        
+        /* 交互类 */
+        .hover-lift { transition: transform 0.3s ease, box-shadow 0.3s ease; }
+        .hover-lift:hover { transform: translateY(-6px); box-shadow: 0 20px 40px -10px rgba(0,0,0,0.15); }
+        .click-press:active { transform: scale(0.95); } /* 点击回弹 */
+    </style>
+</head>
+<body class="font-sans text-slate-700 antialiased bg-white selection:bg-accent selection:text-white">
+
+    <!-- 导航 -->
+    <nav id="navbar" class="fixed w-full z-50 nav-transparent">
+        <div class="container mx-auto px-6 flex justify-between items-center">
+            <a href="#home" class="text-2xl font-extrabold tracking-tight flex items-center gap-2 group cursor-pointer">
+                <i class="fa-solid fa-cube text-accent-force transition-transform duration-500 group-hover:rotate-180"></i> 
+                Turbo Logistics
+            </a>
+            <div class="hidden md:flex space-x-8 text-xs font-bold uppercase tracking-widest">
+                <a href="#home" class="hover:text-accent-force transition duration-300">首页</a>
+                <a href="#services" class="hover:text-accent-force transition duration-300">服务</a>
+                <a href="#about" class="hover:text-accent-force transition duration-300">关于</a>
+                <a href="#quals" class="hover:text-accent-force transition duration-300">资质</a>
+                <a href="#cases" class="hover:text-accent-force transition duration-300">案例</a>
+                <a href="#contact" class="hover:text-accent-force transition duration-300">联系</a>
+            </div>
+        </div>
+    </nav>
+
+    <!-- 1. 首屏 -->
+    <section id="home" class="relative h-screen flex items-center justify-center overflow-hidden bg-primary-force">
+        <div class="absolute inset-0 z-0">
+            <div class="absolute inset-0 bg-primary/80 mix-blend-multiply z-10"></div>
+            <div class="absolute inset-0 bg-black/30 z-10"></div>
+            <img src="https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d" class="w-full h-full object-cover object-center scale-105 animate-[pulse_30s_ease-in-out_infinite]">
+        </div>
+        <div class="container mx-auto px-6 relative z-20 text-white mt-10 text-center md:text-left">
+            <div class="max-w-4xl reveal active mx-auto md:mx-0">
+                <div class="inline-flex items-center gap-3 px-4 py-1.5 mb-6 border border-white/20 bg-white/10 rounded-full text-xs font-bold tracking-[0.2em] uppercase backdrop-blur-md shadow-lg hover:bg-white/20 transition cursor-default">
+                    <span class="w-2 h-2 rounded-full bg-accent animate-ping"></span>
+                    Global Leader
+                </div>
+                <h1 class="text-5xl md:text-8xl font-extrabold leading-tight mb-8 drop-shadow-2xl tracking-tight">
+                    连接全球<br>极速送达
+                </h1>
+                <p class="text-lg md:text-2xl text-slate-100 mb-12 leading-relaxed max-w-2xl font-light opacity-90 mx-auto md:mx-0">
+                    提供比传统物流快 30% 的服务。
+                </p>
+                <div class="flex gap-5 justify-center md:justify-start">
+                    <a href="#contact" class="px-10 py-4 bg-accent text-white font-bold rounded-full hover:bg-white hover:text-primary transition-all duration-300 shadow-lg hover:shadow-glow transform hover:-translate-y-1 click-press">
+                        立即咨询
+                    </a>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- 2. 数据 (增强交互：悬停放大+高亮) -->
+    
+    <section class="bg-slate-900 text-white py-20 relative z-30 shadow-2xl">
+        <div class="container mx-auto px-6">
+            <div class="flex flex-wrap justify-center gap-16 md:gap-24 text-center">
+                
+                <div class="group transform transition duration-500 hover:scale-110 cursor-default reveal" style="transition-delay: 0ms">
+                    <div class="flex items-baseline justify-center gap-1 mb-2">
+                        <span class="text-5xl md:text-6xl font-bold text-white tracking-tighter group-hover:text-accent-force transition-colors duration-300">15</span>
+                        <span class="text-2xl font-medium text-slate-400">+</span>
+                    </div>
+                    <div class="text-xs text-slate-500 uppercase tracking-widest font-bold group-hover:text-white transition-colors">年经验</div>
+                </div>
+                
+                <div class="group transform transition duration-500 hover:scale-110 cursor-default reveal" style="transition-delay: 100ms">
+                    <div class="flex items-baseline justify-center gap-1 mb-2">
+                        <span class="text-5xl md:text-6xl font-bold text-white tracking-tighter group-hover:text-accent-force transition-colors duration-300">200</span>
+                        <span class="text-2xl font-medium text-slate-400">个</span>
+                    </div>
+                    <div class="text-xs text-slate-500 uppercase tracking-widest font-bold group-hover:text-white transition-colors">覆盖国家</div>
+                </div>
+                
+            </div>
+        </div>
+    </section>
+    
+
+    <!-- 3. 服务 (增强交互：卡片上浮) -->
+    
+    <section id="services" class="py-32 bg-slate-50">
+        <div class="container mx-auto px-6">
+            <div class="text-center mb-20 reveal">
+                <span class="text-accent-force font-bold tracking-widest uppercase text-xs mb-3 block">Our Services</span>
+                <h2 class="text-4xl md:text-5xl font-bold text-slate-900">核心业务领域</h2>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                
+                <div class="bg-white p-10 rounded-2xl shadow-sm border border-slate-100 reveal hover-lift group cursor-default" style="transition-delay: 0ms">
+                    <div class="w-16 h-16 bg-slate-50 rounded-2xl flex items-center justify-center text-3xl mb-8 group-hover:scale-110 transition-transform duration-500">
+                        <i class="fa-solid fa-robot text-primary"></i>
+                    </div>
+                    <h3 class="text-2xl font-bold text-slate-900 mb-4 group-hover:text-primary transition-colors">自动化</h3>
+                    <p class="text-slate-500 leading-relaxed">无人化操作</p>
+                </div>
+                
+                <div class="bg-white p-10 rounded-2xl shadow-sm border border-slate-100 reveal hover-lift group cursor-default" style="transition-delay: 100ms">
+                    <div class="w-16 h-16 bg-slate-50 rounded-2xl flex items-center justify-center text-3xl mb-8 group-hover:scale-110 transition-transform duration-500">
+                        <i class="fa-solid fa-plane text-primary"></i>
+                    </div>
+                    <h3 class="text-2xl font-bold text-slate-900 mb-4 group-hover:text-primary transition-colors">航空速运</h3>
+                    <p class="text-slate-500 leading-relaxed">全球次日达</p>
+                </div>
+                
+            </div>
+        </div>
+    </section>
+    
+
+    <!-- 4. 关于我们 -->
+    
+    <section id="about" class="py-32 bg-white overflow-hidden">
+        <div class="container mx-auto px-6">
+            <div class="flex flex-col md:flex-row items-center gap-20">
+                <div class="md:w-1/2 reveal">
+                    <span class="text-accent-force font-bold tracking-widest uppercase text-xs mb-3 block">Why Choose Us</span>
+                    <h2 class="text-4xl font-bold text-slate-900 mb-8 leading-tight">为什么选择我们？</h2>
+                    <p class="text-slate-600 text-lg leading-relaxed mb-10 border-l-4 border-slate-100 pl-6">拥有超过50名高级工程师...</p>
+                    
+                    
+                    <ul class="space-y-5">
+                        
+                        <li class="flex items-center gap-4 group cursor-default reveal" style="transition-delay: 0ms">
+                            <div class="w-8 h-8 rounded-full bg-accent/10 flex items-center justify-center text-accent-force group-hover:scale-110 transition-transform">
+                                <i class="fa-solid fa-check"></i>
+                            </div>
+                            <span class="font-bold text-slate-800 text-lg group-hover:text-primary transition-colors">行业领先的技术解决方案</span>
+                        </li>
+                        
+                        <li class="flex items-center gap-4 group cursor-default reveal" style="transition-delay: 100ms">
+                            <div class="w-8 h-8 rounded-full bg-accent/10 flex items-center justify-center text-accent-force group-hover:scale-110 transition-transform">
+                                <i class="fa-solid fa-check"></i>
+                            </div>
+                            <span class="font-bold text-slate-800 text-lg group-hover:text-primary transition-colors">7x24小时 全球化支持</span>
+                        </li>
+                        
+                        <li class="flex items-center gap-4 group cursor-default reveal" style="transition-delay: 200ms">
+                            <div class="w-8 h-8 rounded-full bg-accent/10 flex items-center justify-center text-accent-force group-hover:scale-110 transition-transform">
+                                <i class="fa-solid fa-check"></i>
+                            </div>
+                            <span class="font-bold text-slate-800 text-lg group-hover:text-primary transition-colors">100% 客户满意度承诺</span>
+                        </li>
+                        
+                    </ul>
+                    
+                </div>
+                <div class="md:w-1/2 relative reveal" style="transition-delay: 200ms">
+                    <img src="https://images.unsplash.com/photo-1556761175-5973dc0f32e7" class="rounded-2xl shadow-2xl relative z-10 w-full object-cover h-[500px] hover:scale-[1.02] transition-transform duration-700">
+                    <div class="absolute -bottom-10 -right-10 w-64 h-64 bg-accent/10 rounded-full blur-3xl -z-10"></div>
+                </div>
+            </div>
+        </div>
+    </section>
+    
+
+    <!-- 5. 资质认证 (增强交互：卡片微动) -->
+    
+    <section id="quals" class="py-24 bg-slate-50 border-t border-slate-200">
+        <div class="container mx-auto px-6 text-center reveal">
+            <h2 class="text-3xl font-bold text-slate-900 mb-16">专业资质与行业认证</h2>
+            <div class="flex flex-wrap justify-center gap-8">
+                
+                <div class="flex items-center gap-5 px-10 py-6 bg-white border border-slate-200 rounded-xl shadow-sm hover:shadow-lg hover:-translate-y-1 transition-all duration-300 cursor-default group" style="transition-delay: 0ms">
+                    <i class="fa-solid fa-certificate text-slate-300 text-4xl group-hover:text-accent-force transition-colors duration-300"></i>
+                    <div class="text-left">
+                        <div class="font-bold text-slate-800 text-xl group-hover:text-primary transition-colors">ISO 9001</div>
+                        <div class="text-sm text-slate-500 font-medium">质量认证</div>
+                    </div>
+                </div>
+                
+            </div>
+        </div>
+    </section>
+    
+
+    <!-- 6. 成功案例 (核心修改：动态布局) -->
+    
+    <section id="cases" class="py-32 bg-primary-force text-white relative overflow-hidden">
+        <div class="absolute top-0 right-0 w-2/3 h-full bg-gradient-to-l from-black/20 to-transparent pointer-events-none"></div>
+        
+        <div class="container mx-auto px-6 relative z-10">
+            <div class="text-center mb-20 reveal">
+                <span class="text-accent-force font-bold tracking-widest uppercase text-xs mb-3 block">Selected Works</span>
+                <h2 class="text-4xl md:text-5xl font-bold mb-6">精选成功案例</h2>
+                <div class="w-24 h-1.5 bg-accent mx-auto rounded-full"></div>
+            </div>
+            
+            <!-- [核心逻辑] 根据案例数量切换布局 -->
+            
+                <!-- 单案例模式：旗舰横幅布局 (饱满、不居中显小) -->
+                <div class="max-w-6xl mx-auto bg-slate-900 rounded-3xl overflow-hidden shadow-2xl flex flex-col md:flex-row group reveal hover:shadow-glow transition-all duration-500">
+                    <div class="md:w-3/5 h-80 md:h-[500px] overflow-hidden relative">
+                        <img src="https://images.unsplash.com/photo-1566576912321-d58ddd7a6088" class="w-full h-full object-cover transition-transform duration-1000 group-hover:scale-105">
+                        <div class="absolute inset-0 bg-primary/30 group-hover:bg-transparent transition-colors duration-500"></div>
+                    </div>
+                    <div class="md:w-2/5 p-12 flex flex-col justify-center relative">
+                        <div class="absolute top-0 right-0 w-32 h-32 bg-accent/10 rounded-full blur-3xl"></div>
+                        <span class="inline-block self-start px-4 py-1.5 bg-accent text-white text-xs font-bold uppercase rounded mb-6">电商</span>
+                        <h3 class="text-3xl font-bold mb-6 leading-tight">黑五保障</h3>
+                        <p class="text-slate-400 text-lg leading-relaxed mb-8 border-l-2 border-accent pl-6">0 爆仓</p>
+                        <div class="flex items-center gap-3 text-accent font-bold cursor-pointer hover:gap-5 transition-all">
+                            <span>查看详情</span> <i class="fa-solid fa-arrow-right"></i>
+                        </div>
+                    </div>
+                </div>
+            
+        </div>
+    </section>
+    
+
+    <!-- 7. 联系 -->
+    <footer id="contact" class="bg-[#0b1120] text-white pt-24 pb-12 border-t border-white/5">
+        <div class="container mx-auto px-6">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-16 mb-20">
+                <div class="reveal">
+                    <h3 class="text-3xl font-bold mb-8 flex items-center gap-3">
+                        <i class="fa-solid fa-cube text-accent-force"></i> Turbo Logistics
+                    </h3>
+                    <p class="text-slate-400 text-sm leading-8">
+                        我们致力于通过技术创新为客户创造持久价值，推动行业的智能化转型。
+                    </p>
+                </div>
+                <div class="reveal" style="transition-delay: 100ms">
+                    <h4 class="text-lg font-bold mb-8 border-l-4 border-accent pl-4">联系方式</h4>
+                    <ul class="space-y-6 text-slate-400">
+                        <li class="flex items-center gap-4 hover:text-white transition hover:translate-x-2 duration-300"><i class="fa-solid fa-location-dot text-accent-force text-xl"></i> 上海市浦东新区</li>
+                        <li class="flex items-center gap-4 hover:text-white transition hover:translate-x-2 duration-300"><i class="fa-solid fa-phone text-accent-force text-xl"></i> 400-888-6666</li>
+                        <li class="flex items-center gap-4 hover:text-white transition hover:translate-x-2 duration-300"><i class="fa-solid fa-envelope text-accent-force text-xl"></i> support@turbo.com</li>
+                    </ul>
+                </div>
+                <div class="reveal" style="transition-delay: 200ms">
+                    <h4 class="text-lg font-bold mb-8 border-l-4 border-accent pl-4">立即咨询</h4>
+                    <form class="space-y-4">
+                        <input type="email" placeholder="您的邮箱地址" class="w-full px-5 py-4 bg-slate-800 border border-slate-700 rounded-lg focus:outline-none focus:border-accent text-white transition focus:ring-1 focus:ring-accent">
+                        <button class="w-full px-5 py-4 bg-accent text-white font-bold rounded-lg hover:bg-white hover:text-primary transition-all duration-300 shadow-lg active:scale-95 click-press">订阅更新 / 咨询</button>
+                    </form>
+                </div>
+            </div>
+            <div class="text-center pt-8 border-t border-white/10 text-slate-600 text-sm">
+                &copy; 2026 Turbo Logistics. All Rights Reserved.
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        function reveal(){
+            var reveals = document.querySelectorAll(".reveal");
+            for(var i=0; i<reveals.length; i++){
+                var windowHeight = window.innerHeight;
+                var elementTop = reveals[i].getBoundingClientRect().top;
+                if(elementTop < windowHeight - 100) reveals[i].classList.add("active");
+            }
+        }
+        window.addEventListener("scroll", reveal);
+        reveal();
+        const navbar = document.getElementById('navbar');
+        window.addEventListener('scroll', () => {
+            if (window.scrollY > 50) {
+                navbar.classList.add('nav-scrolled');
+                navbar.classList.remove('nav-transparent');
+            } else {
+                navbar.classList.add('nav-transparent');
+                navbar.classList.remove('nav-scrolled');
+            }
+        });
+    </script>
+</body>
+</html>

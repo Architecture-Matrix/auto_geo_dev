@@ -1,11 +1,4 @@
 # -*- coding: utf-8 -*-
-"""
-AutoGeo 后端服务入口 - 工业加固合并版
-合并内容：
-1. 包含收录监控、知识库等新路由
-2. 保留 Loguru WebSocket 日志广播 (前端监控核心)
-3. 修复 DB Session 工厂问题
-"""
 
 import sys
 import os
@@ -21,41 +14,61 @@ sys.path.insert(0, str(project_root))
 
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles  # 必须导入
 from loguru import logger
 
 # 导入配置和数据库
 from backend.config import (
-    APP_NAME, APP_VERSION, DEBUG, HOST, PORT, RELOAD,
-    CORS_ORIGINS, PLATFORMS
+    APP_NAME,
+    APP_VERSION,
+    DEBUG,
+    HOST,
+    PORT,
+    RELOAD,
+    CORS_ORIGINS,
+    PLATFORMS,
 )
 from backend.database import init_db, get_db, engine, SessionLocal
 from backend.scripts.fix_database import check_and_fix_database
-from backend.api import account, article, publish, keywords, geo, index_check, reports, notifications, scheduler, knowledge, upload, candidate, auth, article_collection
+
+# 导入所有 API 路由模块
+from backend.api import (
+    account,
+    article,
+    publish,
+    keywords,
+    geo,
+    index_check,
+    reports,
+    notifications,
+    scheduler,
+    knowledge,
+    upload,
+    candidate,
+    auth,
+    article_collection,
+    site_builder,  # [新增] 网站生成路由
+)
 
 # 导入服务组件
 from backend.services.websocket_manager import ws_manager
 from backend.services.scheduler_service import get_scheduler_service
 from backend.services.n8n_service import get_n8n_service
 
-
-# ==================== 🌟 日志拦截器 (核心监控功能) ====================
+# ==================== 日志拦截器 (核心监控功能) ====================
 
 def socket_log_sink(message):
     """
     Loguru 拦截器：将每一条日志通过 WebSocket 广播出去
-    这是前端控制台能看到“绿色日志”的关键！
     """
     try:
         record = message.record
-        # 构造发送给前端的标准 JSON 格式
         log_payload = {
             "time": record["time"].strftime("%H:%M:%S"),
             "level": record["level"].name,
             "module": record["extra"].get("module", "系统"),
             "message": record["message"],
         }
-
-        # 获取当前运行的事件循环
         try:
             loop = asyncio.get_event_loop()
             if loop.is_running():
@@ -64,7 +77,6 @@ def socket_log_sink(message):
             pass
     except Exception:
         pass
-
 
 # 配置 Loguru
 logger.remove()
@@ -75,29 +87,24 @@ logger.add(socket_log_sink, level="INFO")
 # ==================== 应用生命周期管理 ====================
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """
-    应用生命周期管理：处理启动时的初始化和关闭时的资源释放
-    """
     # ---------------- 启动阶段 ----------------
     logger.info(f"🚀 {APP_NAME} v{APP_VERSION} 正在启动...")
 
-    # 1. 初始化数据库 (WAL模式)
+    # 1. 初始化数据库
     try:
         init_db()
-        # 自动执行数据库修复/迁移（确保新字段存在）
         check_and_fix_database()
         logger.success("✅ 数据库初始化检查完成")
     except Exception as e:
         logger.error(f"数据库初始化失败: {e}")
 
-    # 2. 注入全局 WebSocket 管理器 (让各模块能发消息)
+    # 2. 注入全局 WebSocket 管理器
     account.set_ws_manager(ws_manager)
     publish.set_ws_manager(ws_manager)
     notifications.set_ws_callback(ws_manager.broadcast)
 
     # 3. 初始化 Playwright 管理器
     from backend.services.playwright_mgr import playwright_mgr
-    # 🌟 关键修复：使用 SessionLocal (工厂) 而不是 get_db (生成器)
     playwright_mgr.set_db_factory(SessionLocal)
     playwright_mgr.set_ws_callback(ws_manager.broadcast)
 
@@ -105,34 +112,21 @@ async def lifespan(app: FastAPI):
     scheduler_instance = get_scheduler_service()
     scheduler_instance.set_db_factory(SessionLocal)
     scheduler_instance.start()
-
     logger.bind(module="调度中心").success("自动化任务引擎已启动")
 
     yield
 
     # ---------------- 关闭阶段 ----------------
     logger.info("正在关闭服务，释放资源...")
-
-    # 停止定时任务
     scheduler_instance.stop()
-
-    # 关闭 Playwright
     await playwright_mgr.stop()
-
-    # 关闭 n8n HTTP 客户端连接
     n8n_service = await get_n8n_service()
     await n8n_service.close()
-
     logger.info("服务已安全关闭")
 
 
 # ==================== 创建应用实例 ====================
-app = FastAPI(
-    title=APP_NAME,
-    version=APP_VERSION,
-    debug=DEBUG,
-    lifespan=lifespan
-)
+app = FastAPI(title=APP_NAME, version=APP_VERSION, debug=DEBUG, lifespan=lifespan)
 
 # 跨域中间件
 app.add_middleware(
@@ -143,46 +137,61 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# ==================== 🛠️ [核心新增] 静态资源挂载 ====================
+
+current_dir = os.path.dirname(os.path.abspath(__file__))
+static_dir = os.path.join(current_dir, "static")
+
+if not os.path.exists(static_dir):
+    logger.info(f"正在创建静态目录: {static_dir}")
+    os.makedirs(static_dir)
+if not os.path.exists(os.path.join(static_dir, "uploads")):
+    os.makedirs(os.path.join(static_dir, "uploads"))
+if not os.path.exists(os.path.join(static_dir, "sites")):
+    os.makedirs(os.path.join(static_dir, "sites"))
+
+# 挂载目录
+app.mount("/static", StaticFiles(directory=static_dir), name="static")
+logger.success(f"✅ 静态资源已挂载: {static_dir}")
+
+
 # ==================== 注册路由 ====================
-# 这里合并了所有的路由模块
 app.include_router(account.router)
 app.include_router(article.router)
-app.include_router(publish.router)  # 加上发布路由！
-app.include_router(keywords.router)  # 加上关键词路由！
-app.include_router(geo.router)  # 加上GEO文章路由！
-app.include_router(index_check.router)  # 加上收录检测路由！
-app.include_router(reports.router)  # 加上数据报表路由！
-app.include_router(notifications.router)  # 加上预警通知路由！
-app.include_router(scheduler.router)  # 加上定时任务路由！
-app.include_router(knowledge.router)  # 加上知识库路由！
-app.include_router(upload.router)  # 加上文件上传路由！
-app.include_router(candidate.router)  # 加上候选人管理路由！
-app.include_router(auth.router)  # 加上授权路由！
-app.include_router(article_collection.router)  # 加上文章收集路由！
+app.include_router(publish.router)
+app.include_router(keywords.router)
+app.include_router(geo.router)
+app.include_router(index_check.router)
+app.include_router(reports.router)
+app.include_router(notifications.router)
+app.include_router(scheduler.router)
+app.include_router(knowledge.router)
+app.include_router(upload.router)       # 文件上传
+app.include_router(candidate.router)
+app.include_router(auth.router)
+app.include_router(article_collection.router)
+app.include_router(site_builder.router) # [新增] 网站生成器路由
 
 
 # ==================== WebSocket 端点 ====================
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket, client_id: str = None):
-    """
-    实时日志 WebSocket 通道
-    """
     if not client_id:
         client_id = f"client_{uuid.uuid4().hex[:8]}"
 
     await ws_manager.connect(websocket, client_id)
-
-    # 发送连接成功的初始信号
-    await ws_manager.send_personal({
-        "time": "系统",
-        "level": "SUCCESS",
-        "module": "系统",
-        "message": "实时监控链路已就绪"
-    }, client_id)
+    await ws_manager.send_personal(
+        {
+            "time": "系统",
+            "level": "SUCCESS",
+            "module": "系统",
+            "message": "实时监控链路已就绪",
+        },
+        client_id,
+    )
 
     try:
         while True:
-            # 保持连接，接收客户端心跳
             await websocket.receive_text()
     except WebSocketDisconnect:
         ws_manager.disconnect(client_id)
@@ -196,24 +205,18 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str = None):
 async def root():
     return {"app": APP_NAME, "version": APP_VERSION, "status": "running"}
 
-
 @app.get("/api/health")
 async def health():
     return {"status": "ok"}
 
-
 @app.get("/api/platforms")
 async def get_platforms():
-    """获取支持的平台列表"""
-    return {
-        "platforms": list(PLATFORMS.values())
-    }
+    return {"platforms": list(PLATFORMS.values())}
 
 
 # ==================== 全局异常处理 ====================
 @app.exception_handler(Exception)
 async def global_exception_handler(request, exc):
-    """全局异常处理，防止 500 错误没有任何返回"""
     logger.exception(f"未处理的异常: {exc}")
     return HTTPException(status_code=500, detail=str(exc))
 
@@ -221,20 +224,11 @@ async def global_exception_handler(request, exc):
 # ==================== 启动脚本 ====================
 if __name__ == "__main__":
     import uvicorn
-    import asyncio
-    import sys
 
-    # Windows 下异步策略优化
     if sys.platform == "win32":
         asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
 
     logger.info(f"正在启动 {APP_NAME} v{APP_VERSION}...")
     logger.info(f"服务地址: http://{HOST}:{PORT}")
 
-    uvicorn.run(
-        "main:app",
-        host=HOST,
-        port=PORT,
-        reload=RELOAD,
-        log_level="info"
-    )
+    uvicorn.run("main:app", host=HOST, port=PORT, reload=RELOAD, log_level="info")

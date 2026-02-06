@@ -4,9 +4,10 @@
 包含基础发布、GEO、监控、知识库及AI招聘所有表结构
 """
 
-from sqlalchemy import Column, Integer, String, Text, DateTime, Boolean, func, ForeignKey
+from sqlalchemy import Column, Integer, String, Text, DateTime, Boolean, func, ForeignKey, JSON
 from sqlalchemy.orm import relationship
 from backend.database import Base
+from datetime import datetime
 
 # 表参数：允许扩展现有表
 TABLE_ARGS = {"extend_existing": True}
@@ -454,3 +455,21 @@ class ReferenceArticle(Base):
 
     def __repr__(self):
         return f"<ReferenceArticle {self.title[:30]}... ({self.platform})>"
+
+# ==================== AEO网站信息收集表 ====================
+class SiteProject(Base):
+    __tablename__ = "site_projects"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, comment="项目名称，如：极速物流官网")
+    site_id = Column(String, unique=True, index=True, comment="唯一标识，用于生成路径")
+    
+    # 核心配置：存储前端传来的那个大 JSON
+    config_data = Column(JSON, comment="网站的全量配置数据")
+    
+    # 状态管理
+    deploy_path = Column(String, nullable=True, comment="生成的本地 index.html 路径")
+    preview_url = Column(String, nullable=True, comment="本地预览 URL")
+    
+    created_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
