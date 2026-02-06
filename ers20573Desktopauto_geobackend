@@ -101,40 +101,6 @@ class QianwenChecker(AIPlatformChecker):
             self._log("error", f"通义千问导航失败: {e}")
             return False
 
-    async def submit_question(
-        self,
-        page: Page,
-        question: str,
-        input_selector: str,
-        submit_button_selector: str = None
-    ) -> bool:
-        """
-        通义千问专用的提问提交方法 - 简化版
-        使用 fill + Enter 方式
-        """
-        try:
-            self._log("info", f"开始输入问题，长度: {len(question)}")
-            
-            # 1. 点击输入框确保聚焦
-            await page.click(input_selector)
-            await asyncio.sleep(0.3)
-            
-            # 2. 使用 fill 填充内容
-            await page.fill(input_selector, question)
-            self._log("info", "问题输入完成")
-            
-            await asyncio.sleep(0.5)
-            
-            # 3. 按 Enter 提交
-            await page.keyboard.press("Enter")
-            self._log("info", "已提交问题")
-            
-            return True
-            
-        except Exception as e:
-            self._log("error", f"提问提交失败: {e}")
-            return False
-
     async def get_answer_content(
         self,
         page: Page,
