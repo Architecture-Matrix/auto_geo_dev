@@ -1,17 +1,19 @@
 # -*- coding: utf-8 -*-
 """
-GEO文章业务服务 - 工业加固修复版 (v2.6)
+GEO文章业务服务 - 工业鲁棒加固版 (v3.0)
 修复：
 1. 解决 AI 还没生成完就触发发布的竞态问题
 2. 强化发布前的状态校验
 3. 优化日志输出，适配前端实时监控
+4. 浏览器资源复用（使用全局 playwright_mgr）
+5. 指数退避重试策略
 """
 
 import asyncio
 import random
 import json
 from typing import Any, Dict, Optional, List
-from datetime import datetime
+from datetime import datetime, timedelta
 from loguru import logger
 from sqlalchemy.orm import Session
 
@@ -19,7 +21,10 @@ from backend.database.models import GeoArticle, Keyword, Account
 from backend.services.n8n_service import get_n8n_service
 from backend.services.playwright.publishers.base import get_publisher
 from backend.services.crypto import decrypt_storage_state
-from playwright.async_api import async_playwright
+from backend.services.playwright_mgr import get_playwright_manager
+
+# 指数退避时间配置（分钟）- 与 scheduler_service.py 保持一致
+RETRY_DELAYS = [5, 30, 120]  # 第1次5分钟，第2次30分钟，第3次2小时（锁定）
 
 # 模块化日志绑定
 gen_log = logger.bind(module="生成器")
@@ -95,8 +100,11 @@ class GeoArticleService:
 
     async def execute_publish(self, article_id: int) -> bool:
         """
-        执行真实发布动作
-        增加了严格的状态校验，防止 AI 未完成时抢跑
+        执行真实发布动作（v3.0 鲁棒加固版）
+        增强功能：
+        1. 状态守卫，防止 AI 未完成时抢跑
+        2. 浏览器资源复用，使用全局 playwright_mgr
+        3. 指数退避重试策略
         """
         article = self.db.query(GeoArticle).filter(GeoArticle.id == article_id).first()
 
@@ -148,49 +156,93 @@ class GeoArticleService:
         pub_log.info(f"⏳ 模拟人工：将在 {wait_time}s 后启动浏览器推送文章")
         await asyncio.sleep(wait_time)
 
-        # 5. 启动 Playwright 执行
-        async with async_playwright() as p:
-            # 调试阶段建议 headless=False
-            browser = await p.chromium.launch(headless=False)
+        # 5. 🌟 使用全局 PlaywrightManager 获取浏览器上下文
+        playwright_mgr = get_playwright_manager()
+
+        # 启动浏览器管理器（如果未启动）
+        try:
+            await playwright_mgr.start()
+        except Exception as e:
+            pub_log.error(f"❌ 启动浏览器管理器失败: {e}")
+            article.publish_status = "failed"
+            article.error_msg = f"浏览器管理器启动失败: {str(e)}"
+            self.db.commit()
+            return False
+
+        # 解密 Session
+        state_data = {}
+        if account.storage_state:
             try:
-                context = await browser.new_context(
-                    storage_state=state_data,
-                    viewport={"width": 1280, "height": 800}
-                )
-                page = await context.new_page()
+                decrypted = decrypt_storage_state(account.storage_state)
+                state_data = decrypted if decrypted else json.loads(account.storage_state)
+                # 兼容旧数据格式：如果缺少 cookies 字段，从 account.cookies 补充
+                if isinstance(state_data, dict) and "cookies" not in state_data and account.cookies:
+                    state_data["cookies"] = account.cookies
+            except:
+                pub_log.warning(f"账号 {account.account_name} Session 解析失败，尝试裸奔")
 
-                pub_log.info(f"🚀 正在执行 {article.platform} 自动化发布脚本...")
-                article.publish_status = "publishing"
-                self.db.commit()
+        context = None
+        try:
+            # 从全局浏览器创建上下文（不启动新浏览器进程）
+            context = await playwright_mgr.get_browser_context(
+                storage_state=state_data if state_data else None,
+                viewport={"width": 1280, "height": 800}
+            )
 
-                # 执行适配器逻辑
-                result = await publisher.publish(page, article, account)
+            page = await context.new_page()
 
-                if result.get("success"):
-                    article.publish_status = "published"
-                    article.publish_time = datetime.now()
-                    article.platform_url = result.get("platform_url")
-                    article.publish_logs = f"[{datetime.now()}] ✅ 发布成功\n"
-                    pub_log.success(f"🎊 发布完成：{article.platform_url}")
-                    success = True
-                else:
-                    article.publish_status = "failed"
-                    article.error_msg = result.get("error_msg")
-                    article.retry_count += 1
-                    pub_log.error(f"❌ 发布失败：{article.error_msg}")
-                    success = False
+            pub_log.info(f"🚀 正在执行 {article.platform} 自动化发布脚本...")
+            article.publish_status = "publishing"
+            self.db.commit()
 
-                self.db.commit()
-                return success
+            # 执行适配器逻辑
+            result = await publisher.publish(page, article, account)
 
-            except Exception as e:
-                pub_log.error(f"🚨 浏览器执行崩溃: {e}")
+            if result.get("success"):
+                article.publish_status = "published"
+                article.publish_time = datetime.now()
+                article.platform_url = result.get("platform_url")
+                article.publish_logs = f"[{datetime.now()}] ✅ 发布成功\n"
+                pub_log.success(f"🎊 发布完成：{article.platform_url}")
+                success = True
+            else:
                 article.publish_status = "failed"
-                article.error_msg = f"执行异常: {str(e)}"
-                self.db.commit()
-                return False
-            finally:
-                await browser.close()
+                article.error_msg = result.get("error_msg")
+                article.retry_count += 1
+
+                # 🌟 指数退避重试策略
+                if article.retry_count < len(RETRY_DELAYS):
+                    delay_minutes = RETRY_DELAYS[article.retry_count]
+                    article.next_retry_at = datetime.now() + timedelta(minutes=delay_minutes)
+                    article.publish_time = article.next_retry_at
+                    pub_log.warning(f"❌ 发布失败（第{article.retry_count}次），将在 {delay_minutes} 分钟后重试")
+                else:
+                    pub_log.error(f"❌ 发布失败，已达最大重试次数（{len(RETRY_DELAYS)}次），停止重试")
+
+                pub_log.error(f"❌ 发布失败：{article.error_msg}")
+                success = False
+
+            self.db.commit()
+            return success
+
+        except Exception as e:
+            pub_log.error(f"🚨 浏览器执行崩溃: {e}")
+            article.publish_status = "failed"
+            article.error_msg = f"执行异常: {str(e)}"
+            article.retry_count += 1
+
+            # 指数退避重试策略
+            if article.retry_count < len(RETRY_DELAYS):
+                delay_minutes = RETRY_DELAYS[article.retry_count]
+                article.next_retry_at = datetime.now() + timedelta(minutes=delay_minutes)
+                article.publish_time = article.next_retry_at
+
+            self.db.commit()
+            return False
+        finally:
+            # 关闭上下文（不关闭浏览器）
+            if context:
+                await context.close()
 
     async def check_quality(self, article_id: int) -> Dict[str, Any]:
         """质检逻辑"""
