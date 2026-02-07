@@ -303,13 +303,6 @@ class BaijiahaoPublisher(BasePlatformPublisher):
             )
 
             if not 点击成功:
-                # 截图保存调试
-                try:
-                    screenshot_path = f"debug_baijiahao_{article.id}.png"
-                    await page.screenshot(path=screenshot_path)
-                    logger.info(f"已保存调试截图: {screenshot_path}")
-                except:
-                    pass
                 return PublishResult(False, error_msg="未找到'图文'按钮，可能页面结构已变化")
 
             await asyncio.sleep(3)  # 等待图文编辑页面加载
@@ -360,13 +353,6 @@ class BaijiahaoPublisher(BasePlatformPublisher):
 
         except Exception as e:
             logger.error(f"百家号发布异常: {e}")
-            # 异常时也截图
-            try:
-                screenshot_path = f"debug_baijiahao_error_{article.id}.png"
-                await page.screenshot(path=screenshot_path)
-                logger.info(f"已保存错误截图: {screenshot_path}")
-            except:
-                pass
             return PublishResult(False, error_msg=str(e))
 
 

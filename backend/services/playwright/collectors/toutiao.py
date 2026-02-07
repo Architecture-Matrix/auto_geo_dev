@@ -162,12 +162,8 @@ class ToutiaoCollector(BaseCollector):
                     html_content = await page.content()
                     with open(html_path, "w", encoding="utf-8") as f:
                         f.write(html_content)
-                    
-                    # 保存截图
-                    img_path = f"{debug_dir}/toutiao_fail_{timestamp}.png"
-                    await page.screenshot(path=img_path)
-                    
-                    logger.info(f"[头条] 已保存调试文件: {html_path}, {img_path}")
+
+                    logger.info(f"[头条] 已保存调试文件: {html_path}")
                 except Exception as e:
                     logger.error(f"[头条] 保存调试文件失败: {e}")
 

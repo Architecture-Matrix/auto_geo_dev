@@ -48,10 +48,52 @@ class ScheduledTask(Base):
     is_active = Column(Boolean, default=True, comment="是否启用")
     description = Column(Text, nullable=True, comment="任务描述")
 
+    # 任务隔离机制
+    is_quarantined = Column(Boolean, default=False, comment="是否被隔离（连续失败自动停用）")
+    quarantine_reason = Column(Text, nullable=True, comment="隔离原因")
+    quarantine_at = Column(DateTime, nullable=True, comment="隔离时间")
+    consecutive_failures = Column(Integer, default=0, comment="连续失败次数")
+
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
 
     def __repr__(self):
         return f"<Task {self.name} : {self.cron_expression}>"
+
+
+class SchedulerExecutionLog(Base):
+    """
+    调度器执行日志表
+    记录每次发布的详细执行信息，用于前端展示执行历史和错误回溯
+    """
+    __tablename__ = "scheduler_execution_logs"
+    __table_args__ = TABLE_ARGS
+
+    id = Column(Integer, primary_key=True, autoincrement=True, comment="主键ID")
+    task_key = Column(String(50), nullable=False, index=True, comment="任务标识符")
+    article_id = Column(Integer, ForeignKey("geo_articles.id", ondelete="CASCADE"), nullable=True, index=True, comment="文章ID")
+
+    # 执行时间
+    started_at = Column(DateTime, nullable=False, comment="开始时间")
+    finished_at = Column(DateTime, nullable=True, comment="结束时间")
+    duration_ms = Column(Integer, nullable=True, comment="执行耗时（毫秒）")
+
+    # 执行状态
+    status = Column(String(20), nullable=False, comment="状态：running=执行中 success=成功 failed=失败 timeout=超时")
+    result_summary = Column(Text, nullable=True, comment="结果摘要")
+
+    # 错误信息
+    error_type = Column(String(100), nullable=True, comment="错误类型")
+    error_msg = Column(Text, nullable=True, comment="错误信息")
+    error_stack_trace = Column(Text, nullable=True, comment="完整异常堆栈")
+
+    # 重试信息
+    retry_count = Column(Integer, default=0, comment="当前重试次数")
+
+    # 时间戳
+    created_at = Column(DateTime, default=func.now(), comment="创建时间")
+
+    def __repr__(self):
+        return f"<SchedulerExecutionLog id={self.id} task_key={self.task_key} article_id={self.article_id} status={self.status}>"
 
 
 class Candidate(Base):
@@ -298,8 +340,9 @@ class GeoArticle(Base):
 
     # 发布相关
     platform = Column(String(50), nullable=True, comment="目标发布平台")
-    publish_status = Column(String(20), default="draft", comment="发布状态：draft=草稿 published=已发布 failed=发布失败")
+    publish_status = Column(String(20), default="draft", comment="发布状态：draft=草稿 published=已发布 failed=发布失败 publishing=发布中")
     publish_time = Column(DateTime, nullable=True, comment="发布时间")
+    next_retry_at = Column(DateTime, nullable=True, comment="下次重试时间（指数退避策略）")
 
     # 强壮性与重试 (Added back from v1)
     retry_count = Column(Integer, default=0)

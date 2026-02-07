@@ -838,5 +838,90 @@ class PlaywrightManager:
                 await context.close()
 
 
+    async def get_browser_context(
+        self,
+        storage_state: Optional[Dict] = None,
+        viewport: Optional[Dict] = None
+    ) -> BrowserContext:
+        """
+        获取浏览器上下文（用于发布任务）
+        确保浏览器已启动，然后创建新的上下文
+        通过这种方式实现浏览器资源复用：全局只有一个浏览器进程，通过 context 隔离任务
+
+        Args:
+            storage_state: 存储状态（cookies, localStorage等）
+            viewport: 视口大小
+
+        Returns:
+            BrowserContext: 新的浏览器上下文
+        """
+        await self.start()
+
+        context_options = {
+            "viewport": viewport or {"width": 1280, "height": 800}
+        }
+
+        if storage_state:
+            context_options["storage_state"] = storage_state
+
+        context = await self._browser.new_context(**context_options)
+        logger.debug(f"[Playwright] 创建新的浏览器上下文: {id(context)}")
+        return context
+
+
+    async def execute_publish(self, article: Any, account: Any) -> Dict[str, Any]:
+        """
+        供 Service 调用的发布执行入口 (核心)
+        """
+        await self.start()
+
+        # 动态获取发布器
+        publisher = registry.get(account.platform)
+        if not publisher:
+            return {"success": False, "error_msg": f"未找到平台 {account.platform} 的适配器"}
+
+        # 准备上下文
+        context = None
+        try:
+            # 解密 Session
+            state_data = {}
+            if account.storage_state:
+                try:
+                    decrypted = decrypt_storage_state(account.storage_state)
+                    state_data = decrypted if decrypted else json.loads(account.storage_state)
+
+                    # 兼容旧数据格式：如果缺少 cookies 字段，从 account.cookies 补充
+                    if isinstance(state_data, dict) and "cookies" not in state_data and account.cookies:
+                        logger.warning(f"storage_state缺少cookies字段，使用独立cookies")
+                        state_data["cookies"] = decrypt_cookies(account.cookies)
+                except:
+                    logger.warning(f"账号 {account.account_name} Session 解析失败，尝试裸奔")
+
+            context = await self._browser.new_context(
+                storage_state=state_data if state_data else None,
+                viewport={"width": 1280, "height": 800}
+            )
+
+            page = await context.new_page()
+
+            # 执行发布逻辑
+            logger.info(f"🚀 [Publish] 开始执行发布: {account.platform} - {article.title}")
+            result = await publisher.publish(page, article, account)
+
+            return result
+
+        except Exception as e:
+            logger.exception(f"❌ [Publish] 执行异常: {e}")
+            return {"success": False, "error_msg": str(e)}
+        finally:
+            if context:
+                await context.close()
+
+
+def get_playwright_manager() -> PlaywrightManager:
+    """获取 PlaywrightManager 单例实例"""
+    return playwright_mgr
+
+
 # 全局单例
 playwright_mgr = PlaywrightManager()

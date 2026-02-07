@@ -147,6 +147,28 @@ const closeWindow = () => {
     display: flex;
     flex-direction: column;
     gap: 4px;
+    overflow-y: auto;
+    overflow-x: hidden;
+    scroll-behavior: smooth;
+
+    // 极简暗色滚动条
+    &::-webkit-scrollbar {
+      width: 4px;
+    }
+
+    &::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    &::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 10px;
+      transition: background 0.3s ease;
+    }
+
+    &::-webkit-scrollbar-thumb:hover {
+      background: rgba(255, 255, 255, 0.2);
+    }
 
     .nav-item {
       display: flex;
@@ -157,6 +179,7 @@ const closeWindow = () => {
       color: var(--text-secondary);
       text-decoration: none;
       transition: all 0.2s;
+      flex-shrink: 0;
 
       &:hover {
         background: rgba(74, 144, 226, 0.1);
@@ -167,6 +190,7 @@ const closeWindow = () => {
         background: rgba(74, 144, 226, 0.2);
         color: #4a90e2;
         border-left: 3px solid #4a90e2;
+        box-shadow: 0 2px 8px rgba(74, 144, 226, 0.15);
       }
 
       .el-icon {
