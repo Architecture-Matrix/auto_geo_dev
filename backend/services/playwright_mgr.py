@@ -226,6 +226,10 @@ class PlaywrightManager:
     async def _finalize_auth(self, task_id: str) -> str:
         """
         核心：提取登录凭证并入库
+
+        v13.1 核心修复：
+        1. Rule #4 核心指纹：在提取 Cookies 和 Storage 之前抓取 User-Agent
+        2. 在 Account 更新或新增的代码块中，明确赋值 account.user_agent
         """
         task = self._auth_tasks.get(task_id)
         if not task:
@@ -234,6 +238,12 @@ class PlaywrightManager:
         logger.info(f"[Auth] 收到确认信号: {task_id}")
 
         try:
+            # ========================================
+            # v13.1: Rule #4 核心指纹 - 抓取 User-Agent
+            # ========================================
+            ua = await task.page.evaluate("() => navigator.userAgent")
+            logger.info(f"[Auth] 捕获到 User-Agent: {ua}")
+
             # 1. 提取 Cookies 和 Storage
             cookies = await task.context.cookies()
 
@@ -371,10 +381,12 @@ class PlaywrightManager:
                         account.cookies = enc_cookies
                         account.storage_state = enc_storage
                         account.username = username or account.username
+                        # v13.1: Rule #4 核心指纹 - 明确赋值 User-Agent
+                        account.user_agent = ua
                         account.status = 1
                         account.last_auth_time = datetime.now()
                         db.commit()
-                        logger.success(f"[Auth] 账号 {account.account_name} 更新成功")
+                        logger.success(f"[Auth] 账号 {account.account_name} 更新成功 (含 User-Agent)")
                 else:
                     # 新增
                     name = task.account_name or f"{PLATFORMS[task.platform]['name']}_{username or 'User'}"
@@ -384,6 +396,8 @@ class PlaywrightManager:
                         username=username,
                         cookies=enc_cookies,
                         storage_state=enc_storage,
+                        # v13.1: Rule #4 核心指纹 - 明确赋值 User-Agent
+                        user_agent=ua,
                         status=1,
                         last_auth_time=datetime.now()
                     )
@@ -391,7 +405,7 @@ class PlaywrightManager:
                     db.commit()
                     db.refresh(account)
                     task.created_account_id = account.id
-                    logger.success(f"[Auth] 新账号 {name} 创建成功")
+                    logger.success(f"[Auth] 新账号 {name} 创建成功 (含 User-Agent)")
 
                 task.status = "success"
 
@@ -792,6 +806,12 @@ class PlaywrightManager:
     async def execute_publish(self, article: Any, account: Any) -> Dict[str, Any]:
         """
         供 Service 调用的发布执行入口 (核心)
+
+        v13.1 更新：
+        - 增加 user_agent 参数支持，实现指纹守卫 Rule #4
+
+        v12.0 更新：
+        - 移除搜狐号特殊处理，统一使用标准发布流程
         """
         await self.start()
 
@@ -803,7 +823,7 @@ class PlaywrightManager:
         # 准备上下文
         context = None
         try:
-            # 解密 Session
+            # 准备 storage_state
             state_data = {}
             if account.storage_state:
                 try:
@@ -817,12 +837,142 @@ class PlaywrightManager:
                 except:
                     logger.warning(f"账号 {account.account_name} Session 解析失败，尝试裸奔")
 
+            # ========================================
+            # v13.1: Rule #4 核心指纹 - UA 检查
+            # ========================================
+            if not account.user_agent:
+                logger.error(f"❌ [指纹守卫] 账号 {account.account_name} 缺少 User-Agent！请重新授权以修复指纹缺失问题")
+                return {"success": False, "error_msg": "[指纹守卫] User-Agent 缺失，请前往管理页重新授权"}
+
+            logger.info(f"🔍 [指纹守卫] 使用 UA: {account.user_agent}")
+
+            # ========================================
+            # v13.1: 底层指纹手术 - 四重保险
+            # ========================================
             context = await self._browser.new_context(
                 storage_state=state_data if state_data else None,
-                viewport={"width": 1280, "height": 800}
+                user_agent=account.user_agent if account.user_agent else "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                viewport={"width": 1280, "height": 800},
+                # 生物级指纹：启用 JS 和下载
+                java_script_enabled=True,
+                accept_downloads=True,
+                # v13.1: 地区伪装
+                locale="zh-CN",
+                # v13.1: 时区伪装
+                timezone_id="Asia/Shanghai",
+                # v13.1: 忽略 HTTPS 错误
+                ignore_https_errors=True
             )
+            logger.info("🔍 [指纹手术] 已注入 locale/时区伪装")
 
             page = await context.new_page()
+
+            # ========================================
+            # 工业级隐身疫苗 - 深度指纹补齐 v3.0 生物级
+            # ========================================
+            await page.add_init_script("""() => {
+                // ===== 1. 抹除自动化痕迹 - 多层防护 =====
+                Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
+                delete navigator.__proto__.webdriver;
+
+                // ===== 2. 补齐完整 Chrome 运行时对象 - 搜狐网关必查 =====
+                window.chrome = {
+                    runtime: {
+                        onMessage: {},
+                        sendMessage: () => {},
+                        getManifest: () => {},
+                        connect: () => {}
+                    },
+                    loadTimes: function() {
+                        return {
+                            requestTime: Date.now() / 1000,
+                            startLoadTime: Date.now() / 1000 - 0.1,
+                            commitLoadTime: Date.now() / 1000 - 0.05,
+                            finishDocumentLoadTime: Date.now() / 1000,
+                            finishLoadTime: Date.now() / 1000 + 0.1,
+                            firstPaintTime: Date.now() / 1000 + 0.02,
+                            firstPaintAfterLoadTime: 0
+                        };
+                    },
+                    csi: function() {
+                        return {
+                            startE: Date.now(),
+                            onloadT: Date.now(),
+                            pageT: Date.now(),
+                            tran: 15
+                        };
+                    },
+                    app: {
+                        isInstalled: () => false,
+                        InstallState: { DISABLED: 'disabled', INSTALLED: 'installed', NOT_INSTALLED: 'not_installed' },
+                        RunningState: { CANNOT_RUN: 'cannot_run', READY_TO_RUN: 'ready_to_run', RUNNING: 'running' }
+                    },
+                    sync: {},
+                    fileSystem: {}
+                };
+
+                // ===== 3. 伪造硬件指纹 =====
+                Object.defineProperty(navigator, 'deviceMemory', {get: () => 8});
+                Object.defineProperty(navigator, 'hardwareConcurrency', {get: () => 8});
+                Object.defineProperty(navigator, 'maxTouchPoints', {get: () => 0});
+
+                // ===== 4. 伪造语言设置 =====
+                Object.defineProperty(navigator, 'languages', {
+                    get: () => ['zh-CN', 'zh', 'en-US', 'en']
+                });
+
+                // ===== 5. 伪造插件列表 - 搜狐网关高频校验 =====
+                Object.defineProperty(navigator, 'plugins', {
+                    get: () => [
+                        { name: 'Chrome PDF Plugin', description: 'Portable Document Format', filename: 'internal-pdf-viewer' },
+                        { name: 'Chrome PDF Viewer', description: '', filename: 'mhjfbmdgcfjbbpaeojofohoefgiehjai' },
+                        { name: 'Native Client', description: '', filename: 'internal-nacl-plugin' }
+                    ]
+                });
+
+                // ===== 6. 伪造权限接口 - 搜狐网关必查 =====
+                const originalQuery = window.navigator.permissions.query;
+                window.navigator.permissions.query = (parameters) => (
+                    parameters.name === 'notifications' ?
+                    Promise.resolve({ state: Notification.permission }) :
+                    originalQuery(parameters)
+                );
+
+                // ===== 7. 伪造屏幕属性 =====
+                Object.defineProperty(screen, 'availWidth', {get: () => 1280});
+                Object.defineProperty(screen, 'availHeight', {get: () => 720});
+                Object.defineProperty(screen, 'width', {get: () => 1280});
+                Object.defineProperty(screen, 'height', {get: () => 800});
+                Object.defineProperty(screen, 'colorDepth', {get: () => 24});
+                Object.defineProperty(screen, 'pixelDepth', {get: () => 24});
+
+                // ===== 8. 伪造连接信息 =====
+                Object.defineProperty(navigator, 'connection', {
+                    get: () => ({
+                        effectiveType: '4g',
+                        rtt: 100,
+                        downlink: 10,
+                        saveData: false
+                    })
+                });
+
+                // ===== 9. 伪造 Canvas 指纹噪声 =====
+                const originalToDataURL = HTMLCanvasElement.prototype.toDataURL;
+                HTMLCanvasElement.prototype.toDataURL = function(type) {
+                    const context = this.getContext('2d');
+                    if (context) {
+                        const imageData = context.getImageData(0, 0, this.width, this.height);
+                        for (let i = 0; i < imageData.data.length; i += 4) {
+                            imageData.data[i] = imageData.data[i] + Math.random() * 0.1;
+                        }
+                        context.putImageData(imageData, 0, 0);
+                    }
+                    return originalToDataURL.apply(this, arguments);
+                };
+
+                console.log('[生物级指纹] Chrome 全家桶疫苗 v3.0 已注入');
+            }""")
+            logger.info("💉 [反爬疫苗] 生物级深度指纹补齐疫苗 v3.0 已注入")
 
             # 执行发布逻辑
             logger.info(f"🚀 [Publish] 开始执行发布: {account.platform} - {article.title}")
@@ -841,7 +991,8 @@ class PlaywrightManager:
     async def get_browser_context(
         self,
         storage_state: Optional[Dict] = None,
-        viewport: Optional[Dict] = None
+        viewport: Optional[Dict] = None,
+        user_agent: Optional[str] = None
     ) -> BrowserContext:
         """
         获取浏览器上下文（用于发布任务）
@@ -851,6 +1002,7 @@ class PlaywrightManager:
         Args:
             storage_state: 存储状态（cookies, localStorage等）
             viewport: 视口大小
+            user_agent: 用户代理字符串（用于指纹守卫）
 
         Returns:
             BrowserContext: 新的浏览器上下文
@@ -858,64 +1010,19 @@ class PlaywrightManager:
         await self.start()
 
         context_options = {
-            "viewport": viewport or {"width": 1280, "height": 800}
+            "viewport": viewport or {"width": 1280, "height": 800},
+            "java_script_enabled": True
         }
 
         if storage_state:
             context_options["storage_state"] = storage_state
 
+        if user_agent:
+            context_options["user_agent"] = user_agent
+
         context = await self._browser.new_context(**context_options)
         logger.debug(f"[Playwright] 创建新的浏览器上下文: {id(context)}")
         return context
-
-
-    async def execute_publish(self, article: Any, account: Any) -> Dict[str, Any]:
-        """
-        供 Service 调用的发布执行入口 (核心)
-        """
-        await self.start()
-
-        # 动态获取发布器
-        publisher = registry.get(account.platform)
-        if not publisher:
-            return {"success": False, "error_msg": f"未找到平台 {account.platform} 的适配器"}
-
-        # 准备上下文
-        context = None
-        try:
-            # 解密 Session
-            state_data = {}
-            if account.storage_state:
-                try:
-                    decrypted = decrypt_storage_state(account.storage_state)
-                    state_data = decrypted if decrypted else json.loads(account.storage_state)
-
-                    # 兼容旧数据格式：如果缺少 cookies 字段，从 account.cookies 补充
-                    if isinstance(state_data, dict) and "cookies" not in state_data and account.cookies:
-                        logger.warning(f"storage_state缺少cookies字段，使用独立cookies")
-                        state_data["cookies"] = decrypt_cookies(account.cookies)
-                except:
-                    logger.warning(f"账号 {account.account_name} Session 解析失败，尝试裸奔")
-
-            context = await self._browser.new_context(
-                storage_state=state_data if state_data else None,
-                viewport={"width": 1280, "height": 800}
-            )
-
-            page = await context.new_page()
-
-            # 执行发布逻辑
-            logger.info(f"🚀 [Publish] 开始执行发布: {account.platform} - {article.title}")
-            result = await publisher.publish(page, article, account)
-
-            return result
-
-        except Exception as e:
-            logger.exception(f"❌ [Publish] 执行异常: {e}")
-            return {"success": False, "error_msg": str(e)}
-        finally:
-            if context:
-                await context.close()
 
 
 def get_playwright_manager() -> PlaywrightManager:

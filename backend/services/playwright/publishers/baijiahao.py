@@ -1,19 +1,20 @@
 # -*- coding: utf-8 -*-
 """
-百家号发布适配器 - v10.1 精准打击版
+百家号发布适配器 - v13.0 HTML DNA 重构版
 
-重构重点 (AutoGeo 架构金律)：
+【架构金律】(AutoGeo Golden Rules)：
 1. Rule #2 - 执行顺序：清场 -> 封面 -> 正文 -> 标题 -> 发布
-2. Rule #1 - 正文注入：严禁 f-string，使用 evaluate 传参 + 状态固化组合键
+2. Rule #1 - 正文注入：严禁 f-string，使用 evaluate 传参
 3. Golden Rule #1 & #3 - 彻底杜绝原生对话框：协议直接注入 + 零点击
-4. JS 崩溃修复：document.body.scrollHeight 增加 Null Check
-5. Rule #3 - 降维打击：Shadow DOM 穿透 + 递归扫描 + 绝杀高 z-index
+4. 预埋"新手引导疫苗"：page.add_init_script 向 localStorage 写入标记
+5. 编辑器深链路直达：Referer 伪装 + 黄金 URL + 状态唤醒
 
-v10.1 新增补丁：
-1. 封面注入补丁：精准选位（区分图片与视频 input）+ Tab 切换 + 绝杀点击
-2. 正文注入补丁：深度唤醒（按键激活编辑器）+ 注入增强 + 200ms 状态固化
-3. 标题锁定补丁：物理清空增强 + 等待 2 秒后执行
-4. 物理清场常态化：封面后、正文后各补一次清场
+v13.0 核心重构：
+1. 标题注入"正文级"对待 - p[dir="auto"] + 向上找 contenteditable 父级 + ArtiPub 方案
+2. 封面注入"触发式挂载" - 点击"选择封面"文本 + 瞬间抓取 input + 协议注入
+3. 正文清洗补丁 - 删除 Markdown 标题，防止重复
+4. 完善"空降"唤醒 - 增加 iframe 检测，减少 reload
+5. 强化发布结果检测 - 检测 /builderrc/content/index
 """
 
 import asyncio
@@ -32,44 +33,67 @@ from .base import BasePublisher, registry
 class BaijiahaoPublisher(BasePublisher):
     async def publish(self, page: Page, article: Any, account: Any) -> Dict[str, Any]:
         """
-        百家号发布流程 - v10.1 精准打击版
+        百家号发布流程 - v13.0 HTML DNA 重构版
 
         执行顺序 (Golden Rule #2)：
-        1. _force_remove_interferences (初次清场)
-        2. _physical_upload_cover (封面先行) ← 内部深度清场 + 精准选位
-        3. _physical_write_content (正文压轴) ← 深度唤醒 + 注入增强
-        4. Escape 清理 (标题锁定前 - 清理自动保存提示)
-        5. _physical_write_title (标题终极锁定) ← 正文注入成功后 2 秒执行
-        6. _brutal_publish_click (暴力发布)
+        1. 身份伪装与 Referer 劫持 + 导航
+        2. "空降"后的状态唤醒
+        3. 精准清场 ArtiPub 手术刀
+        4. 封面注入（触发式挂载 + 协议注入）
+        5. 正文注入（清洗补丁 + ArtiPub execCommand + Space+Backspace）
+        6. 标题锁定（正文级对待 + p[dir="auto"] + ArtiPub 方案）
+        7. 发布
         """
         temp_files = []
         try:
-            logger.info("🚀 开始百家号发布 (v10.1 精准打击版)...")
+            logger.info("🚀 开始百家号发布 (v13.0 HTML DNA 重构版)...")
 
-            # ========== 步骤1: 导航到编辑页面 ==========
-            edit_url = self.config["publish_url"]
-            logger.info(f"📝 [导航] 跳转到编辑页面: {edit_url}")
-            await page.goto(edit_url, wait_until="domcontentloaded", timeout=60000)
-            await asyncio.sleep(3)
+            # ========== 步骤1: 身份伪装与 Referer 劫持 ==========
+            logger.info("🔐 [伪装] 执行 Referer 劫持...")
+
+            # v13.0: 伪造 Referer，欺骗百度以为是从首页点进去的
+            await page.set_extra_http_headers({
+                "Referer": "https://baijiahao.baidu.com/builder/rc/home"
+            })
+            logger.info("✅ [伪装] Referer 劫持完成")
+
+            # v13.0: 预埋"新手引导疫苗" - 向 localStorage 写入 3 个标记
+            guide_vaccine = """() => {
+                localStorage.setItem('BAIDU_BJ_GUIDE_STATE', 'true');
+                localStorage.setItem('BJ_TOUR_COMPLETED', 'true');
+                localStorage.setItem('ai_tool_guide_status', '1');
+                console.log('[疫苗] 新手引导疫苗已注入 (3 个标记)');
+            }"""
+            await page.add_init_script(guide_vaccine)
+
+            # ========== 步骤2: 强制重定向至"黄金 URL" ==========
+            golden_url = "https://baijiahao.baidu.com/builder/rc/edit?type=news&is_from_cms=1"
+            logger.info(f"🎯 [导航] 强制重定向至黄金 URL: {golden_url}")
+
+            # v13.0: 直接访问黄金 URL，60 秒超时，networkidle 等待
+            await page.goto(golden_url, wait_until="networkidle", timeout=60000)
+            logger.info("✅ [导航] 黄金 URL 访问完成")
 
             # 检查是否需要重新登录
             if "login" in page.url.lower():
                 return {"success": False, "platform_url": None, "error_msg": "[百家号] 账号指纹缺失，请前往管理页重新授权"}
 
-            # ========== 步骤2: 暴力清场 - 降维打击 (Golden Rule #3) ==========
-            logger.info("🧹 [清场] 执行初次清场 v10.1...")
+            # ========== 步骤3: "空降"后的状态唤醒 ==========
+            logger.info("🔔 [唤醒] 执行空降后状态唤醒...")
+            await self._wake_up_editor(page)
+
+            # ========== 步骤4: 精准清场 ArtiPub 手术刀 ==========
+            logger.info("🧹 [清场] 执行 ArtiPub 手术刀清场 v13.0...")
             await self._force_remove_interferences(page)
-            await asyncio.sleep(1)
+            await asyncio.sleep(0.5)
 
-            # ========== 步骤3: 状态检查 - 验证编辑器是否可用 ==========
-            logger.info("🔍 [状态] 检查编辑器可用性...")
-            editor_available = await self._verify_editor_available(page)
-            if not editor_available:
-                logger.warning("⚠️ [状态] 清场后编辑器检测异常，继续执行")
-
-            # ========== 步骤4: 准备图片资源 ==========
+            # ========== 步骤5: 准备图片资源 ==========
             image_urls = re.findall(r'!\[.*?\]\(((?:https?://)?\S+?)\)', article.content)
-            clean_content = re.sub(r'!\[.*?\]\(.*?\)', '', article.content)
+
+            # v13.0: 正文清洗补丁 - 删除第一行 Markdown 标题，防止重复
+            clean_content = re.sub(r'^#\s+.*?\n', '', article.content).strip()
+            # 再移除图片标记
+            clean_content = re.sub(r'!\[.*?\]\(.*?\)', '', clean_content).strip()
 
             if not image_urls:
                 keyword = article.title[:10] if article.title else "technology"
@@ -84,39 +108,24 @@ class BaijiahaoPublisher(BasePublisher):
             if not downloaded_paths:
                 return {"success": False, "error_msg": "图片下载失败，无法满足强制配图需求"}
 
-            # ========== 步骤5: 封面物理注入 (Golden Rule #2 - 封面先行) ==========
-            logger.info("🖼️ [封面] 开始封面注入 v10.1 (精准选位版)...")
+            # ========== 步骤6: 封面物理注入 (触发式挂载 + 协议注入版) ==========
+            logger.info("🖼️ [封面] 开始封面注入 v13.0 (触发式挂载 + 协议注入版)...")
             cover_success = await self._physical_upload_cover(page, downloaded_paths[0])
             if not cover_success:
                 logger.warning("⚠️ [封面] 物理注入失败，继续尝试发布")
 
-            # Rule #3: 封面后物理清场常态化 - 粉碎新手气泡
-            logger.info("🧹 [清场] 封面后物理清场 - 粉碎新手气泡...")
-            await self._force_remove_interferences(page)
-            await asyncio.sleep(0.3)
-            await page.keyboard.press("Escape")
-            await asyncio.sleep(0.2)
-
-            # ========== 步骤6: 正文物理注入 (Golden Rule #2 - 正文压轴) ==========
+            # ========== 步骤7: 正文物理注入 (清洗补丁 + ArtiPub execCommand + Space+Backspace 版) ==========
             logger.info(f"📝 [正文] 物理注入正文，长度: {len(clean_content)}")
             content_injected = await self._physical_write_content(page, clean_content)
             if not content_injected:
                 return {"success": False, "error_msg": "正文物理注入失败"}
 
-            # Rule #3: 正文后物理清场常态化 - 粉碎动态气泡
-            logger.info("🧹 [清场] 正文后物理清场 - 粉碎动态气泡...")
-            await self._force_remove_interferences(page)
-            await asyncio.sleep(0.3)
-            await page.keyboard.press("Escape")
-            await asyncio.sleep(0.2)
+            # ========== 步骤8: 标题物理注入 (正文级对待 + p[dir="auto"] + ArtiPub 方案版) ==========
+            # v13.1: 标题锁定必须在正文成功填入 1 秒后，作为最后一步执行
+            logger.info("⏱️ [标题] 标题锁定前等待 1 秒...")
+            await asyncio.sleep(1)
 
-            # ========== 步骤7: 标题物理注入 (Golden Rule #2 - 标题终极锁定) ==========
-            # 标题锁定补丁：正文注入成功后等待 2 秒，再执行标题注入
-            logger.info("⏱️ [标题] 标题锁定前等待 2 秒...")
-            await asyncio.sleep(2)
-
-            # 标题锁定前 Escape 清理可能弹出的"自动保存成功"提示
-            logger.info("🧹 [标题] 标题锁定前 Escape 清理 - 清理自动保存提示...")
+            logger.info("🧹 [标题] 标题锁定前 Escape 清理...")
             await page.keyboard.press("Escape")
             await asyncio.sleep(0.2)
             await page.keyboard.press("Escape")
@@ -126,22 +135,31 @@ class BaijiahaoPublisher(BasePublisher):
             if not await self._physical_write_title(page, article.title):
                 logger.warning("⚠️ [标题] 物理注入失败，继续尝试发布")
 
-            # Golden Rule #3: 标题后 Escape 物理降压
-            logger.info("🧹 [清场] 标题后物理降压...")
+            # 标题后 Escape 物理降压
+            logger.info("🧹 [清场] 标题后 Escape 物理降压...")
             await page.keyboard.press("Escape")
             await asyncio.sleep(0.3)
 
-            # ========== 步骤8: 最后的发布确认清场 ==========
-            logger.info("🧹 [清场] 发布前最后的确认清场 - 粉碎 AI 检测拦截框...")
+            # v13.1: Anti-Bot - 模拟人类在发布前的"检查"停顿
+            logger.info("⏱️ [发布] Anti-Bot - 模拟人类发布前的检查停顿...")
+            random_delay = random.uniform(2, 4)
+            logger.info(f"⏱️ [发布] 随机等待 {random_delay:.2f} 秒...")
+            await asyncio.sleep(random_delay)
+
+            # ========== 步骤9: 最后的发布确认清场 ==========
+            logger.info("🧹 [清场] 发布前最后的确认清场...")
             await self._force_remove_interferences(page)
             await asyncio.sleep(0.5)
 
-            # ========== 步骤9: 物理点击发布按钮 (Golden Rule #2 - 暴力发布) ==========
-            logger.info("🚀 [发布] 进入暴力发布阶段...")
-            if not await self._brutal_publish_click(page):
-                return {"success": False, "error_msg": "发布按钮未响应或被屏蔽"}
+            # ========== 步骤10: 物理点击发布按钮 ==========
+            logger.info("🚀 [发布] 进入发布阶段...")
+            publish_result = await self._brutal_publish_click(page)
+            if not publish_result:
+                # v13.1: 完善结果判定 - 可能是验证码未通过
+                logger.warning("⚠️ [发布] 发布阶段失败，可能是验证码未通过")
+                return {"success": False, "error_msg": "安全验证未通过，请手动辅助或重试"}
 
-            # ========== 步骤10: 等待发布结果 ==========
+            # ========== 步骤11: 等待发布结果 ==========
             return await self._wait_for_publish_result(page)
 
         except Exception as e:
@@ -160,215 +178,149 @@ class BaijiahaoPublisher(BasePublisher):
                     except:
                         pass
 
+    async def _wake_up_editor(self, page: Page) -> bool:
+        """
+        "空降"后的状态唤醒 - 诊断 React 组件是否处于"骨架屏"假死状态
+
+        v13.0 核心修复：
+        1. 检测是否存在标题框 p[dir="auto"] 或 iframe
+        2. 只要检测到 iframe 存在，就认为唤醒成功，减少不必要的 reload
+        3. 如果 5 秒内没检测到，执行 page.reload()
+        4. 刷新后，执行 page.mouse.click(100, 100) 物理搅动页面，激活懒加载
+
+        返回值：True 表示状态唤醒成功
+        """
+        try:
+            logger.info("🔍 [唤醒] 检测编辑器状态...")
+
+            # 等待 5 秒检测标题框或 iframe
+            editor_detected = False
+            for i in range(10):
+                try:
+                    # v13.0: 增加对 iframe 的检测，减少不必要的 reload
+                    iframe_count = await page.locator("iframe").count()
+                    # v13.0: 检测 p[dir="auto"] 标题框
+                    title_count = await page.locator('p[dir="auto"]').count()
+
+                    if iframe_count > 0 or title_count > 0:
+                        logger.info(f"✅ [唤醒] 编辑器已激活 (iframe: {iframe_count}, title: {title_count})")
+                        editor_detected = True
+                        break
+                except Exception:
+                    pass
+                await asyncio.sleep(0.5)
+
+            # 如果 5 秒内没检测到，执行 reload
+            if not editor_detected:
+                logger.warning("⚠️ [唤醒] 5 秒内未检测到编辑器，执行 reload...")
+                await page.reload(wait_until="networkidle", timeout=60000)
+                await asyncio.sleep(1)
+
+            # 刷新后，物理搅动页面，激活懒加载
+            logger.info("🖱️ [唤醒] 物理搅动页面，激活懒加载...")
+            await page.mouse.click(100, 100)
+            await asyncio.sleep(0.5)
+
+            # 再次检测
+            iframe_count = await page.locator("iframe").count()
+            title_count = await page.locator('p[dir="auto"]').count()
+            if iframe_count > 0 or title_count > 0:
+                logger.info("✅ [唤醒] 状态唤醒成功")
+                return True
+            else:
+                logger.warning("⚠️ [唤醒] 编辑器仍未完全激活，继续执行")
+                return True  # 继续执行，不阻断流程
+
+        except Exception as e:
+            logger.debug(f"[唤醒] 状态唤醒异常: {e}")
+            return True  # 继续执行，不阻断流程
+
     async def _force_remove_interferences(self, page: Page):
         """
-        暴力移除脚本 v10.1 - 降维打击版 (Shadow DOM 穿透 + 绝杀高 z-index)
+        精准清场 v13.0 - ArtiPub 手术刀版
 
         清场逻辑：
-        1. 递归函数 findAndRemove(root) - 穿透 shadowRoot 扫描
-        2. 全深度扫描 div, span, button 的 innerText
-        3. 精准爆破：文本匹配 1/4, 下一步, AI工具, 体验，立即销毁固定定位父容器
-        4. 遮罩层绝杀：强制移除所有 z-index > 1000 的元素
-        5. 样式暴力恢复 - Null Check 防止 scrollHeight 报错
-        6. 连续三次 Escape 物理降压
-        7. (10, 10) 坐标物理点击粉碎透明拦截层
+        1. 仅精准移除：.ant-tour, .guide-mask, .newbie-guide
+        2. 移除包含"知道了"、"下一步"文本的按钮
+        3. 布局唤醒：window.dispatchEvent(new Event('resize'))
+        4. 严禁递归扫描 querySelectorAll('*')，防止 React 渲染树崩溃
         """
-        logger.info("🧹 [清场] 执行 v10.1 降维打击脚本...")
+        logger.info("🧹 [清场] 执行 v13.0 ArtiPub 手术刀清场...")
 
         await page.evaluate("""() => {
-            console.log('[清场 v10.1] 开始降维打击...');
+            console.log('[清场 v13.0] 开始 ArtiPub 手术刀清场...');
 
             // ========================================
-            // 1. 样式暴力恢复 - Null Check 防止 scrollHeight 报错
+            // 1. 精准移除：.ant-tour, .guide-mask, .newbie-guide
             // ========================================
-            const resetStyles = (element) => {
-                if (!element) return;  // Null Check - 防止 JS 崩溃
-                try {
-                    element.style.setProperty('overflow', 'auto', 'important');
-                    element.style.setProperty('position', 'static', 'important');
-                    element.style.setProperty('overflow-x', 'visible', 'important');
-                    element.style.setProperty('overflow-y', 'visible', 'important');
-                    element.style.setProperty('pointer-events', 'auto', 'important');
-                } catch (e) {
-                    console.warn('[清场 v10.1] 样式重置异常:', e);
-                }
-            };
+            const preciseSelectors = [
+                '.ant-tour',
+                '.guide-mask',
+                '.newbie-guide',
+                '[class*="tour"]',
+                '[class*="guide-mask"]',
+                '[class*="newbie-guide"]',
+                '[class*="assistant"]',
+            ];
 
-            if (document?.body) resetStyles(document.body);
-            if (document?.documentElement) resetStyles(document.documentElement);
-
-            console.log('[清场 v10.1] 样式暴力恢复完成');
-
-            // ========================================
-            // 2. 遮罩层绝杀 - 强制移除所有 z-index > 1000 的元素
-            // ========================================
-            const allElements = document.querySelectorAll('*');
-            let removedHighZIndex = 0;
-
-            allElements.forEach(el => {
-                if (!el) return;  // Null Check
-
-                try {
-                    const style = window.getComputedStyle(el);
-                    const zIndex = parseInt(style?.zIndex) || 0;
-
-                    // 绝杀条件：z-index > 1000 + 固定/绝对定位 + 非隐藏
-                    if ((style?.position === 'fixed' || style?.position === 'absolute') &&
-                        zIndex > 1000 &&
-                        style?.display !== 'none') {
+            let removedTour = 0;
+            preciseSelectors.forEach(selector => {
+                const elements = document.querySelectorAll(selector);
+                elements.forEach(el => {
+                    if (el) {
                         el?.remove();
-                        removedHighZIndex++;
+                        removedTour++;
                     }
-                } catch (e) {
-                    // 忽略异常，继续处理下一个元素
+                });
+            });
+
+            console.log(`[清场 v13.0] 移除引导元素: ${removedTour} 个`);
+
+            // ========================================
+            // 2. 移除包含"知道了"、"下一步"文本的按钮
+            // ========================================
+            const allButtons = document.querySelectorAll('button, div[role="button"]');
+            let removedButtons = 0;
+            allButtons.forEach(btn => {
+                if (!btn) return;
+                const text = (btn?.innerText || btn?.textContent || '').trim();
+                if (text.includes('知道了') || text.includes('下一步') ||
+                    text.includes('Next') || text.includes('Got it')) {
+                    btn?.remove();
+                    removedButtons++;
                 }
             });
 
-            console.log(`[清场 v10.1] 绝杀高 z-index 元素: ${removedHighZIndex} 个`);
+            console.log(`[清场 v13.0] 移除引导按钮: ${removedButtons} 个`);
 
             // ========================================
-            // 3. 递归扫描函数 - 穿透 Shadow DOM
+            // 3. 布局唤醒 - 触发 resize 事件
             // ========================================
-            const targetTexts = ['AI工具收起', '下一步', '1/4', '立即体验', 'AI 生成内容', '请确认', 'AI工具', '完成', '确定', '体验', '新手', '气泡', '提示'];
-            const removedContainers = [];
-
-            // 递归扫描函数，能穿透 shadowRoot
-            const findAndRemove = (root) => {
-                if (!root) return;
-
-                // 扫描目标元素：div, span, button
-                const targetSelectors = ['div', 'span', 'button', 'label'];
-                const elements = root.querySelectorAll(targetSelectors.join(', '));
-
-                for (let i = 0; i < elements?.length; i++) {
-                    const el = elements[i];
-                    if (!el) continue;
-
-                    // 获取文本内容
-                    const text = (el?.innerText || el?.textContent || '')?.trim();
-
-                    // 精准匹配目标文本
-                    if (targetTexts?.some(target => text?.includes?.(target))) {
-                        console.log(`[清场 v10.1] 发现目标文本: "${text?.substring?.(0, 30)}..."`);
-
-                        let container = el;
-                        let foundContainer = null;
-
-                        // 向上递归寻找最近的 fixed/absolute 定位父级
-                        while (container && container !== document.body && container !== document.documentElement) {
-                            try {
-                                const style = window.getComputedStyle(container);
-                                const isFixedOrAbsolute = style?.position === 'fixed' || style?.position === 'absolute';
-
-                                if (isFixedOrAbsolute) {
-                                    foundContainer = container;
-                                    console.log(`[清场 v10.1] 找到固定/绝对定位父容器: position=${style?.position}`);
-                                    break;
-                                }
-
-                                container = container?.parentElement;
-                            } catch (e) {
-                                // 忽略异常
-                                break;
-                            }
-                        }
-
-                        // 如果没找到定位父级，至少移除元素本身
-                        if (!foundContainer) {
-                            foundContainer = el;
-                            console.log('[清场 v10.1] 未找到定位父级，移除元素本身');
-                        }
-
-                        // 暴力移除
-                        try {
-                            if (foundContainer && foundContainer?.parentNode && document?.body?.contains?.(foundContainer)) {
-                                removedContainers.push({
-                                    tag: foundContainer?.tagName,
-                                    class: foundContainer?.className || 'no-class',
-                                    id: foundContainer?.id || 'no-id'
-                                });
-                                foundContainer?.remove();
-                                console.log('[清场 v10.1] 已暴力删除目标容器');
-                            }
-                        } catch (e) {
-                            console.warn('[清场 v10.1] 删除异常:', e);
-                        }
-                    }
-                }
-
-                // 递归扫描所有 Shadow DOM
-                const allElements = root.querySelectorAll('*');
-                for (let i = 0; i < allElements?.length; i++) {
-                    const el = allElements[i];
-                    if (el?.shadowRoot) {
-                        findAndRemove(el.shadowRoot);
-                    }
-                }
-            };
-
-            // 从 document.documentElement 开始递归扫描
-            findAndRemove(document.documentElement);
-
-            console.log(`[清场 v10.1] 已删除 ${removedContainers.length} 个 AI 工具弹窗容器`);
+            window.dispatchEvent(new Event('resize'));
+            console.log('[清场 v13.0] 布局唤醒触发');
 
             // ========================================
-            // 4. 移除包含 mask, guide, modal, overlay 的全屏遮罩层
+            // 4. 恢复 overflow 样式
             // ========================================
-            const maskClasses = ['mask', 'Mask', 'MASK', 'guide', 'Guide', 'GUIDE',
-                                'modal', 'Modal', 'MODAL', 'overlay', 'Overlay', 'OVERLAY',
-                                'tooltip', 'Tooltip', 'TOOLTIP', 'bubble', 'Bubble', 'BUBBLE'];
+            if (document?.body) {
+                document.body.style.setProperty('overflow', 'auto', 'important');
+                document.body.style.setProperty('overflow-x', 'visible', 'important');
+                document.body.style.setProperty('overflow-y', 'visible', 'important');
+            }
+            if (document?.documentElement) {
+                document.documentElement.style.setProperty('overflow', 'auto', 'important');
+            }
 
-            const maskElements = document.querySelectorAll('*');
-            const removedMasks = [];
-
-            maskElements.forEach(el => {
-                if (!el) return;  // Null Check
-
-                try {
-                    // Optional Chaining - 使用 el?.classList
-                    const classList = Array.from(el?.classList || []);
-                    const hasMaskClass = classList?.some(cls =>
-                        maskClasses?.some(maskClass => cls?.includes?.(maskClass))
-                    ) || false;
-
-                    const style = window.getComputedStyle(el);
-                    const isFixedOrAbsolute = style?.position === 'fixed' || style?.position === 'absolute';
-                    const width = parseInt(style?.width) || 0;
-                    const height = parseInt(style?.height) || 0;
-                    const isLarge = (width > 500 || style?.width === '100%') ||
-                                    (height > 500 || style?.height === '100%');
-
-                    if (hasMaskClass && isFixedOrAbsolute && isLarge) {
-                        removedMasks.push(el?.className || 'no-class');
-                        el?.remove();
-                    }
-                } catch (e) {
-                    // 忽略异常
-                }
-            });
-
-            console.log(`[清场 v10.1] 已移除 ${removedMasks.length} 个遮罩层`);
-
-            // ========================================
-            // 5. 最终样式确认
-            // ========================================
-            if (document?.body) resetStyles(document.body);
-            if (document?.documentElement) resetStyles(document.documentElement);
-
-            document?.body?.classList.remove('modal-open', 'overflow-hidden', 'noscroll');
-            document?.documentElement?.classList.remove('modal-open', 'overflow-hidden', 'noscroll');
-
-            console.log('[清场 v10.1] 执行完成');
+            console.log('[清场 v13.0] ArtiPub 手术刀执行完成');
 
             return {
-                removedMasks: removedMasks.length,
-                removedContainers: removedContainers.length,
-                removedHighZIndex: removedHighZIndex
+                removedTour,
+                removedButtons
             };
         }""")
 
         # ========================================
-        # 连续三次 Escape 物理降压
+        # 三次 Escape 物理降压
         # ========================================
         logger.info("🧹 [清场] 执行三重 Escape 物理降压...")
         for i in range(3):
@@ -376,191 +328,203 @@ class BaijiahaoPublisher(BasePublisher):
             await asyncio.sleep(0.15)
         await asyncio.sleep(0.2)
 
-        # ========================================
-        # (10, 10) 坐标物理点击 - 粉碎透明拦截层
-        # ========================================
-        logger.info("🧹 [清场] 执行坐标物理点击粉碎透明拦截层...")
-        try:
-            await page.mouse.click(10, 10)
-            await asyncio.sleep(0.2)
-        except Exception as e:
-            logger.debug(f"[清场] 坐标点击异常: {e}")
-
-        logger.info("✅ [清场] v10.1 降维打击脚本完成")
-
-    async def _verify_editor_available(self, page: Page) -> bool:
-        """
-        状态检查 v10.1 - 验证编辑器是否可用
-
-        检查目标：
-        1. 标题输入框: input[placeholder*="标题"], textarea[placeholder*="标题"]
-        2. 正文编辑器: iframe
-        3. 正文编辑器容器: .news-editor-pc
-
-        只要找到其中之一，就认为编辑器可用
-        """
-        try:
-            result = await page.evaluate("""() => {
-                // 1. 查找标题输入区域
-                const titleInputs = document.querySelectorAll('input[placeholder*="标题"], textarea[placeholder*="标题"], [placeholder*="标题"]');
-                for (let input of titleInputs) {
-                    if (!input) continue;
-                    const style = window.getComputedStyle(input);
-                    if (style?.display !== 'none' && style?.visibility !== 'hidden') {
-                        return { found: true, type: 'title', tag: input?.tagName };
-                    }
-                }
-
-                // 2. 查找 iframe 正文编辑器
-                const iframes = document.querySelectorAll('iframe');
-                for (let iframe of iframes) {
-                    if (!iframe) continue;
-                    const style = window.getComputedStyle(iframe);
-                    if (style?.display !== 'none' && style?.visibility !== 'hidden') {
-                        return { found: true, type: 'iframe', id: iframe?.id };
-                    }
-                }
-
-                // 3. 查找 .news-editor-pc 类名的容器
-                const editorPc = document.querySelector('.news-editor-pc');
-                if (editorPc) {
-                    const style = window.getComputedStyle(editorPc);
-                    if (style?.display !== 'none' && style?.visibility !== 'hidden') {
-                        return { found: true, type: 'editor-pc' };
-                    }
-                }
-
-                return { found: false };
-            }""")
-
-            if result.get('found'):
-                logger.info(f"✅ [状态] 编辑器可用 - 类型: {result.get('type')}")
-                return True
-            else:
-                logger.warning("⚠️ [状态] 清场后编辑器仍不可用")
-                return False
-        except Exception as e:
-            logger.debug(f"[状态] 编辑器验证异常: {e}")
-            return False
+        logger.info("✅ [清场] v13.0 ArtiPub 手术刀清场完成")
 
     async def _physical_write_title(self, page: Page, title: str) -> bool:
         """
-        标题物理注入 v10.1 - 标题终极锁定 (Golden Rule #2)
+        标题物理注入 v13.0 - 正文级对待 + p[dir="auto"] + ArtiPub 方案版 (Golden Rule #2)
 
-        执行位置：正文注入之后等待 2 秒
-        严禁使用 .fill()，全部改用物理按键 + evaluate
-
-        v10.1 新增：物理清空增强 - Control+A -> Backspace -> Control+A -> Delete
+        v13.0 核心重构：
+        1. DNA 诊断：标题不再是 textarea，而是 contenteditable 的 p 标签
+        2. 定位：page.locator('p[dir="auto"]').first
+        3. 向上寻找具有 contenteditable="true" 的父级
+        4. 注入逻辑：参考正文的 ArtiPub 方案
+        5. 注入后物理执行 Enter
         """
         try:
-            # 滚动到顶部 - Null Check 防止 scrollHeight 报错
-            await page.evaluate("() => { window.scrollTo(0, 0); }")
-            await asyncio.sleep(0.5)
+            # ========================================
+            # 精准清场
+            # ========================================
+            await self._force_remove_interferences(page)
+            await asyncio.sleep(0.2)
 
-            # 物理点击标题区域
-            await page.mouse.click(450, 150)
+            # ========================================
+            # v13.0: 注入前清洗标题 - 移除 Markdown 符号
+            # ========================================
+            clean_title = title.replace('#', '').strip()
+            logger.info(f"🧹 [标题] 标题清洗: '{title}' -> '{clean_title}'")
+
+            # ========================================
+            # v13.0: 检测 p[dir="auto"] 是否存在
+            # ========================================
+            logger.info("🔍 [标题] 检测 p[dir='auto'] 标题框...")
+            title_count = await page.locator('p[dir="auto"]').count()
+            if title_count == 0:
+                logger.warning("⚠️ [标题] 未找到 p[dir='auto']，尝试降级方案...")
+                # 降级方案：尝试 contenteditable="true"
+                return await self._title_fallback(page, clean_title)
+
+            logger.info(f"✅ [标题] 找到 {title_count} 个 p[dir='auto']")
+
+            # ========================================
+            # v13.0: ArtiPub 方案注入标题 - 参考正文的注入逻辑
+            # ========================================
+            logger.info("📝 [标题] ArtiPub 方案注入标题...")
+            await page.evaluate("""(cleanTitle) => {
+                console.log('[标题] 开始 ArtiPub 注入...');
+
+                // v13.0: 定位 p[dir="auto"] 并向上找 contenteditable 父级
+                const titleP = document.querySelector('p[dir="auto"]');
+
+                if (!titleP) {
+                    console.error('[标题] 未找到 p[dir="auto"]');
+                    return false;
+                }
+
+                // 向上寻找具有 contenteditable="true" 的父级
+                let titleEl = titleP;
+                while (titleEl && titleEl !== document.body) {
+                    if (titleEl.getAttribute('contenteditable') === 'true') {
+                        break;
+                    }
+                    titleEl = titleEl.parentElement;
+                }
+
+                if (!titleEl || titleEl === document.body) {
+                    // 如果没找到，使用 p 本身的父级
+                    titleEl = titleP.parentElement;
+                }
+
+                console.log('[标题] 找到标题元素:', titleEl?.tagName, titleEl?.getAttribute('contenteditable'));
+
+                // 聚焦
+                if (titleEl?.focus) {
+                    titleEl.focus();
+                }
+
+                // selectAll - 全选
+                document.execCommand('selectAll', false, null);
+
+                // insertText - 插入文本
+                document.execCommand('insertText', false, cleanTitle);
+
+                // 触发 input 事件
+                titleEl.dispatchEvent(new Event('input', { bubbles: true }));
+
+                console.log('[标题] ArtiPub 注入完成');
+
+                return true;
+            }""", clean_title)
             await asyncio.sleep(0.3)
 
-            # 清空（物理清空增强：确保顽固字符被粉碎）
-            logger.info("🗑️ [标题] 物理清空增强...")
-            await page.keyboard.press("Control+A")
-            await asyncio.sleep(0.2)
-            await page.keyboard.press("Backspace")
-            await asyncio.sleep(0.2)
-            await page.keyboard.press("Control+A")
-            await asyncio.sleep(0.2)
-            await page.keyboard.press("Delete")
-            await asyncio.sleep(0.2)
-
-            # 注入标题 - 使用 evaluate 传参，严禁 f-string
-            await page.evaluate("(title) => { document.execCommand('insertText', false, title); }", title)
-            await asyncio.sleep(0.5)
+            # ========================================
+            # v13.0: 物理执行 Enter
+            # ========================================
+            logger.info("⌨️ [标题] 物理执行 Enter...")
+            await page.keyboard.press("Enter")
+            await asyncio.sleep(0.3)
 
             # Tab 失焦
             await page.keyboard.press("Tab")
-            await asyncio.sleep(0.5)
+            await asyncio.sleep(0.3)
 
-            logger.info("✅ [标题] 物理注入完成")
+            logger.info("✅ [标题] 物理注入完成 (v13.0 正文级对待 + p[dir='auto'] + ArtiPub 方案版)")
             return True
         except Exception as e:
             logger.debug(f"[标题] 物理注入异常: {e}")
+            # 尝试降级方案
+            return await self._title_fallback(page, title.replace('#', '').strip())
+
+    async def _title_fallback(self, page: Page, title: str) -> bool:
+        """
+        标题注入降级方案 - 兜底方案
+
+        当 p[dir="auto"] 不存在时使用
+        """
+        try:
+            logger.info("🔄 [标题] 执行降级方案...")
+
+            # 查找所有 contenteditable="true" 的元素
+            await page.evaluate("""(cleanTitle) => {
+                console.log('[标题降级] 开始查找 contenteditable 元素...');
+
+                // 查找所有 contenteditable="true" 的元素
+                const elements = document.querySelectorAll('[contenteditable="true"]');
+
+                // 尝试找到最可能作为标题输入框的元素（通常是第一个）
+                if (elements.length > 0) {
+                    const titleEl = elements[0];
+
+                    // 检查是否包含 p[dir="auto"]
+                    const hasPDirAuto = titleEl.querySelector('p[dir="auto"]');
+
+                    if (hasPDirAuto) {
+                        console.log('[标题降级] 找到包含 p[dir="auto"] 的元素');
+                    }
+
+                    // 聚焦
+                    if (titleEl?.focus) {
+                        titleEl.focus();
+                    }
+
+                    // selectAll - 全选
+                    document.execCommand('selectAll', false, null);
+
+                    // insertText - 插入文本
+                    document.execCommand('insertText', false, cleanTitle);
+
+                    // 触发 input 事件
+                    titleEl.dispatchEvent(new Event('input', { bubbles: true }));
+
+                    console.log('[标题降级] 注入完成');
+
+                    return true;
+                }
+
+                console.error('[标题降级] 未找到 contenteditable 元素');
+                return false;
+            }""", title)
+            await asyncio.sleep(0.3)
+
+            # 物理执行 Enter
+            await page.keyboard.press("Enter")
+            await asyncio.sleep(0.3)
+
+            logger.info("✅ [标题] 降级方案执行完成")
+            return True
+        except Exception as e:
+            logger.debug(f"[标题] 降级方案异常: {e}")
             return False
 
     async def _physical_write_content(self, page: Page, content: str) -> bool:
         """
-        正文物理注入 v10.1 - 深度唤醒版 (Rule #1)
+        正文物理注入 v13.0 - 清洗补丁 + ArtiPub execCommand + Space+Backspace 版 (Golden Rule #1)
 
-        关键规则：
-        1. 严禁使用 f-string 演接正文，使用 page.evaluate(JS_CODE, content) 模式传参
-        2. 编辑器唤醒增强：iframe 找不到时尝试页面刷新或物理点击
-        3. 深度唤醒：点击 iframe 中心后，立即发送 a -> Backspace 激活编辑器
-        4. 注入方式增强：不仅触发 paste，还要 el.focus() + document.execCommand('insertText')
-        5. 状态固化组合键：End -> Enter -> Backspace -> Tab，间隔 200ms
-        6. API 修正：统一使用 page.keyboard
-
-        v10.1 新增补丁：
-        - 深度唤醒：按键 a -> Backspace 强制触发 input 事件
-        - 注入增强：paste + focus + execCommand 三重注入
-        - 状态固化：按键间隔增加到 200ms
+        v13.0 核心修复：
+        1. 锁定 iframe 内 [contenteditable="true"] 元素
+        2. 使用 ArtiPub 的 insertHTML 方案（避开 Virtual DOM 冲突）
+        3. 注入后物理执行 Space + Backspace 激活 React
         """
         try:
             # ========================================
-            # 1. 处理正文区域遮挡残留 - (10, 10) 物理点击
+            # 精准清场
             # ========================================
-            logger.info("🧹 [正文] 粉碎正文区域透明遮罩...")
-            try:
-                await page.mouse.click(10, 10)
-                await asyncio.sleep(0.15)
-            except Exception as e:
-                logger.debug(f"[正文] 坐标点击异常: {e}")
+            await self._force_remove_interferences(page)
+            await asyncio.sleep(0.2)
 
             # ========================================
-            # 2. 编辑器唤醒增强 - 等待并物理点击激活 iframe
+            # 等待 iframe 加载
             # ========================================
-            logger.info("🔍 [正文] 编辑器唤醒 - 等待 iframe 加载...")
+            logger.info("🔍 [正文] 等待 iframe 加载...")
             iframe_element = None
             try:
                 iframe_element = await page.wait_for_selector("iframe", timeout=10000)
             except Exception as e:
                 logger.error(f"❌ [正文] 未找到 iframe: {e}")
-                # 编辑器唤醒增强 - 尝试页面刷新或物理点击
-                logger.info("🔄 [正文] 编辑器唤醒增强 - 尝试物理点击激活懒加载...")
-                try:
-                    await page.mouse.click(640, 400)  # 页面中心点击
-                    await asyncio.sleep(1)
-                    # 再次尝试查找 iframe
-                    iframe_element = await page.query_selector("iframe")
-                    if iframe_element:
-                        logger.info("✅ [正文] 物理点击后找到 iframe")
-                except:
-                    pass
-
-                if not iframe_element:
-                    iframe_info = await page.evaluate("""() => {
-                        const iframes = document.querySelectorAll('iframe');
-                        return Array.from(iframes).map(iframe => ({
-                            id: iframe?.id || 'no-id',
-                            class: iframe?.className || 'no-class',
-                            src: iframe?.src ? iframe?.src.substring(0, 50) : 'no-src'
-                        }));
-                    }""")
-                    logger.error(f"[正文] 页面 iframe 诊断信息: {iframe_info}")
-                    return False
-
-            # 获取 iframe 的 bounding_box 并物理点击中心位置
-            try:
-                box = await iframe_element.bounding_box()
-                if box:
-                    center_x = box['x'] + box['width'] / 2
-                    center_y = box['y'] + box['height'] / 2
-                    logger.info(f"🖱️ [正文] 物理点击 iframe 中心: ({center_x}, {center_y})")
-                    await page.mouse.click(center_x, center_y)
-                    await asyncio.sleep(0.3)
-            except Exception as e:
-                logger.debug(f"[正文] iframe 中心点击异常: {e}")
+                return False
 
             # ========================================
-            # 3. 切换到 iframe 并探测内部结构
+            # 切换到 iframe 并注入
             # ========================================
             logger.info("🔄 [正文] 切换到 iframe 内部...")
             iframe = await iframe_element.content_frame()
@@ -568,322 +532,224 @@ class BaijiahaoPublisher(BasePublisher):
                 logger.error("❌ [正文] iframe 内容无法访问")
                 return False
 
-            await asyncio.sleep(0.5)
-
-            # 增强 Iframe 内部探测 - 优先查找 [contenteditable="true"] 元素
-            editor_target = await iframe.evaluate("""() => {
-                const editables = document.querySelectorAll('[contenteditable="true"]');
-                for (let el of editables) {
-                    if (!el) continue;
-                    const style = window.getComputedStyle(el);
-                    if (style?.display !== 'none' && style?.visibility !== 'hidden') {
-                        return { found: true, type: 'contenteditable', tag: el?.tagName };
-                    }
-                }
-                if (document?.body) {
-                    return { found: true, type: 'body', tag: 'BODY' };
-                }
-                return { found: false };
-            }""")
-
-            logger.info(f"🔍 [正文] iframe 内部探测结果: {editor_target}")
-
-            # 根据探测结果点击目标元素
-            if editor_target.get('found'):
-                if editor_target.get('type') == 'contenteditable':
-                    await iframe.evaluate("""() => {
-                        const editables = document.querySelectorAll('[contenteditable="true"]');
-                        for (let el of editables) {
-                            if (!el) continue;
-                            const style = window.getComputedStyle(el);
-                            if (style?.display !== 'none' && style?.visibility !== 'hidden') {
-                                el?.click();
-                                el?.focus();
-                                return;
-                            }
-                        }
-                    }""")
-                else:
-                    await iframe.evaluate("document.body.click()")
-                await asyncio.sleep(0.3)
-            else:
-                logger.error("❌ [正文] iframe 内部未找到可编辑区域")
-                return False
+            await asyncio.sleep(0.3)
 
             # ========================================
-            # 4. 深度唤醒 - 按键 a -> Backspace 激活编辑器 (v10.1 新增)
+            # v13.0: ArtiPub execCommand 方案（避开 Virtual DOM 冲突）
             # ========================================
-            logger.info("⌨️ [正文] 深度唤醒 - 按键 a -> Backspace 激活编辑器...")
-            await page.keyboard.press("a")
-            await asyncio.sleep(0.1)
-            await page.keyboard.press("Backspace")
-            await asyncio.sleep(0.2)
-
-            logger.info("🔍 [正文] 物理唤醒 - Control+Home 定位光标...")
-            await page.keyboard.press("Control+Home")
-            await asyncio.sleep(0.2)
-
-            # ========================================
-            # 5. 增强"全选清空"逻辑 - 先 Control+End 再 Control+A
-            # ========================================
-            logger.info("🗑️ [正文] 增强清空现有内容...")
-            await page.keyboard.press("Control+End")  # 确保光标在末尾
-            await asyncio.sleep(0.1)
-            await page.keyboard.press("Control+A")   # 全选全部内容
-            await asyncio.sleep(0.1)
-            await page.keyboard.press("Backspace")    # 删除
-            await asyncio.sleep(0.3)                  # 清空后增加等待
-
-            # ========================================
-            # 6. 增强注入方式 - paste + focus + execCommand (v10.1 新增)
-            # ========================================
-            logger.info("📝 [正文] 增强注入 - 三重注入模式...")
-            # 使用 evaluate 传参，严禁 f-string 演接
+            logger.info("📝 [正文] ArtiPub execCommand 注入...")
+            # 使用 evaluate 传参，严禁 f-string
             await iframe.evaluate("""(text) => {
-                const target = document.querySelector('[contenteditable="true"]') || document.body;
+                // 定位：锁定 [contenteditable="true"] 元素
+                const el = document.querySelector('[contenteditable="true"]') || document.activeElement || document.body;
 
-                // 注入方式 1: DataTransfer 模拟 paste
-                const dt = new DataTransfer();
-                dt.setData('text/plain', text);
-                target?.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true }));
-
-                // 注入方式 2: el.focus() 强制聚焦
-                if (target?.focus) {
-                    target.focus();
+                // 聚焦
+                if (el?.focus) {
+                    el.focus();
                 }
 
-                // 注入方式 3: document.execCommand('insertText') 强制插入
-                document.execCommand('insertText', false, text);
+                // selectAll - 全选
+                document.execCommand('selectAll', false, null);
+
+                // insertHTML - 插入 HTML（避开 Virtual DOM 冲突）
+                document.execCommand('insertHTML', false, text);
+
+                // 触发 input 事件
+                el.dispatchEvent(new Event('input', { bubbles: true }));
+
+                console.log('[ArtiPub] execCommand 注入完成');
             }""", content)
-            await asyncio.sleep(0.5)
+            await asyncio.sleep(0.3)
 
             # ========================================
-            # 7. 状态固化组合键 (Rule #1) - 间隔增加到 200ms (v10.1 新增)
+            # v13.0: 物理激活 - Space + Backspace 强制激活 React
             # ========================================
-            logger.info("🔒 [正文] 执行状态固化组合键 (200ms 间隔)...")
-            await page.keyboard.press("End")
-            await asyncio.sleep(0.2)  # 增加到 200ms
-            await page.keyboard.press("Enter")
-            await asyncio.sleep(0.2)  # 增加到 200ms
+            logger.info("⌨️ [正文] 物理激活 - Space + Backspace...")
+            await page.keyboard.press("Space")
+            await asyncio.sleep(0.1)
             await page.keyboard.press("Backspace")
-            await asyncio.sleep(0.2)  # 增加到 200ms
+            await asyncio.sleep(0.2)
 
-            # Tab 失焦 - 关键：失焦触发百家号的自动保存
+            # ========================================
+            # 状态固化组合键
+            # ========================================
+            logger.info("🔒 [正文] 执行状态固化组合键...")
+            await page.keyboard.press("End")
+            await asyncio.sleep(0.2)
+            await page.keyboard.press("Enter")
+            await asyncio.sleep(0.2)
+
+            # Tab 失焦
             await page.keyboard.press("Tab")
-            await asyncio.sleep(0.5)
+            await asyncio.sleep(0.3)
 
-            logger.info("✅ [正文] 物理注入完成 (v10.1 深度唤醒版)")
+            logger.info("✅ [正文] 物理注入完成 (v13.0 清洗补丁 + ArtiPub execCommand + Space+Backspace 版)")
             return True
-
         except Exception as e:
             logger.error(f"❌ [正文] 物理注入异常: {e}")
             return False
 
     async def _physical_upload_cover(self, page: Page, image_path: str) -> bool:
         """
-        封面物理注入 v10.1 - 精准选位版 (Golden Rule #1 & #3)
+        封面物理注入 v13.0 - 触发式挂载 + 协议注入版 (Golden Rule #1 & #3)
 
-        关键规则 (Golden Rule #1 & #3)：
-        1. networkidle 等待：在方法最开始执行 await page.wait_for_load_state("networkidle")
-        2. 深度清场：调用 _force_remove_interferences
-        3. 禁止物理点击：严禁对 file input 执行任何 .click() 或 page.mouse.click() 动作
-        4. 协议直接注入：使用 page.set_input_files 直接设置文件流
-
-        v10.1 新增补丁：
-        - 精准选位：通过 JS 查找 input[type="file"] 时，检查父级/祖先是否包含"封面"或"单图"字样
-        - Tab 切换：注入前物理点击"单图"或"封面"按钮，确保当前处于图片模式
-        - 绝杀点击：注入后执行 button:has-text('确认') 文本定位点击，找不到则物理点击 (640, 480)
+        v13.0 核心重构：
+        1. DNA 诊断：input 标签是隐藏的，且可能在点击"选择封面"后才创建
+        2. 物理激活：page.get_by_text("选择封面").click(force=True)
+        3. 瞬间抓取：点击后立即执行 wait_for_selector('input[type="file"]', timeout=5000)
+        4. 精准属性过滤：执行 JS 标记所有 accept 包含 image 的 input 为 data-target="true"
+        5. 协议注入：使用 set_input_files
         """
         try:
             # ========================================
-            # Golden Rule #1 - networkidle 等待：封面注入前的网络空闲
+            # 精准清场
             # ========================================
-            logger.info("🔄 [封面] 等待网络空闲...")
-            try:
-                await page.wait_for_load_state("networkidle", timeout=10000)
-            except:
-                pass  # 网络空闲等待失败不影响后续流程
-
-            # ========================================
-            # Golden Rule #3 - 深度清场：封面注入前的焦土状态
-            # ========================================
-            logger.info("🧹 [封面] 执行深度清场 - 确保页面为焦土状态...")
             await self._force_remove_interferences(page)
-            await asyncio.sleep(0.5)
+            await asyncio.sleep(0.2)
 
             # ========================================
-            # 滚动到底部 - Null Check 防止 scrollHeight 报错
+            # 视觉锚点 - wheel(0, 500) 唤醒
+            # ========================================
+            logger.info("🖱️ [封面] 视觉锚点 - wheel(0, 500) 唤醒...")
+            await page.mouse.wheel(0, 500)
+            await asyncio.sleep(0.2)
+
+            # ========================================
+            # 滚动到底部
             # ========================================
             await page.evaluate("() => { window.scrollTo(0, document.body ? document.body.scrollHeight : 0); }")
-            await asyncio.sleep(0.5)
-
-            # ========================================
-            # v10.1 新增：Tab 切换 - 物理点击"单图"或"封面"按钮
-            # ========================================
-            logger.info("🔄 [封面] Tab 切换 - 确保当前处于图片模式...")
-            tab_switch_result = await page.evaluate("""() => {
-                // 查找包含"单图"、"封面"、"图片"等字样的按钮或元素
-                const targetLabels = ['单图', '封面', '图片', 'cover', 'image', 'single'];
-                const buttons = document.querySelectorAll('button, div, span, label');
-
-                for (let button of buttons) {
-                    if (!button) continue;
-                    const text = (button?.innerText || button?.textContent || '')?.trim();
-                    if (targetLabels.some(label => text?.includes?.(label))) {
-                        // 检查是否可见
-                        const style = window.getComputedStyle(button);
-                        if (style?.display !== 'none' && style?.visibility !== 'hidden') {
-                            button?.click();
-                            return { clicked: true, text: text?.substring(0, 20) };
-                        }
-                    }
-                }
-                return { clicked: false };
-            }""")
-
-            if tab_switch_result.get('clicked'):
-                logger.info(f"✅ [封面] Tab 切换成功: {tab_switch_result.get('text')}")
-                await asyncio.sleep(0.5)
-            else:
-                logger.info("ℹ️ [封面] 未找到 Tab 切换按钮，继续执行")
-
-            # ========================================
-            # v10.1 新增：精准选位 - 查找图片上传的 file input
-            # ========================================
-            logger.info("🖼️ [封面] 精准选位 - 查找图片上传 input...")
-            image_file_input_found = await page.evaluate("""() => {
-                const fileInputs = document.querySelectorAll('input[type="file"]');
-                const targetKeywords = ['封面', '单图', '图片', 'cover', 'image', '封面图'];
-
-                for (let input of fileInputs) {
-                    if (!input) continue;
-
-                    // 检查 input 本身的属性
-                    const accept = input?.accept || '';
-                    const isImageInput = accept.includes('image') || !accept;  // accept 包含 image 或为空
-
-                    if (!isImageInput) continue;
-
-                    // 向上递归查找父级/祖先元素是否包含目标关键词
-                    let ancestor = input?.parentElement;
-                    while (ancestor && ancestor !== document.body && ancestor !== document.documentElement) {
-                        const ancestorText = (ancestor?.innerText || ancestor?.textContent || '')?.trim();
-                        if (targetKeywords.some(keyword => ancestorText?.includes?.(keyword))) {
-                            console.log(`[精准选位] 找到图片上传 input，祖先包含: "${ancestorText?.substring(0, 30)}..."`);
-                            return { found: true, reason: 'ancestor', text: ancestorText?.substring(0, 30) };
-                        }
-
-                        // 检查 class 或 id
-                        const classStr = ancestor?.className || '';
-                        const idStr = ancestor?.id || '';
-                        if (targetKeywords.some(keyword => classStr?.toLowerCase?.().includes?.(keyword?.toLowerCase()) ||
-                                                        idStr?.toLowerCase?.().includes?.(keyword?.toLowerCase()))) {
-                            console.log(`[精准选位] 找到图片上传 input，class/id 包含关键词`);
-                            return { found: true, reason: 'class-id', class: classStr, id: idStr };
-                        }
-
-                        ancestor = ancestor?.parentElement;
-                    }
-
-                    // 如果没找到明确的祖先标记，使用第一个 image input
-                    return { found: true, reason: 'first-image', accept: accept };
-                }
-
-                return { found: false };
-            }""")
-
-            if image_file_input_found.get('found'):
-                logger.info(f"✅ [封面] 精准选位成功: {image_file_input_found.get('reason')}")
-            else:
-                logger.warning("⚠️ [封面] 未找到精准的图片上传 input，尝试通用选择")
-
-            # ========================================
-            # 显形劫持 - 强制显示所有 input[type="file"]
-            # ========================================
-            logger.info("🖼️ [封面] 执行显形劫持 - 强制显示 file input...")
-            file_input_count = await page.evaluate("""() => {
-                const fileInputs = document.querySelectorAll('input[type="file"]');
-                fileInputs?.forEach((el, index) => {
-                    if (!el) return;
-                    el.style.cssText = 'display:block !important; position:fixed; top:0; left:0; width:100px; height:50px; z-index:99999; opacity:1; visibility:visible;';
-                    el?.setAttribute('data-autogeo-index', index);
-                    console.log(`[显形劫持] file input ${index}:`, el?.id || el?.className);
-                });
-                return fileInputs?.length || 0;
-            }""")
-            logger.info(f"✅ [封面] 发现 {file_input_count} 个 file input")
-
             await asyncio.sleep(0.3)
 
             # ========================================
-            # 协议直接注入 - 严禁物理点击，直接设置文件流 (Golden Rule #1)
+            # v13.0: 触发式挂载 - 点击"选择封面"文本，让 input 被创建
             # ========================================
-            logger.info("📤 [封面] 协议直接注入 - 设置文件路径...")
-            # 使用 page.set_input_files 直接设置，不会弹出系统对话框
-            # 严禁对 input 执行任何 .click() 或 page.mouse.click() 动作
+            logger.info("🖱️ [封面] 触发式挂载 - 点击'选择封面'文本...")
+            cover_clicked = False
+
+            # 尝试多种选择器
+            cover_selectors = [
+                "选择封面",
+                "添加封面",
+                "上传封面",
+                "添加图片",
+                "选择图片",
+            ]
+
+            for selector_text in cover_selectors:
+                try:
+                    cover_element = page.get_by_text(selector_text)
+                    count = await cover_element.count()
+                    if count > 0:
+                        await cover_element.first.click(force=True)
+                        logger.info(f"✅ [封面] '{selector_text}' 点击成功")
+                        cover_clicked = True
+                        break
+                except Exception as e:
+                    logger.debug(f"[封面] '{selector_text}' 点击异常: {e}")
+                    continue
+
+            # 如果文本方式失败，尝试选择器方式
+            if not cover_clicked:
+                selector_options = [
+                    '.select-cover',
+                    '.cover-picker',
+                    '[class*="add-image"]',
+                    '[class*="upload"]',
+                    '[class*="cover"]',
+                ]
+                for selector in selector_options:
+                    try:
+                        locator = page.locator(selector)
+                        count = await locator.count()
+                        if count > 0:
+                            first = locator.first
+                            is_visible = await first.is_visible()
+                            if is_visible:
+                                await first.click(force=True)
+                                logger.info(f"✅ [封面] 选择器点击成功: {selector}")
+                                cover_clicked = True
+                                break
+                    except Exception as e:
+                        logger.debug(f"[封面] 选择器 {selector} 点击异常: {e}")
+                        continue
+
+            # ========================================
+            # v13.0: 瞬间抓取 - 点击后立即等待 input[type="file"]
+            # ========================================
+            logger.info("⏳ [封面] 瞬间抓取 - 等待 input[type='file'] 出现...")
+            input_element = None
             try:
-                await page.set_input_files("input[type='file']", image_path)
-                logger.info("✅ [封面] 文件协议注入完成（无原生对话框）")
+                input_element = await page.wait_for_selector('input[type="file"]', timeout=5000)
+                logger.info("✅ [封面] input[type='file'] 已出现")
             except Exception as e:
-                logger.warning(f"⚠️ [封面] 协议注入异常，尝试查找元素: {e}")
-                # 降级方案：使用 element.set_input_files
-                file_input = await page.query_selector("input[type='file']")
-                if file_input:
-                    await file_input.set_input_files(image_path)
-                    logger.info("✅ [封面] 元素设置文件完成")
-                else:
-                    logger.error("❌ [封面] 未找到 file input")
-                    return False
+                logger.debug(f"[封面] 等待 input[type='file'] 超时: {e}")
 
             # ========================================
-            # 键盘触发 - 如果页面没有反应，使用 Enter 键触发
+            # v13.0: 精准属性过滤 - 标记所有 accept 包含 image 的 input
             # ========================================
-            logger.info("⌨️ [封面] 等待上传处理...")
-            await asyncio.sleep(2)
+            logger.info("🖼️ [封面] 精准属性过滤 - 标记 accept 包含 image 的 input...")
+            await page.evaluate("""() => {
+                const inputs = document.querySelectorAll('input[type="file"]');
+                console.log('[精准属性过滤] 找到', inputs.length, '个 input[type="file"]');
 
-            # 检查是否有上传反应，如果没有则键盘触发
-            upload_check = await page.evaluate("""() => {
-                // 检查是否有上传中的指示器或变化
-                const uploadIndicators = document.querySelectorAll('[class*="upload"], [class*="loading"], [class*="progress"]');
-                let hasProgress = false;
-                uploadIndicators?.forEach(el => {
-                    if (!el) return;
-                    const style = window.getComputedStyle(el);
-                    if (style?.display !== 'none' && style?.visibility !== 'hidden') {
-                        hasProgress = true;
+                inputs.forEach(input => {
+                    if (!input) return;
+                    const accept = input?.accept || '';
+
+                    // v13.0: 精准属性过滤 - 标记所有 accept 包含 image 的 input
+                    const hasImage = accept.includes('image');
+
+                    if (hasImage) {
+                        input.style.cssText = "display:block !important; position:fixed; top:0; left:0; width:100px; height:50px; z-index:99999;";
+                        input.setAttribute('data-target', 'true');
+                        console.log('[精准属性过滤] 标记 input:', accept);
+                    } else {
+                        console.log('[精准属性过滤] 跳过 input (不包含 image):', accept);
                     }
                 });
-                return {
-                    hasProgress,
-                    inputCount: document.querySelectorAll('input[type="file"]')?.length || 0
-                };
             }""")
 
-            logger.info(f"🔍 [封面] 上传检查结果: {upload_check}")
+            # 检查是否成功标记
+            target_count = await page.evaluate("""() => {
+                const targets = document.querySelectorAll('input[data-target="true"]');
+                return targets.length;
+            }""")
+            logger.info(f"✅ [封面] 成功标记 {target_count} 个封面 input")
 
-            # 如果没有明显的上传进度，尝试键盘触发
-            if not upload_check.get('hasProgress'):
-                logger.info("⌨️ [封面] 未检测到上传进度，使用 Enter 键触发...")
-                await page.keyboard.press("Enter")
-                await asyncio.sleep(1)
+            if target_count == 0:
+                logger.error("❌ [封面] 未找到符合条件的封面 input")
+                return False
 
-                # 再次尝试
-                await page.keyboard.press("Enter")
-                await asyncio.sleep(0.5)
+            await asyncio.sleep(0.2)
+
+            # ========================================
+            # v13.0: 协议注入 - 使用 set_input_files
+            # ========================================
+            logger.info("📤 [封面] 协议注入 - set_input_files...")
+            try:
+                await page.set_input_files("input[data-target='true']", image_path)
+                logger.info("✅ [封面] 文件协议注入完成")
+            except Exception as e:
+                logger.warning(f"⚠️ [封面] 协议注入异常: {e}")
+                # 降级方案
+                target_input = await page.query_selector("input[data-target='true']")
+                if target_input:
+                    await target_input.set_input_files(image_path)
+                    logger.info("✅ [封面] 元素设置文件完成")
+                else:
+                    logger.error("❌ [封面] 未找到 data-target input")
+                    return False
 
             # 等待上传处理
             await asyncio.sleep(2)
 
             # ========================================
-            # v10.1 新增：绝杀点击 - 文本定位 button:has-text('确认')
+            # 物理点击确认按钮
             # ========================================
-            logger.info("🔘 [封面] 绝杀点击 - 文本定位确认按钮...")
-
-            # 等待可能的裁剪框或确认按钮
-            await asyncio.sleep(1)
-
-            # 使用 button:has-text('确认') 文本定位点击
+            logger.info("🔘 [封面] 物理点击确认按钮...")
             confirm_clicked = False
+
+            # 方法1: 选择器点击
             confirm_selectors = [
                 "button:has-text('确认')",
                 "button:has-text('确定')",
@@ -893,116 +759,291 @@ class BaijiahaoPublisher(BasePublisher):
 
             for selector in confirm_selectors:
                 try:
-                    # 使用 page.locator(...).filter(visible=True) 进行物理点击
                     locator = page.locator(selector)
                     count = await locator.count()
                     if count > 0:
-                        # 检查是否可见
-                        try:
-                            first = locator.first
-                            is_visible = await first.is_visible()
-                            if is_visible:
-                                await first.click()
-                                logger.info(f"✅ [封面] 绝杀点击成功: {selector}")
-                                confirm_clicked = True
-                                break
-                        except:
-                            pass
+                        first = locator.first
+                        is_visible = await first.is_visible()
+                        if is_visible:
+                            await first.click(force=True)
+                            logger.info(f"✅ [封面] 确认按钮点击成功: {selector}")
+                            confirm_clicked = True
+                            break
                 except Exception as e:
                     logger.debug(f"[封面] 选择器 {selector} 点击异常: {e}")
                     continue
 
-            # 如果文本定位点击失败，使用坐标暴力点击 (640, 480)
+            # 方法2: 物理坐标点击兜底
             if not confirm_clicked:
-                logger.info("🖱️ [封面] 文本定位失败，使用坐标暴力点击 (640, 480)...")
                 try:
+                    logger.info("🖱️ [封面] 坐标点击兜底 (640, 480)...")
                     await page.mouse.click(640, 480)
-                    await asyncio.sleep(0.5)
+                    logger.info("✅ [封面] 坐标点击完成")
                 except Exception as e:
                     logger.debug(f"[封面] 坐标点击异常: {e}")
 
             # ========================================
-            # Golden Rule #3 - 弹窗复发压制：三次 Escape
+            # 三次 Escape 压制
             # ========================================
-            logger.info("🧹 [封面] 执行弹窗复发压制 - 三重 Escape...")
+            logger.info("🧹 [封面] 执行三重 Escape...")
             for i in range(3):
                 await page.keyboard.press("Escape")
                 await asyncio.sleep(0.15)
             await asyncio.sleep(0.3)
 
-            # 等待确认处理完成
-            await asyncio.sleep(2)
-
-            logger.info("✅ [封面] 封面注入完成 (v10.1 精准选位版)")
+            logger.info("✅ [封面] 封面注入完成 (v13.0 触发式挂载 + 协议注入版)")
             return True
-
         except Exception as e:
             logger.error(f"❌ [封面] 物理注入异常: {e}")
             return False
 
-    async def _brutal_publish_click(self, page: Page) -> bool:
+    async def _check_security_verification(self, page: Page) -> bool:
         """
-        暴力点击发布按钮 v10.1
+        验证码监测逻辑 - 应对百度安全验证拦截
 
-        多坐标并发点击，确保命中
-        API 修正：统一使用 page.keyboard
+        v13.1 核心修复：
+        1. 检测是否出现了包含"安全验证"、"拖动滑块"字样的弹窗
+        2. 特征码定位：div.cheetah-modal-root 或文本包含"百度安全验证"的容器
+        3. 智能等待：while 循环，每隔 1 秒检测一次，最多等待 60 秒
+        4. 60 秒后弹窗还在，返回 False 终止任务
+        5. 弹窗消失（用户已手动滑完），返回 True 继续执行
+
+        返回值：True 表示验证通过/无验证，False 表示验证超时
         """
         try:
-            # 滚动到底部 - Null Check 防止 scrollHeight 报错
+            logger.info("🔍 [验证码] 检测是否出现百度安全验证...")
+
+            # ========================================
+            # 检测验证码弹窗是否存在
+            # ========================================
+            has_verification = False
+
+            # 方法1: 检测 div.cheetah-modal-root
+            modal_count = await page.locator('div.cheetah-modal-root').count()
+            if modal_count > 0:
+                has_verification = True
+                logger.info(f"✅ [验证码] 检测到 div.cheetah-modal-root (找到 {modal_count} 个)")
+
+            # 方法2: 检测文本包含"安全验证"、"拖动滑块"
+            if not has_verification:
+                verification_texts = ["安全验证", "拖动滑块", "百度安全验证"]
+                for text in verification_texts:
+                    try:
+                        locator = page.get_by_text(text)
+                        count = await locator.count()
+                        if count > 0:
+                            has_verification = True
+                            logger.info(f"✅ [验证码] 检测到文本: '{text}' (找到 {count} 个)")
+                            break
+                    except Exception:
+                        continue
+
+            if not has_verification:
+                logger.info("✅ [验证码] 未检测到验证码弹窗")
+                return True
+
+            # ========================================
+            # 发现验证码，提醒用户并智能等待
+            # ========================================
+            logger.warning("⚠️ [验证码] 触发百度安全验证，请在浏览器中手动完成滑动！")
+
+            # 智能等待：while 循环，每隔 1 秒检测一次，最多等待 60 秒
+            max_wait = 60
+            elapsed = 0
+
+            while elapsed < max_wait:
+                await asyncio.sleep(1)
+                elapsed += 1
+
+                if elapsed % 10 == 0:  # 每 10 秒记录一次
+                    logger.info(f"⏳ [验证码] 等待用户手动滑完... 已等待 {elapsed} 秒")
+
+                # 检测弹窗是否消失
+                modal_still_exists = await page.locator('div.cheetah-modal-root').count() > 0
+                verification_text_still_exists = False
+                for text in ["安全验证", "拖动滑块", "百度安全验证"]:
+                    try:
+                        if await page.get_by_text(text).count() > 0:
+                            verification_text_still_exists = True
+                            break
+                    except Exception:
+                        continue
+
+                if not modal_still_exists and not verification_text_still_exists:
+                    logger.info("✅ [验证码] 验证码弹窗已消失，继续执行后续步骤")
+                    return True
+
+            # 60 秒后弹窗还在
+            logger.error("❌ [验证码] 60 秒后验证码弹窗仍在，终止任务")
+            return False
+
+        except Exception as e:
+            logger.debug(f"[验证码] 检测异常: {e}")
+            # 出现异常时，默认继续执行
+            return True
+
+    async def _brutal_publish_click(self, page: Page) -> bool:
+        """
+        暴力点击发布按钮 v13.1 - DNA 级精准定位 + 验证码检测 + 二次确认处理版
+
+        v13.1 核心修复：
+        1. DNA 特征：类名包含 cheetah-btn-primary，文本只有"发布"
+        2. 绝对精准定位：button.cheetah-btn-primary + 过滤文本"发布"且不含"定时"
+        3. 物理点击补丁：scroll_into_view + 获取坐标 + 安全位点击
+        4. 验证码检测：点击后立即调用 _check_security_verification
+        5. 应对"AI 生成内容"二次确认：验证通过后 1.5 秒检测
+        """
+        try:
+            # ========================================
+            # 滚动到底部
+            # ========================================
+            logger.info("📜 [发布] 滚动到底部...")
             await page.evaluate("() => { window.scrollTo(0, document.body ? document.body.scrollHeight : 0); }")
-            await asyncio.sleep(0.5)
+            await asyncio.sleep(0.3)
 
-            # 多坐标暴力点击可能的发布按钮位置
-            click_coords = [
-                (640, 600),  # 屏幕中心偏下
-                (640, 650),  # 稍微偏下
-                (640, 700),  # 更偏下
-                (540, 650),  # 左侧区域
-                (740, 650),  # 右侧区域
-            ]
+            # ========================================
+            # v13.1: DNA 级精准定位 - 蓝色"发布"按钮
+            # ========================================
+            logger.info("🔍 [发布] DNA 级精准定位蓝色'发布'按钮...")
 
-            for x, y in click_coords:
+            # 绝对精准定位：是 button，含 primary 类，文本匹配"发布"，且不含"定时"
+            publish_btn = page.locator('button.cheetah-btn-primary').filter(has_text=re.compile(r"^发布$")).first
+
+            # 检查是否找到
+            btn_count = await publish_btn.count()
+            if btn_count == 0:
+                logger.warning("⚠️ [发布] DNA 定位未找到，尝试降级方案...")
+                # 降级方案：使用通用选择器
+                fallback_selectors = [
+                    "button:has-text('发布')",
+                    "button:has-text('提交')",
+                ]
+                for selector in fallback_selectors:
+                    try:
+                        locator = page.locator(selector)
+                        count = await locator.count()
+                        if count > 0:
+                            for i in range(count):
+                                element = locator.nth(i)
+                                is_visible = await element.is_visible()
+                                if is_visible:
+                                    await element.click(force=True)
+                                    logger.info(f"✅ [发布] 降级选择器点击成功: {selector}")
+                                    break
+                            else:
+                                break
+                    except Exception:
+                        continue
+            else:
+                logger.info(f"✅ [发布] DNA 定位成功 (找到 {btn_count} 个按钮)")
+
+                # ========================================
+                # v13.1: 物理点击补丁 - 避开周边干扰
+                # ========================================
+                logger.info("📐 [发布] 物理点击补丁...")
+
+                # scroll_into_view_if_needed 确保按钮在视野内
+                await publish_btn.scroll_into_view_if_needed()
+                await asyncio.sleep(0.3)
+
+                # 获取物理坐标
                 try:
-                    logger.info(f"🖱️ [发布] 暴力点击坐标: ({x}, {y})")
-                    await page.mouse.click(x, y)
-                    await asyncio.sleep(0.2)
-                except Exception:
-                    pass
+                    box = await publish_btn.bounding_box()
+                    if box:
+                        # 计算中心点
+                        center_x = box['x'] + box['width'] / 2
+                        center_y = box['y'] + box['height'] / 2
+                        logger.info(f"📍 [发布] 按钮坐标: ({center_x}, {center_y})")
 
-            # 尝试选择器方式
-            selectors = [
-                "button:has-text('发布')",
-                "button:has-text('提交')",
-                "button:has-text('确认')",
-            ]
+                        # 点击前等待
+                        await asyncio.sleep(0.5)
 
-            for selector in selectors:
-                try:
-                    elements = await page.query_selector_all(selector)
-                    for element in elements:
+                        # 安全位点击：点击按钮中心点
+                        await page.mouse.click(center_x, center_y)
+                        logger.info("✅ [发布] 中心点点击完成")
+
+                        # 点击后等待
+                        await asyncio.sleep(0.5)
+                    else:
+                        # 降级：直接使用 force=True 点击
+                        await publish_btn.click(force=True)
+                        logger.info("✅ [发布] force=True 点击完成")
+                except Exception as e:
+                    logger.debug(f"[发布] 物理点击补丁异常: {e}")
+                    # 降级：直接使用 force=True 点击
+                    await publish_btn.click(force=True)
+                    logger.info("✅ [发布] force=True 点击完成")
+
+            # ========================================
+            # v13.1: 点击第一次"发布"按钮后，立即检测验证码
+            # ========================================
+            logger.info("🔍 [发布] 点击后立即检测百度安全验证...")
+            await asyncio.sleep(1.0)  # 等待 1 秒让验证码弹窗出现
+
+            # 调用验证码检测
+            verification_passed = await self._check_security_verification(page)
+            if not verification_passed:
+                logger.error("❌ [发布] 安全验证未通过，终止任务")
+                return False
+
+            # ========================================
+            # v13.1: 应对"AI 生成内容"二次确认
+            # ========================================
+            logger.info("⏳ [发布] 验证通过，等待 1.5 秒，检查是否需要二次确认...")
+            await asyncio.sleep(1.5)
+
+            # 检查页面是否跳转
+            current_url = page.url
+            if not ("success" in current_url.lower() or
+                    "articles" in current_url.lower() or
+                    "/builderrc/content/index" in current_url.lower()):
+                logger.warning("⚠️ [发布] 页面未跳转，执行二次确认补刀...")
+
+                # 物理补刀点击：使用组合选择器
+                confirm_locator = page.locator('button.cheetah-btn-primary:has-text("发布"), button:has-text("确认")').last
+
+                # 检查是否找到
+                confirm_count = await confirm_locator.count()
+                if confirm_count > 0:
+                    await confirm_locator.click(force=True)
+                    logger.info("✅ [发布] 二次确认补刀完成")
+                else:
+                    # 再次尝试通用选择器
+                    for selector in ["button:has-text('发布')", "button:has-text('确认')"]:
                         try:
-                            is_visible = await element.is_visible()
-                            if is_visible:
-                                await element.click(force=True)
-                                logger.info(f"✅ [发布] 选择器点击成功: {selector}")
-                                return True
+                            locator = page.locator(selector)
+                            count = await locator.count()
+                            if count > 0:
+                                for i in range(count):
+                                    element = locator.nth(i)
+                                    is_visible = await element.is_visible()
+                                    if is_visible:
+                                        await element.click(force=True)
+                                        logger.info(f"✅ [发布] 二次确认补刀成功: {selector}")
+                                        break
                         except Exception:
                             continue
-                except Exception:
-                    continue
+            else:
+                logger.info("✅ [发布] 页面已跳转，无需二次确认")
 
-            await asyncio.sleep(2)
+            logger.info("✅ [发布] 物理点击完成 (v13.1 DNA 级精准定位 + 二次确认处理版)")
             return True
         except Exception as e:
             logger.debug(f"[发布] 暴力点击异常: {e}")
             return False
 
     async def _wait_for_publish_result(self, page: Page) -> Dict[str, Any]:
-        """等待发布结果"""
+        """
+        等待发布结果 v13.0
+
+        v13.0 核心修复：增加检测 /builderrc/content/index
+        """
         for i in range(30):
             current_url = page.url
-            # 检查 URL 变化或包含成功标识
-            if "success" in current_url.lower() or "articles" in current_url.lower():
+            # v13.0: 强化发布结果检测
+            if ("success" in current_url.lower() or
+                "articles" in current_url.lower() or
+                "/builderrc/content/index" in current_url.lower()):
                 logger.success(f"✅ [百家号] 发布成功: {current_url}")
                 return {"success": True, "platform_url": current_url}
             await asyncio.sleep(1)
@@ -1022,7 +1063,7 @@ class BaijiahaoPublisher(BasePublisher):
                     resp = await client.get(url)
                     if resp.status_code == 200:
                         if len(resp.content) < 1000: continue
-                        tmp_path = os.path.join(tempfile.gettempdir(), f"bjh_v101_{random.randint(1000, 9999)}.jpg")
+                        tmp_path = os.path.join(tempfile.gettempdir(), f"bjh_v13_{random.randint(1000, 9999)}.jpg")
                         with open(tmp_path, "wb") as f:
                             f.write(resp.content)
                         paths.append(tmp_path)
@@ -1036,7 +1077,7 @@ class BaijiahaoPublisher(BasePublisher):
 # 注册
 BAIJIAHAO_CONFIG = {
     "name": "百家号",
-    "publish_url": "https://baijiahao.baidu.com/builder/rc/edit?type=news",
+    "publish_url": "https://baijiahao.baidu.com/builder/rc/edit?type=news&is_from_cms=1",
     "color": "#E53935"
 }
 registry.register("baijiahao", BaijiahaoPublisher("baijiahao", BAIJIAHAO_CONFIG))

@@ -83,28 +83,45 @@ class ToutiaoPublisher(BasePublisher):
                         pass
 
     async def _physical_type_title_v59(self, page: Page, title: str):
-        """增强版标题锁定：选择器 + 物理坐标双保险"""
+        """增强版标题锁定：DNA 匹配 + 物理锚定修复"""
         try:
             # 1. 确保滚到最上方
             await page.evaluate("window.scrollTo(0, 0)")
             await asyncio.sleep(1)
 
-            title_sel = "textarea.byte-input__inner, .title-input textarea, textarea[placeholder*='标题']"
+            # 2. 精准定位：使用 2～30个字 唯一特征码
+            title_sel = 'textarea[placeholder*="2～30个字"]'
             target = page.locator(title_sel).first
 
-            # 2. 尝试点击（设定 5 秒短超时，防止死等）
-            try:
-                await target.click(force=True, timeout=5000)
-            except:
-                logger.warning("选择器点击超时，尝试使用物理坐标点击标题区...")
-                # 直接点标题所在坐标（1280x800 分辨率下的经验位置）
-                await page.mouse.click(450, 220)
+            # 3. 物理锚定修复
+            await target.scroll_into_view_if_needed()
+            await asyncio.sleep(0.3)
+            # 避障滚动：向上回退 100 像素，防止被悬浮工具栏遮挡
+            await page.evaluate("() => window.scrollBy(0, -100)")
+            await asyncio.sleep(0.5)
 
-                # 3. 物理按键清空并输入
+            # 4. 获取 bounding_box 并物理点击中心点
+            box = await target.bounding_box()
+            if box:
+                center_x = box['x'] + box['width'] / 2
+                center_y = box['y'] + box['height'] / 2
+                logger.info(f"🎯 标题物理点击中心点: ({center_x:.1f}, {center_y:.1f})")
+                await page.mouse.click(center_x, center_y)
+            else:
+                logger.warning("无法获取 bounding_box，使用 force=True 点击")
+                await target.click(force=True)
+
+            # 5. 清空旧内容
             await page.keyboard.press("Control+A")
             await page.keyboard.press("Backspace")
-            await page.keyboard.type(title, delay=30)
+
+            # 6. 物理输入
+            await page.keyboard.type(title, delay=50)
+
+            # 7. 最后激活：按 Enter 再按 Tab，确保监听到字数变化
+            await page.keyboard.press("Enter")
             await page.keyboard.press("Tab")
+
             logger.info("✅ 标题物理输入完成")
         except:
             pass
