@@ -7,6 +7,7 @@
 import os
 import json
 import hashlib
+import asyncio
 from pathlib import Path
 from typing import Dict, Any, Optional, Tuple
 from datetime import datetime, timedelta
@@ -249,12 +250,13 @@ class SecureSessionManager:
             return "invalid"
 
     async def _perform_heartbeat_check(
-        self, 
+        self,
         platform: str,
         storage_state: Dict[str, Any]
     ) -> bool:
         """
         执行心跳检测（打开平台页面验证会话）
+        优化：增加超时时间、添加重试机制、优化加载策略
 
         Args:
             platform: AI平台标识
@@ -263,79 +265,132 @@ class SecureSessionManager:
         Returns:
             心跳检测是否成功
         """
-        try:
-            # 获取平台配置
-            platform_config = AI_PLATFORMS.get(platform)
-            if not platform_config:
-                logger.error(f"未知平台: {platform}")
-                return False
+        max_retries = 2
+        retry_count = 0
 
-            platform_url = platform_config.get("url", "")
-            if not platform_url:
-                logger.error(f"平台URL未配置: {platform}")
-                return False
+        while retry_count <= max_retries:
+            try:
+                # 获取平台配置
+                platform_config = AI_PLATFORMS.get(platform)
+                if not platform_config:
+                    logger.error(f"未知平台: {platform}")
+                    return False
 
-            # 启动浏览器并使用存储状态
-            async with async_playwright() as p:
-                browser = await p.chromium.launch(
-                    headless=True,
-                    args=["--no-sandbox", "--disable-setuid-sandbox"]
-                )
+                platform_url = platform_config.get("url", "")
+                if not platform_url:
+                    logger.error(f"平台URL未配置: {platform}")
+                    return False
 
-                try:
-                    # 创建上下文并加载存储状态
-                    context = await browser.new_context(storage_state=storage_state)
-                    page = await context.new_page()
+                # 启动浏览器并使用存储状态
+                async with async_playwright() as p:
+                    browser = await p.chromium.launch(
+                        headless=True,
+                        args=["--no-sandbox", "--disable-setuid-sandbox"]
+                    )
 
-                    # 导航到平台页面
-                    await page.goto(platform_url, wait_until="load", timeout=30000)
-                    await page.wait_for_load_state("networkidle", timeout=20000)
+                    try:
+                        # 创建上下文并加载存储状态
+                        context = await browser.new_context(storage_state=storage_state)
+                        page = await context.new_page()
 
-                    # 检查是否需要登录（通过检测登录元素）
-                    login_indicators = [
-                        "[class*='login']",
-                        "[id*='login']",
-                        "[class*='auth']",
-                        "[id*='auth']",
-                        "button*='登录'",
-                        "button*='Sign in'"
-                    ]
+                        # 导航到平台页面 - 使用更宽松的加载策略
+                        # 使用 domcontentloaded 代替 load，加快响应速度
+                        await page.goto(platform_url, wait_until="domcontentloaded", timeout=60000)
 
-                    # 针对特定平台的额外检测
-                    if platform == 'doubao':
-                        login_indicators.extend([
-                            "[class*='login-btn']",
-                            "[class*='login-button']",
-                            "[href*='login']",
-                            "[class*='account']"
-                        ])
-
-                    has_login = False
-                    for indicator in login_indicators:
+                        # 等待关键元素出现（输入框或登录按钮）
                         try:
-                            elements = await page.query_selector_all(indicator)
-                            if elements:
-                                has_login = True
-                                break
+                            await page.wait_for_selector(
+                                "textarea, input[type='text'], [contenteditable='true'], [class*='login'], button",
+                                timeout=15000,
+                                state="visible"
+                            )
                         except Exception:
-                            continue
+                            # 即使超时也继续检查
+                            pass
 
-                    if has_login:
-                        logger.warning(f"心跳检测失败: 需要登录, platform={platform}")
-                        return False
+                        # 额外等待一小段时间让页面稳定
+                        await asyncio.sleep(2)
 
-                    # 检查是否能访问个人中心或其他需要登录的页面
-                    # 这里根据不同平台实现不同的检查逻辑
-                    # 简化实现，只要能成功加载页面且不需要登录就算通过
-                    logger.info(f"心跳检测成功: platform={platform}")
-                    return True
+                        # 检查是否需要登录（通过检测登录元素）
+                        login_indicators = [
+                            "[class*='login']",
+                            "[id*='login']",
+                            "[class*='auth']",
+                            "[id*='auth']",
+                            "button*='登录'",
+                            "button*='Sign in'"
+                        ]
 
-                finally:
-                    await browser.close()
+                        # 针对特定平台的额外检测
+                        if platform == 'doubao':
+                            login_indicators.extend([
+                                "[class*='login-btn']",
+                                "[class*='login-button']",
+                                "[href*='login']",
+                                "[class*='account']"
+                            ])
 
-        except Exception as e:
-            logger.error(f"心跳检测异常: {e}, platform={platform}")
-            return False
+                        # 针对千问的特殊检测
+                        if platform == 'qianwen':
+                            login_indicators.extend([
+                                "[class*='login-entry']",
+                                "[class*='user-login']"
+                            ])
+
+                        has_login = False
+                        for indicator in login_indicators:
+                            try:
+                                # 使用 query_selector 并检查可见性
+                                element = await page.query_selector(indicator)
+                                if element and await element.is_visible():
+                                    has_login = True
+                                    logger.debug(f"检测到登录元素: {indicator}")
+                                    break
+                            except Exception:
+                                continue
+
+                        if has_login:
+                            logger.warning(f"心跳检测失败: 需要登录, platform={platform}")
+                            return False
+
+                        # 检查是否能找到输入框（说明已登录）
+                        input_selectors = [
+                            "textarea[placeholder*='输入']",
+                            "textarea[placeholder*='提问']",
+                            "[contenteditable='true']",
+                            "textarea"
+                        ]
+
+                        has_input = False
+                        for selector in input_selectors:
+                            try:
+                                element = await page.query_selector(selector)
+                                if element and await element.is_visible():
+                                    has_input = True
+                                    break
+                            except Exception:
+                                continue
+
+                        if not has_input:
+                            logger.warning(f"心跳检测警告: 未找到输入框, platform={platform}")
+                            # 不直接返回False，因为有些页面结构可能不同
+
+                        logger.info(f"心跳检测成功: platform={platform}")
+                        return True
+
+                    finally:
+                        await browser.close()
+
+            except Exception as e:
+                retry_count += 1
+                if retry_count <= max_retries:
+                    logger.warning(f"心跳检测失败，正在重试 ({retry_count}/{max_retries}): {e}, platform={platform}")
+                    await asyncio.sleep(2)  # 等待2秒后重试
+                else:
+                    logger.error(f"心跳检测异常，已重试{max_retries}次: {e}, platform={platform}")
+                    return False
+
+        return False
 
     async def get_session_status_fast(
         self, 

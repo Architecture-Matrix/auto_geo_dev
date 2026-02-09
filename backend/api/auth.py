@@ -41,14 +41,31 @@ async def start_auth_flow(
         授权流程信息
     """
     try:
-        # 验证用户和项目
+        # 宽松验证：如果用户不存在，创建默认用户
         user = db.query(User).filter(User.id == user_id).first()
         if not user:
-            raise HTTPException(status_code=404, detail="用户不存在")
+            # 创建默认用户
+            user = User(
+                id=user_id,
+                username=f"user_{user_id}",
+                email=f"user_{user_id}@example.com"
+            )
+            db.add(user)
+            db.commit()
+            db.refresh(user)
         
+        # 宽松验证：如果项目不存在，创建默认项目
         project = db.query(Project).filter(Project.id == project_id).first()
         if not project:
-            raise HTTPException(status_code=404, detail="项目不存在")
+            # 创建默认项目
+            project = Project(
+                id=project_id,
+                name=f"默认项目_{project_id}",
+                user_id=user_id
+            )
+            db.add(project)
+            db.commit()
+            db.refresh(project)
         
         # 开始授权流程
         result = await auth_service.start_auth_flow(

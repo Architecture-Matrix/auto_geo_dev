@@ -21,7 +21,10 @@ project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
 from backend.database import SessionLocal, init_db
-from backend.database.models import Account, Article, PublishRecord, Project, Keyword, ReferenceArticle
+from backend.database.models import (
+    Account, Article, PublishRecord, Project, Keyword, ReferenceArticle,
+    IndexCheckRecord, GeoArticle, QuestionVariant
+)
 
 
 # ==================== 配置 ====================
@@ -80,8 +83,11 @@ def db():
 def clean_db(db):
     """每个测试后清理数据库"""
     yield db
-    # 清理测试数据
+    # 清理测试数据（按依赖顺序逆序删除）
     db.query(PublishRecord).delete()
+    db.query(GeoArticle).delete()
+    db.query(IndexCheckRecord).delete()
+    db.query(QuestionVariant).delete()
     db.query(Article).delete()
     db.query(Keyword).delete()
     db.query(Project).delete()

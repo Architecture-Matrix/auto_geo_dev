@@ -21,15 +21,15 @@ class DoubaoChecker(AIPlatformChecker):
     async def navigate_to_page(self, page: Page) -> bool:
         """
         豆包平台特殊导航逻辑
-        优化：直接导航到聊天页面，减少等待时间
+        优化：使用与心跳检测一致的URL，确保会话正确恢复
         
         Returns:
             是否成功导航
         """
         try:
-            # 直接导航到聊天页面
-            chat_url = "https://www.doubao.com/chat"
-            self._log("info", f"正在导航到豆包聊天页面: {chat_url}")
+            # 使用与配置一致的URL（与心跳检测保持一致）
+            chat_url = "https://www.doubao.com"
+            self._log("info", f"正在导航到豆包页面: {chat_url}")
 
             # 使用 domcontentloaded 代替 load/networkidle，加快响应速度
             await page.goto(

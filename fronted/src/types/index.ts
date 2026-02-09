@@ -5,7 +5,51 @@
 
 // ==================== 平台相关 ====================
 
-export type PlatformId = 'zhihu' | 'baijiahao' | 'sohu' | 'toutiao'
+export type PlatformId =
+  | 'zhihu'
+  | 'baijiahao'
+  | 'sohu'
+  | 'toutiao'
+  | 'wenku'
+  | 'penguin'
+  | 'weixin'
+  | 'wangyi'
+  | 'zijie'
+  | 'xiaohongshu'
+  | 'bilibili'
+  | '36kr'
+  | 'huxiu'
+  | 'woshipm'
+  | 'douyin'
+  | 'kuaishou'
+  | 'video_account'
+  | 'sohu_video'
+  | 'weibo'
+  | 'haokan'
+  | 'xigua'
+  | 'jianshu'
+  | 'iqiyi'
+  | 'dayu'
+  | 'acfun'
+  | 'tencent_video'
+  | 'yidian'
+  | 'pipixia'
+  | 'meipai'
+  | 'douban'
+  | 'kuai_chuan'
+  | 'dafeng'
+  | 'xueqiu'
+  | 'yiche'
+  | 'chejia'
+  | 'duoduo'
+  | 'weishi'
+  | 'mango'
+  | 'ximalaya'
+  | 'meituan'
+  | 'alipay'
+  | 'douyin_company'
+  | 'douyin_company_lead'
+  | 'custom'
 
 export interface PlatformConfig {
   id: PlatformId
@@ -160,4 +204,33 @@ export interface RouteMeta {
   title?: string
   icon?: string
   hidden?: boolean
+}
+
+// ==================== 账号检测相关 ====================
+
+export interface AccountCheckResult {
+  account_id: number
+  platform: PlatformId
+  account_name: string
+  status_before: number
+  is_valid: boolean
+  message: string
+  check_time: string
+}
+
+export interface AccountCheckSummary {
+  total: number
+  success: number
+  failed: number
+  results: AccountCheckResult[]
+  check_time: string
+}
+
+export interface AccountCheckProgressMessage {
+  type: 'account_check_progress' | 'account_check_complete'
+  current?: number
+  total?: number
+  progress?: number
+  result?: AccountCheckResult
+  summary?: AccountCheckSummary
 }

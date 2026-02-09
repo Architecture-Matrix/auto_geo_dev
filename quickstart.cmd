@@ -2,8 +2,8 @@
 REM ========================================
 REM AutoGeo Project Launcher
 REM Maintainer: Xiao A
-REM Version: v2.8.0
-REM Updated: 2026-02-03
+REM Version: v2.11.0
+REM Updated: 2026-02-06
 REM ========================================
 
 set "PROJECT_ROOT=%~dp0"
@@ -13,7 +13,7 @@ cls
 
 echo.
 echo ========================================
-echo    AutoGeo Launcher v2.7.0
+echo    AutoGeo Launcher v2.11.0
 echo ========================================
 echo.
 
@@ -26,19 +26,21 @@ echo   [2] Start Frontend Electron App
 echo   [3] Restart Backend Service
 echo   [4] Restart Frontend Service
 echo   [5] Cleanup Project
-echo   [6] Exit (Close All Services)
+echo   [6] Reset Database (DANGER!)
+echo   [7] Exit (Close All Services)
 echo.
 echo ========================================
 echo.
 
-set /p choice="Enter option (1-6): "
+set /p choice="Enter option (1-7): "
 
 if "%choice%"=="1" goto start_backend
 if "%choice%"=="2" goto start_frontend
 if "%choice%"=="3" goto restart_backend
 if "%choice%"=="4" goto restart_frontend
 if "%choice%"=="5" goto cleanup_menu
-if "%choice%"=="6" goto exit_all
+if "%choice%"=="6" goto reset_database
+if "%choice%"=="7" goto exit_all
 
 echo.
 echo [ERROR] Invalid option, please try again!
@@ -80,6 +82,29 @@ if not exist "backend\requirements.txt" (
     echo [ERROR] backend\requirements.txt not found!
     pause
     goto menu_loop
+)
+
+REM Check if key Python packages are installed
+echo Checking Python packages...
+python -c "import fastapi" 2>nul
+if errorlevel 1 (
+    echo [WARNING] Required Python packages not found!
+    echo.
+    echo Installing backend dependencies...
+    echo This may take a few minutes, please wait...
+    echo.
+    pip install -r backend\requirements.txt
+    if errorlevel 1 (
+        echo.
+        echo [ERROR] Failed to install dependencies!
+        echo Please check your Python environment and try again.
+        echo.
+        pause
+        goto menu_loop
+    )
+    echo.
+    echo [OK] Dependencies installed successfully!
+    echo.
 )
 
 if not exist "backend\database" (
@@ -143,11 +168,24 @@ if not exist "fronted\package.json" (
 if not exist "fronted\node_modules" (
     echo [WARNING] node_modules not found!
     echo.
-    echo Frontend dependencies not installed.
-    echo Please run manually: cd fronted ^&^& npm install
+    echo Installing frontend dependencies...
+    echo This may take a few minutes, please wait...
     echo.
-    pause
-    goto menu_loop
+    cd fronted
+    call npm install
+    if errorlevel 1 (
+        echo.
+        echo [ERROR] npm install failed!
+        echo Please check your internet connection and try again.
+        echo.
+        pause
+        cd ..
+        goto menu_loop
+    )
+    cd ..
+    echo.
+    echo [OK] Dependencies installed successfully!
+    echo.
 )
 
 echo.
@@ -438,6 +476,83 @@ echo   playwright install chromium
 echo.
 pause
 goto cleanup_menu
+
+REM ========================================
+REM Reset Database
+REM ========================================
+:reset_database
+cls
+echo.
+echo ========================================
+echo    Reset Database (DANGER!)
+echo ========================================
+echo.
+echo [WARNING] This will DELETE the database file!
+echo.
+echo This action will:
+echo   - Stop backend service if running
+echo   - Delete backend\database\auto_geo_v3.db
+echo   - Delete all database temp files (.wal, .shm)
+echo   - Database will be recreated on next startup
+echo.
+echo [DANGER] All data will be LOST forever!
+echo.
+echo Type "DELETE" to confirm database deletion:
+echo.
+
+set /p confirm="Enter confirmation: "
+if not "%confirm%"=="DELETE" (
+    echo.
+    echo [CANCELLED] Database reset cancelled!
+    echo.
+    timeout /t 2 /nobreak >nul
+    cls
+    goto menu_loop
+)
+
+echo.
+echo Stopping backend service...
+for /f "tokens=5" %%a in ('netstat -ano ^| findstr ":8001" ^| findstr "LISTENING"') do (
+    taskkill /F /PID %%a >nul 2>&1
+)
+if errorlevel 1 (
+    echo   [INFO] Backend service was not running
+) else (
+    echo   [OK] Backend service stopped
+)
+
+timeout /t 1 /nobreak >nul
+
+echo.
+echo Deleting database files...
+if exist "backend\database\auto_geo_v3.db" (
+    del /f /q "backend\database\auto_geo_v3.db" 2>nul
+    echo   [OK] Database file deleted
+) else (
+    echo   [INFO] Database file not found
+)
+
+if exist "backend\database\*.wal" (
+    del /f /q "backend\database\*.wal" 2>nul
+    echo   [OK] WAL files deleted
+)
+
+if exist "backend\database\*.shm" (
+    del /f /q "backend\database\*.shm" 2>nul
+    echo   [OK] SHM files deleted
+)
+
+echo.
+echo ========================================
+echo [OK] Database reset completed!
+echo ========================================
+echo.
+echo Database will be automatically recreated
+echo when you start the backend service.
+echo.
+pause
+cls
+goto menu_loop
 
 REM ========================================
 REM Exit (Close All Services)

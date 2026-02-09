@@ -420,15 +420,7 @@ const statConfigs = computed(() => [
   { label: '总体命中率', value: stats.value.overall_hit_rate || 0, unit: '%', class: 'stat-purple' }
 ])
 
-// 加载项目列表
-const loadProjects = async () => {
-  try {
-    const result = await geoKeywordApi.getProjects()
-    projects.value = result || []
-  } catch (error) {
-    console.error('加载项目失败:', error)
-  }
-}
+// 加载项目列表函数已移除，未使用
 
 // 项目变化时加载关键词
 const onProjectChange = async () => {
@@ -882,7 +874,7 @@ const loadPlatformStatuses = async (forceRefresh = false) => {
     }
 
     // 并行执行所有请求，提高效率
-    const [sessionsResponse, ...statusResponses] = await Promise.all([
+    const [, ...statusResponses] = await Promise.all([
       // 获取所有会话状态
       get('/auth/sessions', { user_id, project_id }).catch((err: any) => {
         console.error('获取会话列表失败:', err)
@@ -935,10 +927,9 @@ const refreshPlatformStatuses = () => {
 // 开始平台授权流程
 const startPlatformAuthFlow = async (platformId: string) => {
   try {
-    // 这里应该从当前登录用户获取user_id，从路由参数或store获取project_id
-    // 暂时使用固定值，实际应用中需要从上下文中获取
-    const user_id = 1 // 示例值
-    const project_id = 1 // 示例值
+    // 从实际上下文获取用户ID和项目ID
+    const user_id = parseInt(localStorage.getItem('current_user_id') || '1')
+    const project_id = parseInt(String(checkForm.value.projectId) || '1')
 
     // 开始授权流程，只授权指定平台
     const platforms = [platformId]
@@ -992,32 +983,7 @@ const startSinglePlatformAuth = async (authSessionId: string, platform: string) 
   }
 }
 
-// 检查平台授权状态
-const checkPlatformAuthStatus = async (authSessionId: string, platform: string) => {
-  try {
-    // 调用后端API完成平台授权
-    const response = await post(`/auth/complete-platform/${authSessionId}`, {}, {
-      params: { platform }
-    })
-
-    if (response.success) {
-      // 授权成功后刷新平台状态
-      await loadPlatformStatuses()
-      
-      // 检查刷新后的状态
-      const updatedPlatform = platformStatuses.value.find(p => p.id === platform)
-      if (updatedPlatform && updatedPlatform.status === 'valid') {
-        ElMessage.success(`${availablePlatforms.value.find(p => p.id === platform)?.name}平台授权成功`)
-      } else {
-        ElMessage.warning(`${availablePlatforms.value.find(p => p.id === platform)?.name}平台授权可能未完成，请手动刷新状态检查`)
-      }
-    } else {
-      ElMessage.error(response.error || '完成平台授权失败')
-    }
-  } catch (err: any) {
-    ElMessage.error(`请求失败: ${err.message || '未知错误'}`)
-  }
-}
+// 检查平台授权状态函数已移除，根据设计不自动检查授权状态，用户可通过手动刷新查看状态
 
 // 获取状态文本
 const getStatusText = (status: string | undefined) => {

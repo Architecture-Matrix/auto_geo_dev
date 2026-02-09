@@ -56,7 +56,7 @@ class ErrorResponse(BaseModel):
 # ==================== 账号相关 ====================
 class AccountBase(BaseModel):
     """账号基础信息"""
-    platform: str = Field(..., description="平台ID", pattern="^(zhihu|baijiahao|sohu|toutiao)$")
+    platform: str = Field(..., description="平台ID", pattern="^(zhihu|baijiahao|sohu|toutiao|wenku|penguin|weixin|wangyi|zijie|xiaohongshu|bilibili|36kr|huxiu|woshipm|douyin|kuaishou|video_account|sohu_video|weibo|haokan|xigua|jianshu|iqiyi|dayu|acfun|tencent_video|yidian|pipixia|meipai|douban|kuai_chuan|dafeng|xueqiu|yiche|chejia|duoduo|weishi|mango|ximalaya|meituan|alipay|douyin_company|douyin_company_lead|custom)$")
     account_name: str = Field(..., min_length=1, max_length=100, description="账号备注名称")
     remark: Optional[str] = Field(None, description="备注信息")
 
@@ -213,3 +213,24 @@ class PublishRecordResponse(BaseModel):
     retry_count: int
     created_at: datetime
     published_at: Optional[datetime] = None
+
+
+# ==================== 账号验证相关 ====================
+class AccountCheckResult(BaseModel):
+    """单个账号检测结果"""
+    account_id: int
+    platform: str
+    account_name: str
+    status_before: int
+    is_valid: bool
+    message: str
+    check_time: str
+
+
+class AccountCheckSummary(BaseModel):
+    """批量检测汇总结果"""
+    total: int
+    success: int
+    failed: int
+    results: List[AccountCheckResult]
+    check_time: str

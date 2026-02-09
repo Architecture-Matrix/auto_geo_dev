@@ -3,7 +3,14 @@
     <!-- 1. 顶部筛选区 -->
     <div class="filter-section card-box">
       <div class="filter-left">
-        <el-select v-model="filters.project_id" placeholder="选择项目" clearable @change="loadData" class="project-select">
+        <el-select
+          v-model="filters.project_id"
+          placeholder="选择项目"
+          clearable
+          @change="loadData"
+          class="project-select"
+          size="default"
+        >
           <el-option
             v-for="item in projects"
             :key="item.id"
@@ -11,13 +18,23 @@
             :value="item.id"
           />
         </el-select>
-        <el-select v-model="filters.days" placeholder="时间范围" @change="loadData" class="time-select">
+        <el-select
+          v-model="filters.days"
+          placeholder="时间范围"
+          @change="loadData"
+          class="time-select"
+          size="default"
+        >
           <el-option label="近7天" :value="7" />
           <el-option label="近30天" :value="30" />
         </el-select>
       </div>
       <div class="filter-right">
-        <el-radio-group v-model="filters.platform" @change="loadData" size="default">
+        <el-radio-group
+          v-model="filters.platform"
+          @change="loadData"
+          size="default"
+        >
           <el-radio-button label="">全平台</el-radio-button>
           <el-radio-button label="DeepSeek">DeepSeek</el-radio-button>
           <el-radio-button label="豆包">豆包</el-radio-button>
@@ -26,6 +43,10 @@
         <el-button @click="loadData" class="refresh-btn">
           <el-icon><Refresh /></el-icon>
           刷新
+        </el-button>
+        <el-button type="primary" @click="runCheck" :loading="checkLoading">
+          <el-icon><Search /></el-icon>
+          执行收录检测
         </el-button>
       </div>
     </div>
@@ -37,6 +58,9 @@
         <el-tooltip content="统计选定时间范围内的核心指标数据" placement="top">
           <el-icon class="info-icon"><InfoFilled /></el-icon>
         </el-tooltip>
+        <el-button type="text" @click="viewRecords" class="view-link">
+          查看检测记录 <el-icon><ArrowRight /></el-icon>
+        </el-button>
       </div>
       <div class="stats-grid">
         <div class="stat-card blue">
@@ -83,34 +107,30 @@
     <!-- 4. 项目影响力排行榜 -->
     <div class="leaderboard-section card-box">
       <h3 class="section-title">项目影响力排行榜</h3>
-      <el-table :data="projectLeaderboard" stripe style="width: 100%" class="dark-table">
+      <el-table
+        :data="projectLeaderboard"
+        stripe
+        style="width: 100%"
+        class="dark-table"
+      >
         <el-table-column prop="rank" label="排名" width="80" align="center" />
         <el-table-column prop="project_name" label="品牌/项目" />
         <el-table-column prop="company_name" label="公司" />
-        <el-table-column prop="content_volume" label="内容声量" align="center" />
+        <el-table-column
+          prop="content_volume"
+          label="内容声量"
+          align="center"
+        />
         <el-table-column prop="ai_mention_rate" label="AI提及率" align="center">
           <template #default="{ row }">{{ row.ai_mention_rate }}%</template>
         </el-table-column>
-        <el-table-column prop="brand_relevance" label="品牌关联度" align="center">
+        <el-table-column
+          prop="brand_relevance"
+          label="品牌关联度"
+          align="center"
+        >
           <template #default="{ row }">{{ row.brand_relevance }}%</template>
         </el-table-column>
-        <template #empty>
-          <div class="empty-text">暂无数据</div>
-        </template>
-      </el-table>
-    </div>
-
-    <!-- 5. 高贡献内容分析 -->
-    <div class="analysis-section card-box">
-      <h3 class="section-title">高贡献内容分析 (AI引用源)</h3>
-      <el-table :data="contentAnalysis" stripe style="width: 100%" class="dark-table">
-        <el-table-column prop="rank" label="排名" width="80" align="center" />
-        <el-table-column prop="title" label="文章标题" show-overflow-tooltip />
-        <el-table-column prop="platform" label="发布平台" width="120" />
-        <el-table-column prop="ai_contribution" label="AI引用贡献率" width="150" align="center">
-          <template #default="{ row }">{{ row.ai_contribution }}%</template>
-        </el-table-column>
-        <el-table-column prop="publish_time" label="发布时间" width="180" align="center" />
         <template #empty>
           <div class="empty-text">暂无数据</div>
         </template>
@@ -120,21 +140,32 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue'
-import { InfoFilled, Refresh } from '@element-plus/icons-vue'
-import { ElMessage } from 'element-plus'
-import * as echarts from 'echarts'
-import { reportsApi, geoKeywordApi } from '@/services/api'
+import { ref, onMounted, onUnmounted } from "vue";
+import { useRouter } from "vue-router";
+import {
+  InfoFilled,
+  Refresh,
+  Search,
+  ArrowRight,
+} from "@element-plus/icons-vue";
+import { ElMessage } from "element-plus";
+import * as echarts from "echarts";
+import { reportsApi, geoKeywordApi } from "@/services/api";
+
+const router = useRouter();
+
+// 检测加载状态
+const checkLoading = ref(false);
 
 // 筛选状态
 const filters = ref({
   project_id: null,
   days: 7,
-  platform: ''
-})
+  platform: "",
+});
 
 // 项目列表
-const projects = ref<any[]>([])
+const projects = ref<any[]>([]);
 
 // 统计数据
 const stats = ref({
@@ -149,122 +180,176 @@ const stats = ref({
   keyword_check_count: 0,
   company_hit_rate: 0,
   company_hit_count: 0,
-  company_check_count: 0
-})
+  company_check_count: 0,
+});
 
 // 排行榜数据
-const projectLeaderboard = ref<any[]>([])
-const contentAnalysis = ref<any[]>([])
+const projectLeaderboard = ref<any[]>([]);
 
 // 图表 DOM
-const comparisonChartRef = ref<HTMLElement | null>(null)
-let comparisonChart: echarts.ECharts | null = null
+const comparisonChartRef = ref<HTMLElement | null>(null);
+let comparisonChart: echarts.ECharts | null = null;
 
 // 加载数据
 const loadData = async () => {
   try {
     // 加载卡片数据
-    const statsRes = await reportsApi.getStats(filters.value)
-    stats.value = statsRes
+    const statsRes = await reportsApi.getStats(filters.value);
+    stats.value = statsRes;
 
     // 加载对比分析图表
-    const comparisonRes = await reportsApi.getPlatformComparison(filters.value)
-    renderComparisonChart(comparisonRes)
+    const comparisonRes = await reportsApi.getPlatformComparison(filters.value);
+    renderComparisonChart(comparisonRes);
 
     // 加载项目排行
-    const leaderboardRes = await reportsApi.getProjectLeaderboard({ days: filters.value.days })
-    projectLeaderboard.value = leaderboardRes
-
-    // 加载内容分析
-    const analysisRes = await reportsApi.getContentAnalysis(filters.value)
-    contentAnalysis.value = analysisRes
+    const leaderboardRes = await reportsApi.getProjectLeaderboard({
+      days: filters.value.days,
+    });
+    projectLeaderboard.value = leaderboardRes;
   } catch (error) {
-    console.error('加载报表数据失败:', error)
-    ElMessage.error('加载报表数据失败，请稍后重试')
+    console.error("加载报表数据失败:", error);
+    ElMessage.error("加载报表数据失败，请稍后重试");
   }
-}
+};
 
 // 渲染对比图表
 const renderComparisonChart = (data: any[]) => {
-  if (!comparisonChartRef.value) return
-  
+  if (!comparisonChartRef.value) return;
+
   if (!comparisonChart) {
-    comparisonChart = echarts.init(comparisonChartRef.value)
+    comparisonChart = echarts.init(comparisonChartRef.value);
   }
 
-  const platforms = data.map(item => item.platform)
-  const hitRates = data.map(item => item.hit_rate)
+  const platforms = data.map((item) => item.platform);
+  const hitRates = data.map((item) => item.hit_rate);
 
   const option = {
-    backgroundColor: 'transparent',
+    backgroundColor: "transparent",
     tooltip: {
-      trigger: 'axis',
-      axisPointer: { type: 'shadow' }
+      trigger: "axis",
+      axisPointer: { type: "shadow" },
     },
     grid: {
-      left: '3%',
-      right: '4%',
-      bottom: '3%',
-      containLabel: true
+      left: "3%",
+      right: "4%",
+      bottom: "3%",
+      containLabel: true,
     },
     xAxis: {
-      type: 'category',
+      type: "category",
       data: platforms,
-      axisLabel: { color: '#888' },
-      axisLine: { lineStyle: { color: '#333' } }
+      axisLabel: { color: "#888" },
+      axisLine: { lineStyle: { color: "#333" } },
     },
     yAxis: {
-      type: 'value',
-      axisLabel: { color: '#888', formatter: '{value}%' },
-      splitLine: { lineStyle: { color: '#333' } }
+      type: "value",
+      axisLabel: { color: "#888", formatter: "{value}%" },
+      splitLine: { lineStyle: { color: "#333" } },
     },
     series: [
       {
-        name: '命中率',
-        type: 'bar',
+        name: "命中率",
+        type: "bar",
         data: hitRates,
-        barWidth: '40%',
+        barWidth: "40%",
         itemStyle: {
           color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-            { offset: 0, color: '#4a90e2' },
-            { offset: 1, color: '#357abd' }
+            { offset: 0, color: "#4a90e2" },
+            { offset: 1, color: "#357abd" },
           ]),
-          borderRadius: [4, 4, 0, 0]
-        }
-      }
-    ]
-  }
+          borderRadius: [4, 4, 0, 0],
+        },
+      },
+    ],
+  };
 
-  comparisonChart.setOption(option)
-}
+  comparisonChart.setOption(option);
+};
 
 // 窗口调整处理函数
 const handleResize = () => {
-  comparisonChart?.resize()
-}
+  comparisonChart?.resize();
+};
 
 onMounted(async () => {
   // 获取项目列表
-  const projectsRes = await geoKeywordApi.getProjects()
-  projects.value = projectsRes
+  const projectsRes = await geoKeywordApi.getProjects();
+  projects.value = projectsRes;
 
-  loadData()
+  loadData();
 
   // 监听窗口调整
-  window.addEventListener('resize', handleResize)
-})
+  window.addEventListener("resize", handleResize);
+});
 
 // 清理资源
 onUnmounted(() => {
   // 移除事件监听器
-  window.removeEventListener('resize', handleResize)
+  window.removeEventListener("resize", handleResize);
 
   // 销毁图表实例
   if (comparisonChart) {
-    comparisonChart.dispose()
-    comparisonChart = null
+    comparisonChart.dispose();
+    comparisonChart = null;
   }
-})
+});
+
+// 执行收录检测
+const runCheck = async () => {
+  if (!filters.value.project_id) {
+    ElMessage.warning("请先选择项目");
+    return;
+  }
+
+  checkLoading.value = true;
+  try {
+    // 转换平台筛选格式
+    const platforms = convertPlatformFilter(filters.value.platform);
+
+    await reportsApi.runCheck({
+      project_id: filters.value.project_id,
+      platforms: platforms.length > 0 ? platforms : undefined,
+    });
+
+    ElMessage.success("收录检测已完成，3秒后自动刷新数据");
+
+    // 延迟期新，等待检测数据写入
+    setTimeout(() => {
+      loadData();
+    }, 3000);
+  } catch (error: any) {
+    console.error("检测失败:", error);
+    ElMessage.error(error.response?.data?.message || "检测失败，请稍后重试");
+  } finally {
+    checkLoading.value = false;
+  }
+};
+
+// 平台筛选格式转换（将前端格式转换为后端格式）
+const convertPlatformFilter = (platform: string): string[] => {
+  const platformMap: Record<string, string> = {
+    DeepSeek: "deepseek",
+    豆包: "doubao",
+    通义千问: "qianwen",
+  };
+  return platform ? [platformMap[platform]] : [];
+};
+
+// 跳转到收录查询页面查看详细记录
+const viewRecords = () => {
+  if (!filters.value.project_id) {
+    ElMessage.warning("请先选择项目");
+    return;
+  }
+
+  router.push({
+    name: "Monitor",
+    query: {
+      project_id: filters.value.project_id,
+      // 可以传递其他筛选参数
+    },
+  });
+};
 </script>
 
 <style scoped lang="scss">
@@ -299,16 +384,26 @@ onUnmounted(() => {
 
   .filter-left {
     display: flex;
+    align-items: center;
     gap: 12px;
 
-    .project-select { width: 200px; }
-    .time-select { width: 120px; }
+    .project-select {
+      width: 200px;
+    }
+    .time-select {
+      width: 120px;
+    }
   }
 
   .filter-right {
     display: flex;
     align-items: center;
     gap: 16px;
+
+    :deep(.el-radio-group),
+    :deep(.el-button) {
+      height: 32px;
+    }
 
     .refresh-btn {
       background: transparent;
@@ -329,8 +424,21 @@ onUnmounted(() => {
     align-items: center;
     gap: 8px;
     margin-bottom: 20px;
-    .section-title { margin-bottom: 0; }
-    .info-icon { color: var(--text-secondary); cursor: help; }
+    .section-title {
+      margin-bottom: 0;
+    }
+    .info-icon {
+      color: var(--text-secondary);
+      cursor: help;
+    }
+    .view-link {
+      margin-left: auto;
+      color: var(--primary);
+      font-size: 14px;
+      &:hover {
+        color: var(--primary-light);
+      }
+    }
   }
 
   .stats-grid {
@@ -350,20 +458,36 @@ onUnmounted(() => {
     text-align: center;
     min-height: 160px;
 
-    &.blue { background: linear-gradient(135deg, #4a90e2 0%, #357abd 100%); }
-    &.green { background: linear-gradient(135deg, #4caf50 0%, #3d8b40 100%); }
-    &.orange { background: linear-gradient(135deg, #ff9800 0%, #f57c00 100%); }
-    &.grey { background: linear-gradient(135deg, #607d8b 0%, #455a64 100%); }
+    &.blue {
+      background: linear-gradient(135deg, #4a90e2 0%, #357abd 100%);
+    }
+    &.green {
+      background: linear-gradient(135deg, #4caf50 0%, #3d8b40 100%);
+    }
+    &.orange {
+      background: linear-gradient(135deg, #ff9800 0%, #f57c00 100%);
+    }
+    &.grey {
+      background: linear-gradient(135deg, #607d8b 0%, #455a64 100%);
+    }
 
-    .card-title { font-size: 14px; opacity: 0.9; margin-bottom: 12px; }
-    .card-value { font-size: 36px; font-weight: 700; margin-bottom: 12px; }
+    .card-title {
+      font-size: 14px;
+      opacity: 0.9;
+      margin-bottom: 12px;
+    }
+    .card-value {
+      font-size: 36px;
+      font-weight: 700;
+      margin-bottom: 12px;
+    }
     .card-footer {
       width: 100%;
       display: flex;
       justify-content: space-around;
       font-size: 12px;
       opacity: 0.8;
-      border-top: 1px solid rgba(255,255,255,0.2);
+      border-top: 1px solid rgba(255, 255, 255, 0.2);
       padding-top: 12px;
     }
   }
@@ -381,12 +505,14 @@ onUnmounted(() => {
     flex-direction: column;
     align-items: stretch;
 
-    .filter-left, .filter-right {
+    .filter-left,
+    .filter-right {
       flex-direction: column;
       width: 100%;
     }
 
-    .project-select, .time-select {
+    .project-select,
+    .time-select {
       width: 100%;
     }
   }
@@ -397,7 +523,9 @@ onUnmounted(() => {
 
   .stat-card {
     min-height: 140px;
-    .card-value { font-size: 28px; }
+    .card-value {
+      font-size: 28px;
+    }
   }
 
   .dark-table {
@@ -423,7 +551,7 @@ onUnmounted(() => {
   --el-table-tr-bg-color: transparent;
   --el-table-header-bg-color: var(--bg-tertiary);
   --el-table-row-hover-bg-color: var(--bg-tertiary);
-  
+
   :deep(.el-table__header) th {
     background: #111 !important;
     color: #888;

@@ -219,6 +219,10 @@ class PlaywrightManager:
 
         return task
 
+    def get_auth_task(self, task_id: str) -> Optional[AuthTask]:
+        """获取授权任务"""
+        return self._auth_tasks.get(task_id)
+
     async def _finalize_auth(self, task_id: str) -> str:
         """
         核心：提取登录凭证并入库
@@ -232,23 +236,121 @@ class PlaywrightManager:
         try:
             # 1. 提取 Cookies 和 Storage
             cookies = await task.context.cookies()
-            storage_state = await task.page.evaluate(
+
+            # 获取 localStorage 和 sessionStorage
+            storage_data = await task.page.evaluate(
                 "() => ({ localStorage: {...localStorage}, sessionStorage: {...sessionStorage} })") or {}
 
-            # 2. 基础验证
-            # 针对不同平台的关键 Cookie 检查
-            platform_checks = {
-                "zhihu": "z_c0",
-                "baijiahao": "BDUSS",
-                "toutiao": "sessionid"
+            # 构建完整的 storage_state（必须包含 cookies 字段！）
+            storage_state = {
+                "cookies": cookies,
+                "localStorage": storage_data.get("localStorage", {}),
+                "sessionStorage": storage_data.get("sessionStorage", {})
             }
-            key_cookie = platform_checks.get(task.platform)
-            if key_cookie and not any(c['name'] == key_cookie for c in cookies):
-                return json.dumps({"success": False, "message": f"未检测到登录凭证 ({key_cookie})，请先登录"})
+
+            # 2. 基础验证
+            # 针对不同平台的关键 Cookie 检查 (支持多个备选Cookie，用|分隔)
+            platform_checks = {
+                "zhihu": "z_c0|z_cari0",  # 知乎关键Cookie，增加 z_c0 作为备选
+                "baijiahao": "BDUSS|STOKEN",
+                "toutiao": "sessionid|sid_tt",
+                "wenku": "BDUSS|STOKEN",
+                "penguin": "uin|skey|p_sktkt",
+                "weixin": "pt2gguin|token|app_id|app_msgid",  # 微信公众号关键Cookie
+                "wangyi": "NTES_SESS|S_INFO",
+                "sohu": "ppinf|pprdig",
+                "zijie": "sessionid|sid_tt",
+                "xiaohongshu": "xhs_web_session|webid|web_session|webId",  # 小红书关键Cookie
+                "bilibili": "bili_jct|SESSDATA",
+                "36kr": "uid|ticket",
+                "huxiu": "huxiu_hash|huxiusessionid",
+                "woshipm": "uid|token",
+                # 新增平台
+                "doyin": "sessionid|passport_auth_id",
+                "kuaishou": "userId|token",
+                "video_account": "wxuin|webwxuvid",
+                "sohu_video": "ppinf|pprdig",
+                "weibo": "SUB|SUBP",
+                "haokan": "BAIDUID|STOKEN",
+                "xigua": "sessionid|sid_tt",
+                "jianshu": "_session_id",
+                "iqiyi": "P00001|P00003",
+                "dayu": "e_token|e_u",
+                "acfun": "acFun__web__pc__session_id",
+                "tencent_video": "vqq_vusession",
+                "yidian": "uid|token",
+                "pipixia": "token|uid",
+                "meipai": "token|uid",
+                "douban": "dbcl2|ll",
+                "kuai_chuan": "qi_uin|qkn",
+                "dafeng": "auth_cookie|ssuid",
+                "xueqiu": "xq_a_token|xq_r_token",
+                "yiche": "yiche_uid|yiche_sso",
+                "chejia": "autohomecookie|token",
+                "duoduo": "cookie2|p_token",
+                "weishi": "uin|skey",
+                "mango": "mgtv_complex_id",
+                "ximalaya": "device_idudi|token",
+                "meituan": "token|userId",
+                "alipay": "euid|ALIPAY_JWT",
+                "douyin_company": "sessionid|passport_auth_id",
+                "douyin_company_lead": "sessionid|passport_auth_id",
+            }
+            key_cookie_str = platform_checks.get(task.platform)
+
+            # 🔍 调试：输出所有 Cookie
+            logger.info(f"[Auth] 平台: {task.platform}, Cookie数量: {len(cookies)}")
+            if cookies:
+                cookie_names = [c['name'] for c in cookies]
+                logger.info(f"[Auth] Cookie列表: {cookie_names}")
+            logger.info(f"[Auth] 需要的Cookie: {key_cookie_str}")
+
+            # 验证逻辑：如果配置了检查项，则必须包含至少一个关键Cookie
+            has_auth = True  # 默认为真，只对有检查要求的平台进行验证
+            if key_cookie_str:
+                required_keys = key_cookie_str.split("|")
+                # 检查是否存在任意一个关键Cookie（不区分大小写）
+                has_auth = any(c['name'].lower() in [k.lower() for k in required_keys] for c in cookies)
+
+                # 特殊处理：企鹅号如果已经进入后台页面，视为成功
+                if task.platform == "penguin":
+                    current_url = task.page.url
+                    # 检查是否在企鹅号域名下
+                    if "om.qq.com" in current_url:
+                        # 排除登录页
+                        if "userAuth" not in current_url and "login" not in current_url:
+                            has_auth = True
+                            logger.info(f"[Auth] 企鹅号授权成功，当前页面: {current_url}")
+                        else:
+                            has_auth = False
+
+                # 特殊处理：微信公众号 - 放宽验证，只要在公众号平台域名且不在登录页就
+                # 跳过严格的Cookie检查，因为微信公众号的Cookie结构复杂且多变
+                if task.platform == "weixin":
+                    current_url = task.page.url
+                    logger.info(f"[Auth] 微信公众号当前URL: {current_url}")
+                    # 微信公众号登录成功后会在公众号管理平台首页
+                    # 检查URL中是否包含公众号平台特征
+                    if "mp.weixin.qq.com" in current_url:
+                        # 如果在登录页面，则表示未登录成功
+                        if any(x in current_url for x in ["/login", "/bind", "/captcha", "/oauth"]):
+                            has_auth = False
+                            logger.warning(f"[Auth] 微信公众号仍在登录页，需要完成登录")
+                        else:
+                            # 已登录到公众号平台，直接视为成功，跳过Cookie检查
+                            has_auth = True
+                            logger.info(f"[Auth] 微信公众号授权成功，当前页面: {current_url}")
+
+                if not has_auth:
+                    return json.dumps({"success": False, "message": f"未检测到登录凭证 (需要包含: {key_cookie_str})，请确认已登录"})
 
             # 3. 提取用户名
-            username = await self._extract_username(task.page, task.platform)
-            logger.info(f"[Auth] 提取到用户名: {username}")
+            try:
+                username = await self._extract_username(task.page, task.platform)
+                logger.info(f"[Auth] 提取到用户名: {username}")
+            except Exception as e:
+                logger.warning(f"[Auth] 提取用户名失败: {e}")
+                username = None
 
             # 4. 数据库操作
             db = self._get_db()
@@ -353,6 +455,334 @@ class PlaywrightManager:
                         text = await el.text_content()
                         if text: return text.strip()
 
+            elif platform == "wenku":
+                selectors = [".user-info-name", ".user-name", ".name"]
+                for s in selectors:
+                    el = await page.query_selector(s)
+                    if el:
+                        text = await el.text_content()
+                        if text: return text.strip()
+
+            elif platform == "penguin":
+                selectors = [".header-user-name", ".user-info-name"]
+                for s in selectors:
+                    el = await page.query_selector(s)
+                    if el:
+                        text = await el.text_content()
+                        if text: return text.strip()
+
+            elif platform == "weixin":
+                selectors = [".weui-desktop-account__name", ".account_name"]
+                for s in selectors:
+                    el = await page.query_selector(s)
+                    if el:
+                        text = await el.text_content()
+                        if text: return text.strip()
+
+            elif platform == "wangyi":
+                # 增加更宽泛的选择器
+                selectors = [".name", ".account-name", ".user-name", ".m-name", ".header-info .name", ".media-info .name", "div[class*='name']"]
+                for s in selectors:
+                    el = await page.query_selector(s)
+                    if el:
+                        text = await el.text_content()
+                        if text and text.strip(): return text.strip()
+
+            elif platform == "sohu":
+                selectors = [".user-name", ".name"]
+                for s in selectors:
+                    el = await page.query_selector(s)
+                    if el:
+                        text = await el.text_content()
+                        if text: return text.strip()
+
+            elif platform == "zijie":
+                # 字节号（与头条号相同）
+                selectors = [".user-name", ".name", ".mp-name"]
+                for s in selectors:
+                    el = await page.query_selector(s)
+                    if el:
+                        text = await el.text_content()
+                        if text: return text.strip()
+
+            elif platform == "xiaohongshu":
+                # 小红书
+                selectors = [".user-name", ".username", ".name"]
+                for s in selectors:
+                    el = await page.query_selector(s)
+                    if el:
+                        text = await el.text_content()
+                        if text: return text.strip()
+
+            elif platform == "bilibili":
+                # B站专栏
+                selectors = [".username-text", ".user-nick", ".nickname"]
+                for s in selectors:
+                    el = await page.query_selector(s)
+                    if el:
+                        text = await el.text_content()
+                        if text: return text.strip()
+
+            elif platform == "36kr":
+                # 36氪
+                selectors = [".user-name", ".name", ".profile-name"]
+                for s in selectors:
+                    el = await page.query_selector(s)
+                    if el:
+                        text = await el.text_content()
+                        if text: return text.strip()
+
+            elif platform == "huxiu":
+                # 虎嗅
+                selectors = [".user-name", ".username", ".author-name"]
+                for s in selectors:
+                    el = await page.query_selector(s)
+                    if el:
+                        text = await el.text_content()
+                        if text: return text.strip()
+
+            elif platform == "woshipm":
+                # 人人都是产品经理
+                selectors = [".user-name", ".username", ".author-name"]
+                for s in selectors:
+                    el = await page.query_selector(s)
+                    if el:
+                        text = await el.text_content()
+                        if text: return text.strip()
+
+            # 新增平台的用户名提取
+            elif platform == "douyin":
+                selectors = [".user-name", ".username", ".nickname"]
+                for s in selectors:
+                    el = await page.query_selector(s)
+                    if el:
+                        text = await el.text_content()
+                        if text: return text.strip()
+
+            elif platform == "kuaishou":
+                selectors = [".user-name", ".username", ".creator-name"]
+                for s in selectors:
+                    el = await page.query_selector(s)
+                    if el:
+                        text = await el.text_content()
+                        if text: return text.strip()
+
+            elif platform == "video_account":
+                selectors = [".user-name", ".username", ".nickname"]
+                for s in selectors:
+                    el = await page.query_selector(s)
+                    if el:
+                        text = await el.text_content()
+                        if text: return text.strip()
+
+            elif platform == "sohu_video":
+                selectors = [".user-name", ".username", ".name"]
+                for s in selectors:
+                    el = await page.query_selector(s)
+                    if el:
+                        text = await el.text_content()
+                        if text: return text.strip()
+
+            elif platform == "weibo":
+                selectors = [".ScreenName", ".username", ".name"]
+                for s in selectors:
+                    el = await page.query_selector(s)
+                    if el:
+                        text = await el.text_content()
+                        if text: return text.strip()
+
+            elif platform == "haokan":
+                selectors = [".user-name", ".username", ".name"]
+                for s in selectors:
+                    el = await page.query_selector(s)
+                    if el:
+                        text = await el.text_content()
+                        if text: return text.strip()
+
+            elif platform == "xigua":
+                selectors = [".user-name", ".username", ".name"]
+                for s in selectors:
+                    el = await page.query_selector(s)
+                    if el:
+                        text = await el.text_content()
+                        if text: return text.strip()
+
+            elif platform == "jianshu":
+                selectors = [".user-nick", ".username", ".name"]
+                for s in selectors:
+                    el = await page.query_selector(s)
+                    if el:
+                        text = await el.text_content()
+                        if text: return text.strip()
+
+            elif platform == "iqiyi":
+                selectors = [".user-name", ".username", ".name"]
+                for s in selectors:
+                    el = await page.query_selector(s)
+                    if el:
+                        text = await el.text_content()
+                        if text: return text.strip()
+
+            elif platform == "dayu":
+                selectors = [".user-name", ".username", ".name"]
+                for s in selectors:
+                    el = await page.query_selector(s)
+                    if el:
+                        text = await el.text_content()
+                        if text: return text.strip()
+
+            elif platform == "acfun":
+                selectors = [".user-name", ".username", ".nickname"]
+                for s in selectors:
+                    el = await page.query_selector(s)
+                    if el:
+                        text = await el.text_content()
+                        if text: return text.strip()
+
+            elif platform == "tencent_video":
+                selectors = [".user-name", ".username", ".name"]
+                for s in selectors:
+                    el = await page.query_selector(s)
+                    if el:
+                        text = await el.text_content()
+                        if text: return text.strip()
+
+            elif platform == "yidian":
+                selectors = [".user-name", ".username", ".name"]
+                for s in selectors:
+                    el = await page.query_selector(s)
+                    if el:
+                        text = await el.text_content()
+                        if text: return text.strip()
+
+            elif platform == "pipixia":
+                selectors = [".user-name", ".username", ".name"]
+                for s in selectors:
+                    el = await page.query_selector(s)
+                    if el:
+                        text = await el.text_content()
+                        if text: return text.strip()
+
+            elif platform == "meipai":
+                selectors = [".user-name", ".username", ".name"]
+                for s in selectors:
+                    el = await page.query_selector(s)
+                    if el:
+                        text = await el.text_content()
+                        if text: return text.strip()
+
+            elif platform == "douban":
+                selectors = [".user-name", ".username", ".name"]
+                for s in selectors:
+                    el = await page.query_selector(s)
+                    if el:
+                        text = await el.text_content()
+                        if text: return text.strip()
+
+            elif platform == "kuai_chuan":
+                selectors = [".user-name", ".username", ".name"]
+                for s in selectors:
+                    el = await page.query_selector(s)
+                    if el:
+                        text = await el.text_content()
+                        if text: return text.strip()
+
+            elif platform == "dafeng":
+                selectors = [".user-name", ".username", ".name"]
+                for s in selectors:
+                    el = await page.query_selector(s)
+                    if el:
+                        text = await el.text_content()
+                        if text: return text.strip()
+
+            elif platform == "xueqiu":
+                selectors = [".user-name", ".username", ".name"]
+                for s in selectors:
+                    el = await page.query_selector(s)
+                    if el:
+                        text = await el.text_content()
+                        if text: return text.strip()
+
+            elif platform == "yiche":
+                selectors = [".user-name", ".username", ".name"]
+                for s in selectors:
+                    el = await page.query_selector(s)
+                    if el:
+                        text = await el.text_content()
+                        if text: return text.strip()
+
+            elif platform == "chejia":
+                selectors = [".user-name", ".username", ".name"]
+                for s in selectors:
+                    el = await page.query_selector(s)
+                    if el:
+                        text = await el.text_content()
+                        if text: return text.strip()
+
+            elif platform == "duoduo":
+                selectors = [".user-name", ".username", ".name"]
+                for s in selectors:
+                    el = await page.query_selector(s)
+                    if el:
+                        text = await el.text_content()
+                        if text: return text.strip()
+
+            elif platform == "weishi":
+                selectors = [".user-name", ".username", ".name"]
+                for s in selectors:
+                    el = await page.query_selector(s)
+                    if el:
+                        text = await el.text_content()
+                        if text: return text.strip()
+
+            elif platform == "mango":
+                selectors = [".user-name", ".username", ".name"]
+                for s in selectors:
+                    el = await page.query_selector(s)
+                    if el:
+                        text = await el.text_content()
+                        if text: return text.strip()
+
+            elif platform == "ximalaya":
+                selectors = [".user-name", ".username", ".name"]
+                for s in selectors:
+                    el = await page.query_selector(s)
+                    if el:
+                        text = await el.text_content()
+                        if text: return text.strip()
+
+            elif platform == "meituan":
+                selectors = [".user-name", ".username", ".name"]
+                for s in selectors:
+                    el = await page.query_selector(s)
+                    if el:
+                        text = await el.text_content()
+                        if text: return text.strip()
+
+            elif platform == "alipay":
+                selectors = [".user-name", ".username", ".name"]
+                for s in selectors:
+                    el = await page.query_selector(s)
+                    if el:
+                        text = await el.text_content()
+                        if text: return text.strip()
+
+            elif platform == "douyin_company":
+                selectors = [".user-name", ".username", ".name"]
+                for s in selectors:
+                    el = await page.query_selector(s)
+                    if el:
+                        text = await el.text_content()
+                        if text: return text.strip()
+
+            elif platform == "douyin_company_company_lead":
+                selectors = [".user-name", ".username", ".name"]
+                for s in selectors:
+                    el = await page.query_selector(s)
+                    if el:
+                        text = await el.text_content()
+                        if text: return text.strip()
+
             return None
         except:
             return None
@@ -379,6 +809,11 @@ class PlaywrightManager:
                 try:
                     decrypted = decrypt_storage_state(account.storage_state)
                     state_data = decrypted if decrypted else json.loads(account.storage_state)
+
+                    # 兼容旧数据格式：如果缺少 cookies 字段，从 account.cookies 补充
+                    if isinstance(state_data, dict) and "cookies" not in state_data and account.cookies:
+                        logger.warning(f"storage_state缺少cookies字段，使用独立cookies")
+                        state_data["cookies"] = decrypt_cookies(account.cookies)
                 except:
                     logger.warning(f"账号 {account.account_name} Session 解析失败，尝试裸奔")
 

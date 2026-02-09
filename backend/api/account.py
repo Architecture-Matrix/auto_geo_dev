@@ -13,7 +13,7 @@ from backend.database.models import Account
 from backend.schemas import (
     AccountCreate, AccountUpdate, AccountResponse, AccountDetailResponse,
     AuthStartRequest, AuthStartResponse, AuthStatusResponse,
-    ApiResponse
+    ApiResponse, AccountCheckSummary
 )
 from backend.config import PLATFORMS
 from backend.services.playwright_mgr import playwright_mgr
@@ -297,6 +297,8 @@ async def confirm_auth(task_id: str, db: Session = Depends(get_db)):
 
     # 验证是否真的登录了（简单检查：是否有有效cookie）
     if not cookies or len(cookies) < 3:
+        logger.warning(f"Cookie验证失败: cookie数量={len(cookies) if cookies else 0}")
+        logger.info(f"当前Cookie列表: {[c['name'] for c in cookies] if cookies else []}")
         return ApiResponse(
             success=False,
             message="未检测到登录信息，请先在平台完成登录后再点击授权完成"
@@ -372,3 +374,38 @@ async def cancel_auth(task_id: str):
     """取消授权任务"""
     await playwright_mgr.close_auth_task(task_id)
     return ApiResponse(success=True, message="授权任务已取消")
+
+
+# ==================== 账号检测相关 ====================
+
+@router.post("/check/all", response_model=AccountCheckSummary)
+async def check_all_accounts(db: Session = Depends(get_db)):
+    """
+    批量检测所有账号的授权状态
+    通过WebSocket实时推送检测进度
+    """
+    from backend.services.account_validator import account_validator
+
+    async def progress_callback(current: int, total: int, result: dict):
+        """推送检测进度到前端"""
+        if ws_manager:
+            await ws_manager.broadcast({
+                "type": "account_check_progress",
+                "current": current,
+                "total": total,
+                "progress": round(current / total * 100, 1),
+                "result": result
+            })
+
+    summary = await account_validator.check_all_accounts(
+        db_session=db,
+        progress_callback=progress_callback
+    )
+
+    if ws_manager:
+        await ws_manager.broadcast({
+            "type": "account_check_complete",
+            "summary": summary
+        })
+
+    return summary

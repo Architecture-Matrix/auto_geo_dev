@@ -19,14 +19,8 @@ from loguru import logger
 
 # 导入配置和数据库
 from backend.config import (
-    APP_NAME,
-    APP_VERSION,
-    DEBUG,
-    HOST,
-    PORT,
-    RELOAD,
-    CORS_ORIGINS,
-    PLATFORMS,
+    APP_NAME, APP_VERSION, DEBUG, HOST, PORT, RELOAD,
+    CORS_ORIGINS, PLATFORMS
 )
 from backend.database import init_db, get_db, engine, SessionLocal
 from backend.scripts.fix_database import check_and_fix_database
@@ -54,8 +48,17 @@ from backend.api import (
 from backend.services.websocket_manager import ws_manager
 from backend.services.scheduler_service import get_scheduler_service
 from backend.services.n8n_service import get_n8n_service
+# 导入路由
+from backend.api import (
+    account, article, publish, keywords, geo,
+    index_check, reports, notifications, scheduler, knowledge
+)
 
-# ==================== 日志拦截器 (核心监控功能) ====================
+from backend.database import init_db, get_db
+from backend.api import account, article, publish, keywords, geo, index_check, reports, notifications, scheduler, knowledge, article_collection
+
+
+# ==================== 🌟 日志拦截器 (核心监控功能) ====================
 
 def socket_log_sink(message):
     """
@@ -93,6 +96,7 @@ async def lifespan(app: FastAPI):
     # 1. 初始化数据库
     try:
         init_db()
+        # 自动执行数据库修复/迁移（确保新字段存在）
         check_and_fix_database()
         logger.success("✅ 数据库初始化检查完成")
     except Exception as e:
@@ -171,6 +175,18 @@ app.include_router(candidate.router)
 app.include_router(auth.router)
 app.include_router(article_collection.router)
 app.include_router(site_builder.router) # [新增] 网站生成器路由
+app.include_router(publish.router)  # 加上发布路由！
+app.include_router(keywords.router)  # 加上关键词路由！
+app.include_router(geo.router)  # 加上GEO文章路由！
+app.include_router(index_check.router)  # 加上收录检测路由！
+app.include_router(reports.router)  # 加上数据报表路由！
+app.include_router(notifications.router)  # 加上预警通知路由！
+app.include_router(scheduler.router)  # 加上定时任务路由！
+app.include_router(knowledge.router)  # 加上知识库路由！
+app.include_router(upload.router)  # 加上文件上传路由！
+app.include_router(candidate.router)  # 加上候选人管理路由！
+app.include_router(auth.router)  # 加上授权路由！
+app.include_router(article_collection.router)  # 加上文章收集路由！
 
 
 # ==================== WebSocket 端点 ====================
@@ -224,11 +240,20 @@ async def global_exception_handler(request, exc):
 # ==================== 启动脚本 ====================
 if __name__ == "__main__":
     import uvicorn
+    import asyncio
+    import sys
 
+    # Windows 下异步策略优化
     if sys.platform == "win32":
         asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
 
     logger.info(f"正在启动 {APP_NAME} v{APP_VERSION}...")
     logger.info(f"服务地址: http://{HOST}:{PORT}")
 
-    uvicorn.run("main:app", host=HOST, port=PORT, reload=RELOAD, log_level="info")
+    uvicorn.run(
+        "main:app",
+        host=HOST,
+        port=PORT,
+        reload=RELOAD,
+        log_level="info"
+    )

@@ -4,13 +4,27 @@
     <div class="toolbar">
       <div class="toolbar-left">
         <el-select v-model="filterPlatform" placeholder="筛选平台" clearable style="width: 150px">
-          <el-option label="知乎" value="zhihu" />
-          <el-option label="百家号" value="baijiahao" />
-          <el-option label="今日头条" value="toutiao" />
-          <el-option label="搜狐号" value="sohu" />
+          <el-option
+            v-for="p in platformOptions"
+            :key="p.id"
+            :label="p.name"
+            :value="p.id"
+          />
+        </el-select>
+
+        <el-select v-model="filterStatus" placeholder="状态筛选" clearable style="width: 120px; margin-left: 10px">
+          <el-option label="全部" value="" />
+          <el-option label="正常" :value="1" />
+          <el-option label="授权过期" :value="-1" />
+          <el-option label="禁用" :value="0" />
         </el-select>
       </div>
       <div class="toolbar-right">
+        <el-button type="warning" :loading="checking" @click="handleCheckAll">
+          <el-icon><Refresh /></el-icon>
+          {{ checking ? `检测中 (${checkProgress.current}/${checkProgress.total})` : '一键检测所有' }}
+        </el-button>
+
         <el-button type="primary" @click="showAddDialog">
           <el-icon><Plus /></el-icon> 添加账号
         </el-button>
@@ -23,9 +37,10 @@
         v-for="account in filteredAccounts"
         :key="account.id"
         class="account-card"
+        :class="{ 'expired': account.status === -1 }"
       >
         <div class="account-header">
-          <div class="platform-icon" :class="account.platform">
+          <div class="platform-icon" :style="{ backgroundColor: getPlatformColor(account.platform) }">
             {{ getPlatformName(account.platform).substring(0,1) }}
           </div>
           <div class="status-dot" :class="account.status === 1 ? 'online' : 'offline'"></div>
@@ -70,10 +85,12 @@
         <el-form :model="formData" label-width="80px">
           <el-form-item label="平台">
             <el-select v-model="formData.platform" placeholder="选择平台" :disabled="isEdit" style="width: 100%">
-              <el-option label="知乎" value="zhihu" />
-              <el-option label="百家号" value="baijiahao" />
-              <el-option label="今日头条" value="toutiao" />
-              <el-option label="搜狐号" value="sohu" />
+              <el-option
+                v-for="p in platformOptions"
+                :key="p.id"
+                :label="p.name"
+                :value="p.id"
+              />
             </el-select>
           </el-form-item>
           <el-form-item label="名称">
@@ -111,14 +128,52 @@
         </span>
       </template>
     </el-dialog>
+
+    <!-- 检测进度对话框 -->
+    <el-dialog
+      v-model="checkDialogVisible"
+      title="账号授权状态检测"
+      width="600px"
+      :close-on-click-modal="false"
+    >
+      <div class="check-progress">
+        <el-progress :percentage="checkProgress.percentage" :status="checkProgress.status" />
+        <p class="progress-text">
+          正在检测: {{ checkProgress.current }} / {{ checkProgress.total }}
+        </p>
+
+        <div class="check-log">
+          <div
+            v-for="(log, index) in checkLogs"
+            :key="index"
+            class="log-item"
+            :class="{ 'error': !log.is_valid }"
+          >
+            <span class="log-platform">{{ getPlatformName(log.platform) }}</span>
+            <span class="log-name">{{ log.account_name }}</span>
+            <span class="log-message">{{ log.message }}</span>
+            <el-tag :type="log.is_valid ? 'success' : 'danger'" size="small">
+              {{ log.is_valid ? '有效' : '无效' }}
+            </el-tag>
+          </div>
+        </div>
+      </div>
+
+      <template #footer>
+        <el-button :disabled="!checkCompleted" type="primary" @click="closeCheckDialog">
+          确定
+        </el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
-import { Plus, Loading } from '@element-plus/icons-vue'
+import { Plus, Loading, Refresh } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { accountApi } from '@/services/api' // 直接使用 API 避免 store 逻辑复杂化
+import { getEnabledPlatforms, getPlatformConfig } from '@/core/config/platform'
 
 // 状态
 const accounts = ref<any[]>([])
@@ -128,6 +183,23 @@ const isEdit = ref(false)
 const authStep = ref(false) // 是否处于授权等待阶段
 const loading = ref(false)
 const pollTimer = ref<any>(null)
+const filterStatus = ref<number | null>(null)
+
+// 检测相关状态
+const checking = ref(false)
+const checkDialogVisible = ref(false)
+const checkCompleted = ref(false)
+const checkProgress = ref({
+  current: 0,
+  total: 0,
+  percentage: 0,
+  status: '' as '' | 'success' | 'exception'
+})
+const checkLogs = ref<any[]>([])
+let ws: WebSocket | null = null
+
+// 平台选项
+const platformOptions = computed(() => getEnabledPlatforms().map(p => ({ id: p.id, name: p.name })))
 
 const formData = ref({
   id: null as number | null,
@@ -138,8 +210,14 @@ const formData = ref({
 
 // 计算属性
 const filteredAccounts = computed(() => {
-  if (!filterPlatform.value) return accounts.value
-  return accounts.value.filter(acc => acc.platform === filterPlatform.value)
+  let result = accounts.value
+  if (filterPlatform.value) {
+    result = result.filter(acc => acc.platform === filterPlatform.value)
+  }
+  if (filterStatus.value !== null) {
+    result = result.filter(acc => acc.status === filterStatus.value)
+  }
+  return result
 })
 
 const dialogTitle = computed(() => {
@@ -308,11 +386,106 @@ const resetForm = () => {
   loading.value = false
 }
 
+// 检测相关方法
+const handleCheckAll = async () => {
+  try {
+    await ElMessageBox.confirm(
+      '将检测所有已授权账号的登录状态，检测失败的账号状态将更新为"授权过期"，是否继续？',
+      '批量检测确认',
+      {
+        confirmButtonText: '开始检测',
+        cancelButtonText: '取消',
+        type: 'warning',
+      }
+    )
+  } catch {
+    return
+  }
+
+  checkLogs.value = []
+  checkCompleted.value = false
+  checkProgress.value = { current: 0, total: 0, percentage: 0, status: '' }
+  checkDialogVisible.value = true
+  checking.value = true
+
+  try {
+    const allAccounts: any[] = await accountApi.getList()
+    const authorizedAccounts = allAccounts.filter((acc: any) => acc.status === 1)
+    checkProgress.value.total = authorizedAccounts.length
+
+    if (authorizedAccounts.length === 0) {
+      ElMessage.warning('没有需要检测的账号')
+      checkDialogVisible.value = false
+      checking.value = false
+      return
+    }
+
+    setupWsListener()
+    await accountApi.checkAll()
+  } catch (error: any) {
+    console.error('检测失败:', error)
+    ElMessage.error('检测过程中发生错误')
+    checking.value = false
+  }
+}
+
+const setupWsListener = () => {
+  ws = new WebSocket('ws://127.0.0.1:8001/ws')
+
+  ws.onmessage = (event) => {
+    try {
+      const data = JSON.parse(event.data)
+
+      if (data.type === 'account_check_progress') {
+        checkProgress.value.current = data.current
+        checkProgress.value.percentage = data.progress || 0
+        checkLogs.value.push(data.result)
+      } else if (data.type === 'account_check_complete') {
+        checkCompleted.value = true
+        checking.value = false
+        checkProgress.value.status = data.summary.failed > 0 ? 'exception' : 'success'
+
+        ElMessage.success(
+          `检测完成: 共 ${data.summary.total} 个账号, ` +
+          `成功 ${data.summary.success} 个, ` +
+          `失败 ${data.summary.failed} 个`
+        )
+
+        loadAccounts()
+      }
+    } catch (error) {
+      console.error('解析WebSocket消息失败:', error)
+    }
+  }
+}
+
+const closeCheckDialog = () => {
+  checkDialogVisible.value = false
+  if (ws) {
+    ws.close()
+    ws = null
+  }
+}
+
 // 工具函数
-const getPlatformName = (p: string) => ({ zhihu:'知乎', baijiahao:'百家号', toutiao:'头条', sohu:'搜狐' }[p] || p)
+const getPlatformName = (p: string) => {
+  const config = getPlatformConfig(p)
+  return config ? config.name : p
+}
+
+const getPlatformColor = (p: string) => {
+  const config = getPlatformConfig(p)
+  return config ? config.color : '#999'
+}
 
 onMounted(loadAccounts)
-onUnmounted(resetForm)
+onUnmounted(() => {
+  resetForm()
+  if (ws) {
+    ws.close()
+    ws = null
+  }
+})
 </script>
 
 <style scoped lang="scss">
@@ -325,6 +498,11 @@ onUnmounted(resetForm)
   background: var(--bg-secondary); border-radius: 12px; padding: 20px; position: relative; border: 1px solid var(--border);
   transition: transform 0.2s;
   &:hover { transform: translateY(-3px); box-shadow: 0 5px 15px rgba(0,0,0,0.2); }
+
+  &.expired {
+    border: 2px solid #f56c6c;
+    background: linear-gradient(135deg, rgba(245, 108, 108, 0.05), var(--bg-secondary));
+  }
   
   &.add-card {
     display: flex; flex-direction: column; align-items: center; justify-content: center;
@@ -339,10 +517,6 @@ onUnmounted(resetForm)
   .platform-icon {
     width: 40px; height: 40px; border-radius: 8px; display: flex; align-items: center; justify-content: center;
     color: white; font-weight: bold; font-size: 18px;
-    &.zhihu { background: #0084FF; }
-    &.baijiahao { background: #2932e1; }
-    &.toutiao { background: #f85959; }
-    &.sohu { background: #ffc300; color: #000; }
   }
   .status-dot {
     width: 10px; height: 10px; border-radius: 50%;
@@ -363,5 +537,54 @@ onUnmounted(resetForm)
   text-align: center; padding: 30px 0;
   h3 { margin: 20px 0 10px; color: var(--text-primary); }
   .sub-text { color: var(--text-secondary); font-size: 12px; }
+}
+
+.check-progress {
+  .progress-text {
+    text-align: center;
+    margin: 15px 0;
+    color: var(--text-secondary);
+  }
+
+  .check-log {
+    max-height: 300px;
+    overflow-y: auto;
+    margin-top: 15px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px;
+
+    .log-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px;
+      border-bottom: 1px solid var(--border);
+
+      &:last-child {
+        border-bottom: none;
+      }
+
+      &.error {
+        background: rgba(245, 108, 108, 0.05);
+      }
+
+      .log-platform {
+        font-weight: 500;
+        color: var(--primary);
+        min-width: 80px;
+      }
+
+      .log-name {
+        flex: 1;
+        color: var(--text-primary);
+      }
+
+      .log-message {
+        color: var(--text-secondary);
+        font-size: 13px;
+      }
+    }
+  }
 }
 </style>
