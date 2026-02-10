@@ -61,6 +61,8 @@ BROWSER_ARGS = [
     "--disable-blink-features=AutomationControlled",
     "--disable-infobars",
     "--window-size=1920,1080",
+    "--disable-gpu",  # [新增] 兼容 macOS 和部分 Windows 环境
+    "--disable-dev-shm-usage", # [新增] 避免容器环境内存不足
 ]
 
 # 用户数据目录

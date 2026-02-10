@@ -283,9 +283,10 @@ class SecureSessionManager:
 
                 # 启动浏览器并使用存储状态
                 async with async_playwright() as p:
+                    # 使用统一的 BROWSER_ARGS 配置，确保兼容性
                     browser = await p.chromium.launch(
                         headless=True,
-                        args=["--no-sandbox", "--disable-setuid-sandbox"]
+                        args=BROWSER_ARGS
                     )
 
                     try:
