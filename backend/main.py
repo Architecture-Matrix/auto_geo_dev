@@ -118,6 +118,11 @@ async def lifespan(app: FastAPI):
     scheduler_instance.start()
     logger.bind(module="调度中心").success("自动化任务引擎已启动")
 
+    # 5. 注册平台发布适配器
+    from backend.services.playwright.publishers import register_publishers
+    register_publishers(PLATFORMS)
+    logger.bind(module="发布器").success(f"已注册 {len([k for k in PLATFORMS.keys() if k in ['zhihu', 'baijiahao', 'sohu', 'toutiao']])} 个平台发布器")
+
     yield
 
     # ---------------- 关闭阶段 ----------------
