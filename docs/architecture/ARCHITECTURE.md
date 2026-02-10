@@ -20,6 +20,7 @@
 │  │  - 后端进程管理      │         │  - 发布管理 API      │         │  - 收录分析  ││
 │  │  - 系统托盘          │         │  - GEO/AI API        │         │  - AI中台    ││
 │  │                      │         │  - Playwright 自动化 │         │              ││
+│  │                      │         │  - 智能建站 API       │         │              ││
 │  └──────────┬───────────┘         └──────────┬───────────┘         └──────────────┘│
 │             │                                │                                    │
 │             │ IPC                            │ HTTP/WebSocket                    │
@@ -450,6 +451,7 @@ window.electronAPI.onAuthWindowClosed((data) => {
 - 路由：`backend/api/`
 - 服务：`backend/services/`
 - **n8n 服务封装**：`backend/services/n8n_service.py` (新增)
+- **智能建站**：`backend/api/site_builder.py`、`backend/services/site_generator.py`
 
 ### n8n 工作流
 - 工作流目录：`n8n/workflows/`
@@ -501,12 +503,15 @@ Cookies 使用 AES-256 加密存储在本地数据库。
 | **后端** | SQLAlchemy | 2.0.25 | ORM |
 | **后端** | Playwright | 1.40.0 | 浏览器自动化 |
 | **后端** | APScheduler | 3.10.4 | 定时任务 |
+| **后端** | Jinja2 | - | 模板引擎（智能建站） |
+| **后端** | paramiko | 3.4.0 | SFTP 部署（智能建站） |
+| **后端** | boto3 | 1.34.19 | S3/OSS 部署（智能建站） |
 | **AI中台** | n8n | latest | 工作流引擎 |
 | **AI服务** | DeepSeek | - | 大模型API |
 | **数据库** | SQLite | - | 本地存储 |
 
 ---
 
-**文档更新时间：** 2025-01-22
-**维护者：** 小a
-**版本：** v2.1 (新增 n8n AI 中台)
+**文档更新时间：** 2025-02-10
+**维护者：** 小a + 老王
+**版本：** v2.2 (新增智能建站模块)

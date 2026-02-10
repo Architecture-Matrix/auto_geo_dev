@@ -55,6 +55,7 @@ docs/
 | [AUTH-FEATURE.md](features/AUTH-FEATURE.md) | 授权功能实现 |
 | [COOKIE_RESEARCH.md](features/COOKIE_RESEARCH.md) | Cookie 存储研究 |
 | [UI-DESIGN.md](features/UI-DESIGN.md) | UI 设计规范 |
+| [SITE-BUILDER.md](features/SITE-BUILDER.md) | 智能建站功能文档 |
 
 ---
 
@@ -85,4 +86,4 @@ docs/
 
 ---
 
-**文档更新日期**: 2025-01-10
+**文档更新日期**: 2025-02-10
