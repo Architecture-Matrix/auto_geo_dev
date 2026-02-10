@@ -64,15 +64,32 @@ npm install
 
 ### 2. 启动 n8n (AI工作流引擎)
 
+> **两种部署方式**：
+
+**方式1: 使用云端 n8n** ⭐ 推荐（无需本地运行）
+
 ```bash
-# 方式1: Docker (推荐)
+# 只需配置环境变量即可
+# 复制 .env.example 为 .env
+cp .env.example .env
+
+# 编辑 .env，设置你的云端 n8n 地址：
+# N8N_WEBHOOK_URL=https://n8n.opencaio.cn/webhook
+```
+
+**方式2: 本地 Docker 运行**
+
+```bash
 docker run -it --rm \
   --name n8n \
   -p 5678:5678 \
   -v ~/.n8n:/home/node/.n8n \
   n8nio/n8n
+```
 
-# 方式2: npm
+**方式3: npm 本地运行**
+
+```bash
 npm install -g n8n
 n8n start
 ```
@@ -334,8 +351,11 @@ auto_geo/
 | 后端 API | http://127.0.0.1:8001 |
 | API 文档 | http://127.0.0.1:8001/docs |
 | WebSocket | ws://127.0.0.1:8001/ws |
-| n8n 工作流引擎 | http://127.0.0.1:5678 |
-| n8n Webhook | http://127.0.0.1:5678/webhook/* |
+| n8n 工作流引擎（本地） | http://127.0.0.1:5678 |
+| n8n Webhook（本地） | http://127.0.0.1:5678/webhook/* |
+| n8n Webhook（云端） | 通过 `N8N_WEBHOOK_URL` 环境变量配置 |
+
+> **云端 n8n 配置**：在项目根目录创建 `.env` 文件，设置 `N8N_WEBHOOK_URL=https://n8n.opencaio.cn/webhook`
 
 ### 数据存储
 
@@ -429,10 +449,37 @@ A: 需要先启动后端服务。开两个终端，分别运行：
 
 ### Q: n8n webhook 调用失败？
 
-A: 检查以下几点：
-1. n8n 是否正常运行：访问 http://localhost:5678
-2. workflow 是否已激活：在 n8n 界面点击 "Save and activate workflow"
-3. DeepSeek API 凭证是否配置正确
+A: 根据错误类型排查：
+
+**HTTP 404 错误**（工作流未注册）：
+- 该工作流未在云端激活，需要登录 n8n 管理界面
+- 找到对应工作流，点击右上角 **Active** 开关激活
+- 确认 Webhook 路径正确
+
+**超时错误**：
+- 检查网络连接是否正常
+- 长任务（如文章生成）可能需要 2-5 分钟
+
+**其他错误**：
+- 确认 `.env` 文件中 `N8N_WEBHOOK_URL` 配置正确
+- DeepSeek API 凭证是否配置正确
+
+**当前云端工作流**（仅两个）：
+- ✅ `keyword-distill` - 关键词蒸馏
+- ✅ `geo-article-generate` - GEO文章生成
+
+### Q: 如何使用云端 n8n 而不是本地部署？
+
+A:
+```bash
+# 1. 复制环境变量模板
+cp .env.example .env
+
+# 2. 编辑 .env 文件，设置云端地址
+N8N_WEBHOOK_URL=https://n8n.opencaio.cn/webhook
+
+# 3. 重启后端服务即可
+```
 
 ### Q: Windows下构建内存不足？
 
@@ -447,6 +494,13 @@ A: 后端启动后调用 `POST /api/scheduler/start` 即可启动定时检测
 A: 只需在 n8n 中修改 AI 节点的凭证配置，无需修改业务代码！
 
 ## 更新日志
+
+### v2.9.0 (2026-02-10)
+- ✅ **简化云端 n8n 工作流**：仅保留两个核心 webhook
+- ✅ `keyword-distill` - 关键词蒸馏 ✅ 已激活
+- ✅ `geo-article-generate` - GEO文章生成 ✅ 已激活
+- ❌ 移除 `generate-questions` 和 `index-check-analysis`
+- ✅ 更新 FAQ，同步云端工作流状态
 
 ### v2.8.0 (2026-02-03)
 - ✅ **简化依赖管理**：删除多余的 `requirements-dev.txt`，只保留一个 `requirements.txt`
@@ -507,5 +561,5 @@ MIT License
 ---
 
 **维护者**: 小a
-**更新日期**: 2026-02-03
-**版本**: v2.8.0 (简化依赖管理 - 删除冗余文件)
+**更新日期**: 2026-02-10
+**版本**: v2.9.0 (简化云端 n8n 工作流为两个核心 webhook)
