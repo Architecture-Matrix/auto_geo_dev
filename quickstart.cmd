@@ -85,10 +85,11 @@ if not exist "backend\requirements.txt" (
 )
 
 REM Check if key Python packages are installed
-echo Checking Python packages...
-python -c "import fastapi" 2>nul
+echo Checking Python dependencies...
+python backend\check_deps.py 2>nul
 if errorlevel 1 (
-    echo [WARNING] Required Python packages not found!
+    echo.
+    echo [WARNING] Some dependencies are missing!
     echo.
     echo Installing backend dependencies...
     echo This may take a few minutes, please wait...

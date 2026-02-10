@@ -34,37 +34,60 @@
 
 ---
 
-## 二、工作流清单
+## 二、云端工作流清单
 
-| 工作流 | Webhook路径 | 功能描述 | 状态 |
+> 云端 n8n 地址：`https://n8n.opencaio.cn`
+
+| 工作流 | Webhook路径 | 功能描述 | 云端状态 |
 |--------|-------------|----------|------|
-| `keyword-distill.json` | `/webhook/keyword-distill` | 关键词蒸馏 | ✅ |
-| `geo-article-generate.json` | `/webhook/geo-article-generate` | GEO文章生成 | ✅ |
-| `index-check-analysis.json` | `/webhook/index-check-analysis` | 收录检测分析 | ✅ |
-| `generate-questions.json` | `/webhook/generate-questions` | 生成问题变体 | ✅ |
+| `keyword-distill` | `/webhook/keyword-distill` | 关键词蒸馏 | ✅ 已激活 |
+| `geo-article-generate` | `/webhook/geo-article-generate` | GEO文章生成 | ✅ 已激活 |
 
 ---
 
 ## 三、部署步骤
 
-### 3.1 启动 n8n
+### 3.1 选择部署方式
+
+> **两种部署方式**：
+
+**方式1: 使用云端 n8n** ⭐ 推荐（无需本地运行）
+
+1. 配置环境变量
+```bash
+# 在项目根目录创建 .env 文件
+cp .env.example .env
+
+# 编辑 .env，设置云端地址
+N8N_WEBHOOK_URL=https://n8n.opencaio.cn/webhook
+```
+
+2. 重启后端服务即可
+
+**方式2: 本地 Docker 部署**
 
 ```bash
-# Docker 方式（推荐）
 docker run -it --rm \
   --name n8n \
   -p 5678:5678 \
   -v ~/.n8n:/home/node/.n8n \
   n8nio/n8n
-
-# 或 npm 方式
-npm install n8n -g
-n8n start
 ```
 
 访问 http://localhost:5678
 
-### 3.2 导入工作流
+**方式3: 本地 npm 部署**
+
+```bash
+npm install n8n -g
+n8n start
+```
+
+### 3.2 导入工作流（仅本地部署需要）
+
+> **云端部署用户可跳过此步骤**，工作流已在云端配置完成！
+
+本地部署用户：
 
 1. 打开 n8n 界面
 2. 点击右上角 `...` → `Import from File`
@@ -90,9 +113,16 @@ n8n start
 
 ### 4.1 配置 n8n 地址
 
+**云端部署**（推荐）：
+```bash
+# .env 文件
+N8N_WEBHOOK_URL=https://n8n.opencaio.cn/webhook
+```
+
+**本地部署**（开发环境）：
 ```python
-# backend/config/n8n_config.py
-N8N_WEBHOOK_BASE = "http://localhost:5678/webhook"
+# backend/config.py:453
+N8N_WEBHOOK_URL = os.getenv("N8N_WEBHOOK_URL", "http://localhost:5678/webhook")
 ```
 
 ### 4.2 调用关键词蒸馏
@@ -105,13 +135,18 @@ async def distill_keywords(keywords: list[str]) -> dict:
     async with httpx.AsyncClient() as client:
         resp = await client.post(
             f"{N8N_WEBHOOK_BASE}/keyword-distill",
-            json={"keywords": ",".join(keywords)},
-            timeout=30.0
+            json={
+                "core_kw": "SEO优化",
+                "target_info": "某科技公司",
+                "prefixes": "如何,怎么",
+                "suffixes": "方法,技巧"
+            },
+            timeout=45.0
         )
         return resp.json()
 ```
 
-### 4.3 调用文章生成
+### 4.3 调用 GEO 文章生成
 
 ```python
 async def generate_geo_article(keyword: str, platform: str) -> dict:
@@ -122,9 +157,10 @@ async def generate_geo_article(keyword: str, platform: str) -> dict:
             json={
                 "keyword": keyword,
                 "platform": platform,
-                "requirements": "原创度高，SEO优化"
+                "requirements": "原创度高，SEO优化",
+                "word_count": 1200
             },
-            timeout=60.0
+            timeout=300.0
         )
         return resp.json()
 ```
@@ -133,30 +169,48 @@ async def generate_geo_article(keyword: str, platform: str) -> dict:
 
 ## 五、API 映射表
 
-| 原后端API | n8n Webhook | 迁移状态 |
-|-----------|-------------|----------|
-| `POST /api/geo/distill` | `/webhook/keyword-distill` | 待迁移 |
-| `POST /api/geo/generate-questions` | `/webhook/generate-questions` | 待迁移 |
-| `POST /api/geo/generate-article` | `/webhook/geo-article-generate` | 待迁移 |
-| `POST /api/index-check/analyze` | `/webhook/index-check-analysis` | 待迁移 |
+| 后端API | n8n Webhook | 云端状态 |
+|---------|-------------|----------|
+| `POST /api/keywords/distill` | `/webhook/keyword-distill` | ✅ 已激活 |
+| `POST /api/geo/generate` | `/webhook/geo-article-generate` | ✅ 已激活 |
 
 ---
 
 ## 六、故障排查
 
-### Q: Webhook 调用超时？
+### Q: 云端 n8n 调用 404 错误？
+
+A: 该工作流未在云端激活，需要：
+1. 登录云端 n8n 管理界面
+2. 找到对应工作流
+3. 点击右上角 **Active** 开关激活
+4. 确认 Webhook 路径正确
+
+```bash
+# 测试云端 webhook
+curl -X POST https://n8n.opencaio.cn/webhook/keyword-distill \
+  -H "Content-Type: application/json" \
+  -d '{"core_kw": "测试", "target_info": "测试"}'
+
+curl -X POST https://n8n.opencaio.cn/webhook/geo-article-generate \
+  -H "Content-Type: application/json" \
+  -d '{"keyword": "测试", "platform": "zhihu"}'
+```
+
+### Q: 本地 Webhook 调用超时？
 
 A: 检查 n8n 是否正常运行，workflow 是否已激活
 
 ```bash
+# 测试本地 webhook
 curl -X POST http://localhost:5678/webhook/keyword-distill \
   -H "Content-Type: application/json" \
-  -d '{"keywords": "测试"}'
+  -d '{"core_kw": "测试", "target_info": "测试"}'
 ```
 
 ### Q: AI 调用失败？
 
-A: 检查 n8n 中的凭证配置，确认 API Key 正确
+A: 检查 n8n 中的凭证配置，确认 DeepSeek API Key 正确
 
 ### Q: 响应格式不对？
 
@@ -168,4 +222,4 @@ A: 检查 n8n workflow 中的 "Respond to Webhook" 节点配置
 
 ---
 
-更新日期：2025-01-22
+更新日期：2026-02-10（简化为两个核心 webhook）
