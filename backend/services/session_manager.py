@@ -5,6 +5,7 @@
 """
 
 import os
+import sys
 import json
 import hashlib
 import asyncio
@@ -284,13 +285,46 @@ class SecureSessionManager:
                     logger.error(f"平台URL未配置: {platform}")
                     return False
 
+                # 尝试查找本地 Chrome 路径
+                chrome_paths = [
+                    r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+                    r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
+                    os.path.expandvars(r"%LOCALAPPDATA%\Google\Chrome\Application\chrome.exe")
+                ]
+                
+                # Mac OS 支持
+                if sys.platform == "darwin":
+                    chrome_paths = [
+                        "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+                        os.path.expanduser("~/Applications/Google Chrome.app/Contents/MacOS/Google Chrome")
+                    ]
+
+                executable_path = None
+                for path in chrome_paths:
+                    if os.path.exists(path):
+                        executable_path = path
+                        break
+
                 # 启动浏览器并使用存储状态
                 async with async_playwright() as p:
+                    # 准备启动参数
+                    launch_options = {
+                        "headless": True,
+                        "args": BROWSER_ARGS
+                    }
+                    if executable_path:
+                        launch_options["executable_path"] = executable_path
+
                     # 使用统一的 BROWSER_ARGS 配置，确保兼容性
-                    browser = await p.chromium.launch(
-                        headless=True,
-                        args=BROWSER_ARGS
-                    )
+                    try:
+                        browser = await p.chromium.launch(**launch_options)
+                    except Exception as e:
+                        # 如果指定了executable_path但失败，尝试回退到内置浏览器
+                        if executable_path:
+                            launch_options.pop("executable_path", None)
+                            browser = await p.chromium.launch(**launch_options)
+                        else:
+                            raise e
 
                     try:
                         # 创建上下文并加载存储状态
