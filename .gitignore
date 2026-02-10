@@ -121,3 +121,6 @@ scripts/generate_data.py
 # 忽略 backend/database/ 目录下的 .db-shm 和 .db-wal 后缀的数据库临时文件
 backend/database/*.db-shm
 backend/database/*.db-wal
+
+# ==================== 生成的静态站点 ====================
+backend/static/sites/
