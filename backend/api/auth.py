@@ -92,15 +92,25 @@ async def start_auth_flow(
         # 宽松验证：如果项目不存在，创建默认项目
         project = db.query(Project).filter(Project.id == project_id).first()
         if not project:
-            # 创建默认项目
-            project = Project(
-                id=project_id,
-                name=f"默认项目_{project_id}",
-                company_name=f"默认公司_{project_id}"
-            )
-            db.add(project)
-            db.commit()
-            db.refresh(project)
+            logger.info(f"项目 {project_id} 不存在，准备创建默认项目")
+            try:
+                # 创建默认项目
+                # 注意：Project 模型不需要 user_id
+                project = Project(
+                    id=project_id,
+                    name=f"默认项目_{project_id}",
+                    company_name=f"默认公司_{project_id}"
+                )
+                db.add(project)
+                db.commit()
+                db.refresh(project)
+                logger.info(f"默认项目 {project_id} 创建成功")
+            except Exception as e:
+                logger.error(f"创建默认项目失败: {e}")
+                # 如果是 TypeError，尝试打印更多信息
+                if isinstance(e, TypeError):
+                    logger.error(f"TypeError 详情: {str(e)}")
+                raise HTTPException(status_code=500, detail=f"创建默认项目失败: {str(e)}")
         
         # 开始授权流程
         result = await auth_service.start_auth_flow(

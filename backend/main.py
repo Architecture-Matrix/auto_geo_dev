@@ -175,18 +175,6 @@ app.include_router(candidate.router)
 app.include_router(auth.router)
 app.include_router(article_collection.router)
 app.include_router(site_builder.router) # [新增] 网站生成器路由
-app.include_router(publish.router)  # 加上发布路由！
-app.include_router(keywords.router)  # 加上关键词路由！
-app.include_router(geo.router)  # 加上GEO文章路由！
-app.include_router(index_check.router)  # 加上收录检测路由！
-app.include_router(reports.router)  # 加上数据报表路由！
-app.include_router(notifications.router)  # 加上预警通知路由！
-app.include_router(scheduler.router)  # 加上定时任务路由！
-app.include_router(knowledge.router)  # 加上知识库路由！
-app.include_router(upload.router)  # 加上文件上传路由！
-app.include_router(candidate.router)  # 加上候选人管理路由！
-app.include_router(auth.router)  # 加上授权路由！
-app.include_router(article_collection.router)  # 加上文章收集路由！
 
 
 # ==================== WebSocket 端点 ====================
