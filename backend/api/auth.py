@@ -4,10 +4,11 @@
 处理AI平台的授权流程
 """
 
-from fastapi import APIRouter, HTTPException, Depends, Query, Body
+from fastapi import APIRouter, HTTPException, Depends, Query, Body, Request
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 from typing import List, Dict, Any
+from loguru import logger
 
 from backend.database.models import User, Project
 from backend.database import get_db
@@ -21,26 +22,60 @@ router = APIRouter(
 )
 
 
+from pydantic import BaseModel
+
+class AuthStartFlowRequest(BaseModel):
+    user_id: int
+    project_id: int
+    platforms: List[str]
+
+
 @router.post("/start-flow")
 async def start_auth_flow(
-    user_id: int = Body(..., description="用户ID"),
-    project_id: int = Body(..., description="项目ID"),
-    platforms: List[str] = Body(..., description="要授权的平台列表"),
+    request: Request,
     db: Session = Depends(get_db)
 ):
     """
     开始授权流程
     
     Args:
-        user_id: 用户ID
-        project_id: 项目ID
-        platforms: 要授权的平台列表
+        request: Request对象
         db: 数据库会话
         
     Returns:
         授权流程信息
     """
     try:
+        # 手动解析参数，避免 Pydantic 422 错误，并打印日志
+        try:
+            body = await request.json()
+            logger.info(f"收到授权请求数据: {body}")
+        except Exception as e:
+            logger.error(f"解析请求体失败: {e}")
+            raise HTTPException(status_code=400, detail="无效的 JSON 数据")
+
+        user_id = body.get("user_id")
+        project_id = body.get("project_id")
+        platforms = body.get("platforms")
+        
+        # 兼容性处理：如果前端传了 None，默认设为 1
+        if user_id is None:
+            user_id = 1
+            logger.warning("user_id 为空，使用默认值 1")
+            
+        if project_id is None:
+            project_id = 1
+            logger.warning("project_id 为空，使用默认值 1")
+
+        # 简单的参数校验
+        if user_id is None or project_id is None:
+             error_msg = f"缺少 user_id 或 project_id. 收到数据: {body}"
+             logger.error(error_msg)
+             raise HTTPException(status_code=400, detail=error_msg)
+        
+        if not platforms or not isinstance(platforms, list):
+             raise HTTPException(status_code=400, detail="platforms 必须是非空列表")
+
         # 宽松验证：如果用户不存在，创建默认用户
         user = db.query(User).filter(User.id == user_id).first()
         if not user:

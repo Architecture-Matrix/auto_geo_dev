@@ -8,6 +8,7 @@ Playwright浏览器管理器 - 工业级完整版
 import asyncio
 import json
 import os
+import sys
 import uuid
 from datetime import datetime
 from pathlib import Path
@@ -104,6 +105,13 @@ class PlaywrightManager:
             r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
             os.path.expandvars(r"%LOCALAPPDATA%\Google\Chrome\Application\chrome.exe")
         ]
+        
+        # Mac OS 支持
+        if sys.platform == "darwin":
+            chrome_paths = [
+                "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+                os.path.expanduser("~/Applications/Google Chrome.app/Contents/MacOS/Google Chrome")
+            ]
 
         executable_path = None
         for path in chrome_paths:
@@ -112,15 +120,34 @@ class PlaywrightManager:
                 logger.info(f"✅ 找到本地 Chrome 浏览器: {path}")
                 break
 
+        # 构建启动参数
+        # 移除重复参数，保留 config 中的配置
+        args = list(BROWSER_ARGS)
+        
+        # 添加额外的反爬和稳定性参数
+        extra_args = [
+            "--disable-dev-shm-usage",
+            "--disable-background-networking",
+            "--disable-features=Translate",
+        ]
+        
+        # 确保不重复添加
+        for arg in extra_args:
+            if arg not in args:
+                args.append(arg)
+                
+        # Mac 特殊处理
+        if sys.platform == "darwin":
+            # Mac 上移除可能导致崩溃的 no-sandbox
+            if "--no-sandbox" in args:
+                args.remove("--no-sandbox")
+            # 尝试禁用 GPU 以避免崩溃
+            if "--disable-gpu" not in args:
+                args.append("--disable-gpu")
+
         launch_options = {
             "headless": False,  # 授权和发布通常需要有头模式，或者由上层控制
-            "args": BROWSER_ARGS + [
-                "--disable-blink-features=AutomationControlled",  # 核心反爬
-                "--disable-dev-shm-usage",
-                "--disable-background-networking",
-                "--disable-features=Translate",
-                "--no-sandbox"
-            ]
+            "args": args
         }
 
         if executable_path:
