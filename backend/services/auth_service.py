@@ -621,6 +621,9 @@ class AuthService:
         Returns:
             (browser, context, page, debug_url) 元组
         """
+        # 确保配置已加载
+        from backend.config import BROWSER_ARGS
+        
         try:
             logger.info("开始启动授权浏览器...")
             
@@ -629,19 +632,24 @@ class AuthService:
             playwright = await async_playwright().start()
             
             # 启动浏览器（禁用远程调试）
-            logger.info("启动Chromium浏览器...")
+            logger.info(f"启动Chromium浏览器... 参数: {BROWSER_ARGS}")
             try:
                 browser = await playwright.chromium.launch(
                     headless=False,
-                    args=[
-                        *BROWSER_ARGS
-                    ],
+                    args=BROWSER_ARGS,
                     timeout=30000  # 30秒超时
                 )
             except Exception as browser_error:
-                logger.error(f"浏览器启动失败: {browser_error}")
+                error_msg = str(browser_error)
+                logger.error(f"浏览器启动失败: {error_msg}")
+                
+                # 如果是缺失浏览器的错误，给出更明确的提示
+                if "Executable doesn't exist" in error_msg:
+                    logger.error("请执行 'playwright install' 安装浏览器")
+                
                 await playwright.stop()
-                return None, None, None, None
+                # 抛出异常以便上层捕获具体错误
+                raise Exception(f"浏览器启动失败: {error_msg}")
             
             # 创建上下文和页面
             logger.info("创建浏览器上下文...")
@@ -653,7 +661,7 @@ class AuthService:
                 logger.error(f"创建上下文/页面失败: {context_error}")
                 await browser.close()
                 await playwright.stop()
-                return None, None, None, None
+                raise Exception(f"创建页面失败: {str(context_error)}")
             
             # 禁用远程调试，返回None
             debug_url = None
@@ -662,7 +670,9 @@ class AuthService:
             return browser, context, page, debug_url
             
         except Exception as e:
-            logger.error(f"启动授权浏览器失败: {e}")
+            logger.error(f"启动授权浏览器异常: {e}")
+            # 返回错误信息而不是None，但这需要修改调用方的逻辑
+            # 目前保持返回 None，但在日志中记录详细信息
             return None, None, None, None
     
     async def _close_browser(self, browser: Browser):

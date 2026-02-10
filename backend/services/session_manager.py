@@ -257,14 +257,17 @@ class SecureSessionManager:
         """
         执行心跳检测（打开平台页面验证会话）
         优化：增加超时时间、添加重试机制、优化加载策略
-
+        
         Args:
             platform: AI平台标识
             storage_state: 存储状态
-
+            
         Returns:
             心跳检测是否成功
         """
+        # 确保配置已加载
+        from backend.config import AI_PLATFORMS, BROWSER_ARGS
+        
         max_retries = 2
         retry_count = 0
 
