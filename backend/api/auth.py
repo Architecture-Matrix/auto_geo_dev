@@ -96,7 +96,7 @@ async def start_auth_flow(
             project = Project(
                 id=project_id,
                 name=f"默认项目_{project_id}",
-                user_id=user_id
+                company_name=f"默认公司_{project_id}"
             )
             db.add(project)
             db.commit()
