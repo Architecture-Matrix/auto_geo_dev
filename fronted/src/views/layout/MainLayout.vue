@@ -72,9 +72,13 @@ import { Minus, FullScreen, Close } from '@element-plus/icons-vue'
 const route = useRoute()
 const router = useRouter()
 
-// 获取可见的路由（隐藏 meta.hidden 的路由）
+// 获取可见的路由（不隐藏 meta.hidden 的路由）
+
 const visibleRoutes = computed(() => {
-  return router.getRoutes().filter(r => r.path.startsWith('/') && !r.meta?.hidden)
+  return router
+    .getRoutes()
+    .filter(r => r.path.startsWith('/') && !r.meta?.hidden)
+    .sort((a, b) => (Number(a.meta?.order ?? 999)) - (Number(b.meta?.order ?? 999)))
 })
 
 // 当前页面标题

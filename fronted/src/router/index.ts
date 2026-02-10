@@ -16,13 +16,13 @@ const routes: RouteRecordRaw[] = [
         path: 'dashboard',
         name: 'Dashboard',
         component: () => import('@/views/dashboard/DashboardPage.vue'),
-        meta: { title: '首页', icon: 'House' }, // 原来的概览改为首页，避免名字冲突
+        meta: { title: '首页', icon: 'House', order: 1 }, // 原来的概览改为首页，避免名字冲突
       },
       {
         path: 'data-report',
         name: 'DataReport',
         component: () => import('@/views/report/DataReport.vue'),
-        meta: { title: '数据报表', icon: 'DataAnalysis' },
+        meta: { title: '数据报表', icon: 'DataAnalysis',order:9 },
       },
       {
         path: 'accounts',
@@ -46,7 +46,7 @@ const routes: RouteRecordRaw[] = [
         path: 'articles/add',
         name: 'ArticleAdd',
         component: () => import('@/views/article/ArticleEdit.vue'),
-        meta: { title: '新建文章', hidden: true },
+        meta: { title: '新建文章', hidden: true},
       },
       {
         path: 'articles/edit/:id',
@@ -58,26 +58,26 @@ const routes: RouteRecordRaw[] = [
         path: 'publish',
         name: 'Publish',
         component: () => import('@/views/publish/PublishPage.vue'),
-        meta: { title: '批量发布', icon: 'Promotion' },
+        meta: { title: '批量发布', icon: 'Promotion',order:6 },
       },
       {
         path: 'history',
         name: 'History',
         component: () => import('@/views/publish/PublishHistory.vue'),
-        meta: { title: '发布记录', icon: 'Clock' },
+        meta: { title: '发布记录', icon: 'Clock',order:7 },
       },
       {
         path: 'settings',
         name: 'Settings',
         component: () => import('@/views/settings/SettingsPage.vue'),
-        meta: { title: '设置', icon: 'Setting' },
+        meta: { title: '设置', icon: 'Setting',order:10 },
       },
 // ==================== [新增] 智能建站模块 ====================
       {
         path: 'site-builder',
         name: 'SiteBuilder',
         component: () => import('@/views/site-builder/ConfigWizard.vue'),
-        meta: { title: '智能建站', icon: 'Platform' }, // 图标建议用 Platform 或 Brush
+        meta: { title: '智能建站', icon: 'Platform', order: 3 }, // 图标建议用 Platform 或 Brush
       },
       // ===========================================================
 
@@ -88,7 +88,7 @@ const routes: RouteRecordRaw[] = [
         path: 'geo/dashboard',
         name: 'GeoDashboard',
         component: () => import('@/views/geo/Dashboard.vue'),
-        meta: { title: '数据概览', icon: 'PieChart' }, 
+        meta: { title: '数据概览', icon: 'PieChart', order: 2 }, // 使用饼图图标，放在第一位
       },
       {
         path: 'geo/projects',
@@ -100,19 +100,19 @@ const routes: RouteRecordRaw[] = [
         path: 'geo/keywords',
         name: 'GeoKeywords',
         component: () => import('@/views/geo/Keywords.vue'),
-        meta: { title: '关键词蒸馏', icon: 'MagicStick' },
+        meta: { title: '关键词蒸馏', icon: 'MagicStick',order:4 },
       },
       {
         path: 'geo/articles',
         name: 'GeoArticles',
         component: () => import('@/views/geo/Articles.vue'),
-        meta: { title: '文章生成', icon: 'EditPen' },
+        meta: { title: '文章生成', icon: 'EditPen', order: 5 },
       },
       {
         path: 'geo/monitor',
         name: 'GeoMonitor',
         component: () => import('@/views/geo/Monitor.vue'),
-        meta: { title: '收录监控', icon: 'Monitor' },
+        meta: { title: '收录监控', icon: 'Monitor',order:8 },
       },
             {
         path: 'candidates',

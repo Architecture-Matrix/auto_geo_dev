@@ -274,14 +274,17 @@ const startAuthFlow = async () => {
   try {
     // 这里应该从当前登录用户获取user_id，从路由参数或store获取project_id
     // 暂时使用固定值，实际应用中需要从上下文中获取
-    const user_id = 1 // 示例值
-    const project_id = 1 // 示例值
-
-    const response = await post('/auth/start-flow', {
-      user_id,
-      project_id,
+    
+    // 显式构造请求数据，确保类型正确
+    const requestPayload = {
+      user_id: 1,
+      project_id: 1,
       platforms: selectedPlatforms.value
-    })
+    }
+    
+    console.log('正在发送授权请求:', requestPayload)
+
+    const response = await post('/auth/start-flow', requestPayload)
 
     if (response.success) {
       authSessionId.value = response.auth_session_id
