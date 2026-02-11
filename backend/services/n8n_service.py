@@ -19,7 +19,7 @@ from pydantic import BaseModel, Field, ConfigDict
 class N8nConfig:
     # 🌟 优先读取环境变量，适配 Docker/生产环境
     # 格式示例：http://n8n:5678/webhook 或 http://192.168.1.10:5678/webhook
-    WEBHOOK_BASE = os.getenv("N8N_WEBHOOK_URL", "http://localhost:5678/webhook")
+    WEBHOOK_BASE = os.getenv("N8N_WEBHOOK_URL", "https://n8n.opencaio.cn/webhook")
 
     # 超时配置
     TIMEOUT_SHORT = 45.0
