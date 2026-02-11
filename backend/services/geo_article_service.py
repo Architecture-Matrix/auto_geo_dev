@@ -31,59 +31,55 @@ class GeoArticleService:
     def __init__(self, db: Session):
         self.db = db
 
-    async def generate(self, keyword_id: int, company_name: str, platform: str = "zhihu",
-                       publish_time: Optional[datetime] = None) -> Dict[str, Any]:
+    async def generate(self, keyword_id: int, company_name: str) -> Dict[str, Any]:
         """
-        异步生成文章逻辑
-        流程：创建占位(generating) -> 调用 n8n -> 填充内容 -> 设为待发布(scheduled)
+        异步生成文章逻辑（异步回调模式）
+        流程：创建占位(generating) -> 调用 n8n (异步) -> n8n完成后回调更新内容 -> 设为待发布(scheduled)
         """
         # 1. 创建占位记录，初始状态为 generating
         article = GeoArticle(
             keyword_id=keyword_id,
             title="[AI正在创作中]...",
             content="正在努力写作，请稍后刷新列表...",
-            platform=platform,
-            publish_status="generating",
-            publish_time=publish_time
+            publish_status="generating"
+            # 注意：平台解耦，生成时不绑定具体平台
         )
         self.db.add(article)
         self.db.commit()
         self.db.refresh(article)
 
-        gen_log.info(f"🆕 任务启动：为关键词 ID {keyword_id} 生成文章")
+        gen_log.info(f"🆕 任务启动：为关键词 ID {keyword_id} 生成文章 (article_id: {article.id})")
 
         try:
             # 2. 获取关键词文本
             kw_obj = self.db.query(Keyword).filter(Keyword.id == keyword_id).first()
             kw_text = kw_obj.keyword if kw_obj else "未知关键词"
 
-            # 3. 调用 n8n AI 中台
-            gen_log.info(f"🛰️ 正在外发 AI 请求 (关键词: {kw_text})...")
+            # 3. 调用 n8n AI 中台（异步模式）
+            gen_log.info(f"🛰️ 正在外发 AI 请求 (关键词: {kw_text})，使用异步回调模式...")
             n8n = await get_n8n_service()
             n8n_res = await n8n.generate_geo_article(
                 keyword=kw_text,
-                platform=platform,
+                # 平台解耦：移除 platform 参数，生成阶段不关注发布目标
                 requirements=f"围绕【{company_name}】编写，风格专业商务。",
-                word_count=1200
+                word_count=1200,
+                # 传递回调URL和article_id，n8n完成后将结果回调通知
+                callback_url=None,  # 使用配置中的默认回调URL
+                article_id=article.id
             )
 
+            # 异步模式下，n8n 立即返回，只要HTTP状态200就视为触发成功
+            # 实际内容更新通过回调接口完成
             if n8n_res.status == "success":
-                ai_data = n8n_res.data or {}
-                article.title = ai_data.get("title", f"关于{kw_text}的深度解析")
-                article.content = ai_data.get("content", "内容生成失败")
-
-                # 🌟 核心修复：只有到这一步，状态才改为 scheduled，调度器此时才能扫描到
-                article.publish_status = "scheduled"
-                if not publish_time:
-                    article.publish_time = datetime.now()
-
-                gen_log.success(f"✅ 生成成功：文章《{article.title[:10]}...》已进入待发布队列")
+                gen_log.info(f"✅ AI 生成任务已触发，等待 n8n 异步回调 (article_id: {article.id})")
+                # 保持 generating 状态，等待回调更新内容
+                # 不设置 scheduled，避免调度器提前发布未完成的内容
             else:
                 article.publish_status = "failed"
-                article.error_msg = n8n_res.error
-                gen_log.error(f"❌ AI 生成失败：{n8n_res.error}")
+                article.error_msg = n8n_res.error or "触发 n8n 生成失败"
+                self.db.commit()
+                gen_log.error(f"❌ 触发 n8n 生成失败：{n8n_res.error}")
 
-            self.db.commit()
             return {"success": True, "article_id": article.id}
 
         except Exception as e:

@@ -10,9 +10,10 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from loguru import logger
+from pydantic import BaseModel
 
 from backend.database import get_db
-from backend.database.models import PublishRecord, Account, Article
+from backend.database.models import PublishRecord, Account, Article, GeoArticle
 from backend.schemas import (
     ApiResponse,
     PublishTaskCreate,
@@ -466,3 +467,175 @@ async def retry_publish(
         "retry_count": record.retry_count,
         "message": "重试任务已创建"
     })
+
+
+# ==================== 批量发布接口（针对 GeoArticle） ====================
+
+class BatchPublishRequest(BaseModel):
+    """批量发布请求模型（针对 GeoArticle）"""
+    article_ids: List[int]
+    account_ids: List[int]
+    # 每篇文章可以指定不同的平台和账号组合
+    # 格式: [{"article_id": 1, "platform": "zhihu", "account_id": 2}, ...]
+    # 简化版：直接使用 account_ids，平台由账号决定
+    scheduled_time: Optional[str] = None
+
+
+@router.post("/batch", response_model=ApiResponse)
+async def batch_publish_geo_articles(
+    request: BatchPublishRequest,
+    db: Session = Depends(get_db),
+):
+    """
+    批量发布 GEO 文章
+
+    文章生成阶段已与平台解耦，发布时需要为每篇文章选择平台和账号
+    """
+    # 1. 验证文章和账号是否存在
+    geo_articles = db.query(GeoArticle).filter(GeoArticle.id.in_(request.article_ids)).all()
+    if len(geo_articles) != len(request.article_ids):
+        found_ids = [a.id for a in geo_articles]
+        missing = set(request.article_ids) - set(found_ids)
+        raise HTTPException(status_code=404, detail=f"文章不存在: {missing}")
+
+    accounts = db.query(Account).filter(Account.id.in_(request.account_ids)).all()
+    if len(accounts) != len(request.account_ids):
+        found_ids = [a.id for a in accounts]
+        missing = set(request.account_ids) - set(found_ids)
+        raise HTTPException(status_code=404, detail=f"账号不存在: {missing}")
+
+    # 2. 检查账号状态和文章状态
+    disabled_accounts = [a.account_name for a in accounts if a.status != 1]
+    invalid_articles = [a.title for a in geo_articles if a.publish_status != "scheduled"]
+
+    if disabled_accounts:
+        raise HTTPException(
+            status_code=400,
+            detail=f"以下账号未授权或已禁用: {', '.join(disabled_accounts)}"
+        )
+
+    if invalid_articles:
+        raise HTTPException(
+            status_code=400,
+            detail=f"以下文章尚未生成完成: {', '.join(invalid_articles[:3])}{'...' if len(invalid_articles) > 3 else ''}"
+        )
+
+    # 3. 为每篇文章绑定选中的平台和账号，更新状态为 publishing
+    # 同时创建发布记录
+    publish_records = []
+    task_subtasks = []
+
+    for article in geo_articles:
+        for account in accounts:
+            # 更新文章状态和平台
+            article.platform = account.platform
+            article.publish_status = "publishing"
+
+            # 检查是否已有发布记录
+            existing = db.query(PublishRecord).filter(
+                PublishRecord.article_id == article.id,
+                PublishRecord.account_id == account.id
+            ).first()
+
+            if not existing:
+                record = PublishRecord(
+                    article_id=article.id,
+                    account_id=account.id,
+                    publish_status=0,  # 待发布
+                )
+                db.add(record)
+                publish_records.append(record)
+
+            # 添加到任务子任务列表
+            task_subtasks.append({
+                "article_id": article.id,
+                "account_id": account.id,
+                "platform": account.platform,
+                "status": 0,  # 待发布
+                "platform_url": None,
+                "error_msg": None,
+            })
+
+    db.commit()
+
+    # 4. 创建发布任务
+    task_id = publish_task_manager.create_task(request.article_ids, request.account_ids)
+
+    # 5. 创建异步进度更新函数
+    async def update_task_progress(completed: int, total: int):
+        await update_publish_progress(task_id, completed, total, task_subtasks[completed] if completed < len(task_subtasks) else None)
+
+    # 6. 后台执行发布任务
+    try:
+        await publish_mgr.execute_batch(task_subtasks, update_task_progress)
+        logger.info(f"批量发布任务完成: {task_id}")
+    except Exception as e:
+        logger.error(f"批量发布任务执行失败: {task_id}, {e}")
+        # 更新失败状态
+        for article in geo_articles:
+            if article.publish_status == "publishing":
+                article.publish_status = "failed"
+                article.error_msg = str(e)
+        db.commit()
+
+
+async def update_publish_progress(task_id: str, completed: int, total: int, task: dict):
+    """
+    更新发布进度并推送 WebSocket 消息
+    """
+    # 更新任务管理器中的进度
+    if task is None:
+        return
+
+    # 更新数据库中的发布记录
+    from backend.database import SessionLocal
+    from datetime import datetime
+
+    db = SessionLocal()
+    try:
+        record = db.query(PublishRecord).filter(
+            PublishRecord.article_id == task["article_id"],
+            PublishRecord.account_id == task["account_id"]
+        ).first()
+
+        if record:
+            # 更新记录状态
+            if completed >= total:
+                # 全部完成
+                record.publish_status = 2  # 成功
+                record.published_at = datetime.now()
+            else:
+                record.publish_status = 0  # 待发布
+            db.commit()
+
+            # 更新文章状态
+            article = db.query(GeoArticle).filter(GeoArticle.id == task["article_id"]).first()
+            if article:
+                article.publish_status = "published" if completed >= total else "publishing"
+                article.published_at = datetime.now() if completed >= total else None
+                if task.get("platform_url"):
+                    article.platform_url = task["platform_url"]
+                if task.get("error_msg"):
+                    article.error_msg = task["error_msg"]
+                db.commit()
+
+                # 推送 WebSocket 进度更新
+                ws_mgr = get_ws_manager()
+                if ws_mgr:
+                    await ws_mgr.broadcast({
+                        "type": "publish_progress",
+                        "task_id": task_id,
+                        "data": {
+                            "article_id": task["article_id"],
+                            "article_title": article.title,
+                            "account_id": task["account_id"],
+                            "platform": task.get("platform"),
+                            "status": record.publish_status,
+                            "platform_url": task.get("platform_url"),
+                            "error_msg": task.get("error_msg"),
+                            "completed": completed,
+                            "total": total,
+                        }
+                    })
+    finally:
+        db.close()

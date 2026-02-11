@@ -1,4 +1,7 @@
 # -*- coding: utf-8 -*-
+"""
+AutoGeo 后端主程序
+"""
 
 import sys
 import os
@@ -7,14 +10,9 @@ from pathlib import Path
 from contextlib import asynccontextmanager
 from typing import List
 import uuid
-
-# 添加项目根目录到Python路径
-project_root = Path(__file__).parent.parent
-sys.path.insert(0, str(project_root))
-
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles  # 必须导入
+from fastapi.staticfiles import StaticFiles
 from loguru import logger
 
 # 导入配置和数据库
@@ -26,40 +24,30 @@ from backend.database import init_db, get_db, engine, SessionLocal
 from backend.scripts.fix_database import check_and_fix_database
 
 # 导入所有 API 路由模块
-from backend.api import (
-    account,
-    article,
-    publish,
-    keywords,
-    geo,
-    index_check,
-    reports,
-    notifications,
-    scheduler,
-    knowledge,
-    upload,
-    candidate,
-    auth,
-    article_collection,
-    site_builder,  # [新增] 网站生成路由
-)
+from backend.api.account.router import account
+from backend.api.article.router import article
+from backend.api.publish.router import publish
+from backend.api.keywords.router import keywords
+from backend.api.geo.router import geo
+from backend.api.index_check.router import index_check
+from backend.api.reports.router import reports
+from backend.api.notifications.router import notifications
+from backend.api.scheduler.router import scheduler
+from backend.api.knowledge.router import knowledge
+from backend.api.auth.router import auth
+from backend.api.article_collection.router import article_collection
+from backend.api.site_builder.router import site_builder
 
 # 导入服务组件
 from backend.services.websocket_manager import ws_manager
 from backend.services.scheduler_service import get_scheduler_service
 from backend.services.n8n_service import get_n8n_service
-# 导入路由
-from backend.api import (
-    account, article, publish, keywords, geo,
-    index_check, reports, notifications, scheduler, knowledge
-)
-
-from backend.database import init_db, get_db
-from backend.api import account, article, publish, keywords, geo, index_check, reports, notifications, scheduler, knowledge, article_collection
+from backend.services.playwright_mgr import playwright_mgr
+from backend.services.playwright.publishers import register_publishers
+from backend.config import PLATFORMS
 
 
-# ==================== 🌟 日志拦截器 (核心监控功能) ====================
-
+# ==================== 日志拦截器（核心监控功能） ====================
 def socket_log_sink(message):
     """
     Loguru 拦截器：将每一条日志通过 WebSocket 广播出去
@@ -78,8 +66,11 @@ def socket_log_sink(message):
                 loop.create_task(ws_manager.broadcast(log_payload))
         except RuntimeError:
             pass
-    except Exception:
+        except Exception:
+            pass
+    except Exception as e:
         pass
+
 
 # 配置 Loguru
 logger.remove()
@@ -100,17 +91,18 @@ async def lifespan(app: FastAPI):
         check_and_fix_database()
         logger.success("✅ 数据库初始化检查完成")
     except Exception as e:
-        logger.error(f"数据库初始化失败: {e}")
+        logger.error(f"❌ 数据库初始化失败: {e}")
 
     # 2. 注入全局 WebSocket 管理器
     account.set_ws_manager(ws_manager)
     publish.set_ws_manager(ws_manager)
+    notifications.set_ws_manager(ws_manager)
     notifications.set_ws_callback(ws_manager.broadcast)
 
     # 3. 初始化 Playwright 管理器
-    from backend.services.playwright_mgr import playwright_mgr
     playwright_mgr.set_db_factory(SessionLocal)
     playwright_mgr.set_ws_callback(ws_manager.broadcast)
+    logger.bind(module="发布器").success("发布器已配置")
 
     # 4. 启动定时任务引擎
     scheduler_instance = get_scheduler_service()
@@ -119,7 +111,6 @@ async def lifespan(app: FastAPI):
     logger.bind(module="调度中心").success("自动化任务引擎已启动")
 
     # 5. 注册平台发布适配器
-    from backend.services.playwright.publishers import register_publishers
     register_publishers(PLATFORMS)
     logger.bind(module="发布器").success(f"已注册 {len([k for k in PLATFORMS.keys() if k in ['zhihu', 'baijiahao', 'sohu', 'toutiao']])} 个平台发布器")
 
@@ -146,20 +137,21 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ==================== 🛠️ [核心新增] 静态资源挂载 ====================
 
+# ==================== 静态资源挂载 ====================
 current_dir = os.path.dirname(os.path.abspath(__file__))
 static_dir = os.path.join(current_dir, "static")
 
 if not os.path.exists(static_dir):
     logger.info(f"正在创建静态目录: {static_dir}")
     os.makedirs(static_dir)
+
 if not os.path.exists(os.path.join(static_dir, "uploads")):
     os.makedirs(os.path.join(static_dir, "uploads"))
+
 if not os.path.exists(os.path.join(static_dir, "sites")):
     os.makedirs(os.path.join(static_dir, "sites"))
 
-# 挂载目录
 app.mount("/static", StaticFiles(directory=static_dir), name="static")
 logger.success(f"✅ 静态资源已挂载: {static_dir}")
 
@@ -175,11 +167,11 @@ app.include_router(reports.router)
 app.include_router(notifications.router)
 app.include_router(scheduler.router)
 app.include_router(knowledge.router)
-app.include_router(upload.router)       # 文件上传
+app.include_router(upload.router)
 app.include_router(candidate.router)
 app.include_router(auth.router)
 app.include_router(article_collection.router)
-app.include_router(site_builder.router) # [新增] 网站生成器路由
+app.include_router(site_builder.router)
 
 
 # ==================== WebSocket 端点 ====================
@@ -187,7 +179,6 @@ app.include_router(site_builder.router) # [新增] 网站生成器路由
 async def websocket_endpoint(websocket: WebSocket, client_id: str = None):
     if not client_id:
         client_id = f"client_{uuid.uuid4().hex[:8]}"
-
     await ws_manager.connect(websocket, client_id)
     await ws_manager.send_personal(
         {
@@ -198,7 +189,6 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str = None):
         },
         client_id,
     )
-
     try:
         while True:
             await websocket.receive_text()
@@ -214,9 +204,11 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str = None):
 async def root():
     return {"app": APP_NAME, "version": APP_VERSION, "status": "running"}
 
+
 @app.get("/api/health")
 async def health():
     return {"status": "ok"}
+
 
 @app.get("/api/platforms")
 async def get_platforms():
@@ -232,21 +224,16 @@ async def global_exception_handler(request, exc):
 
 # ==================== 启动脚本 ====================
 if __name__ == "__main__":
-    import uvicorn
-    import asyncio
-    import sys
-
     # Windows 下异步策略优化
     if sys.platform == "win32":
         asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
+        logger.info(f"正在启动 {APP_NAME} v{APP_VERSION}...")
+        logger.info(f"服务地址: http://{HOST}:{PORT}")
 
-    logger.info(f"正在启动 {APP_NAME} v{APP_VERSION}...")
-    logger.info(f"服务地址: http://{HOST}:{PORT}")
-
-    uvicorn.run(
-        "main:app",
-        host=HOST,
-        port=PORT,
-        reload=RELOAD,
-        log_level="info"
-    )
+        uvicorn.run(
+            "main:app",
+            host=HOST,
+            port=PORT,
+            reload=RELOAD,
+            log_level="info"
+        )
