@@ -77,7 +77,8 @@ class QianwenChecker(AIPlatformChecker):
             # 检查登录
             login_indicators = [
                 "[class*='login']",
-                "button*='登录'",
+                "button:has-text('登录')",
+                "text='登录'",
                 "[class*='auth']"
             ]
             
