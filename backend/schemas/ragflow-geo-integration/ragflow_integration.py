@@ -96,18 +96,23 @@ class RAGFlowClient:
             logger.error(f"Failed to get dataset info: {e}")
             raise
     
-    def upload_document(self, dataset_id: str, file_path: str) -> Dict:
+    def upload_document(self, dataset_id: str, file_path: str, auto_parse: bool = True) -> Dict:
         """
-        上传文档到知识库
+        上传文档到知识库（可选择是否自动解析）
         
         Args:
             dataset_id: 知识库ID
             file_path: 文档文件路径
+            auto_parse: 是否自动解析文档，默认为True
         
         Returns:
             上传结果
         """
         url = f"{self.base_url}/api/v1/datasets/{dataset_id}/documents"
+        doc_id = None
+        result = None
+        
+        # 上传文档
         try:
             with open(file_path, 'rb') as file:
                 files = {'file': file}
@@ -115,10 +120,31 @@ class RAGFlowClient:
                     'Authorization': f'Bearer {self.api_key}'
                 })
                 response.raise_for_status()
-                return response.json()
+                result = response.json()
+                
+                # 处理返回结果：RAGFlow API返回格式为 {code: 0, data: [{id: 'xxx', ...}]}
+                if isinstance(result, dict) and 'data' in result and len(result['data']) > 0:
+                    doc_id = result['data'][0].get('id')
+                elif isinstance(result, list) and len(result) > 0:
+                    doc_id = result[0].get('id')
         except requests.exceptions.RequestException as e:
             logger.error(f"Failed to upload document: {e}")
             raise
+        
+        # 如果启用自动解析，使用SDK调用解析API
+        if auto_parse and doc_id:
+            try:
+                from ragflow_sdk import RAGFlow
+                rag = RAGFlow(api_key=self.api_key, base_url=self.base_url)
+                dataset = rag.list_datasets(id=dataset_id)[0]
+                dataset.async_parse_documents([doc_id])
+                logger.info(f"Document {doc_id} parsing initiated successfully")
+            except ImportError:
+                logger.warning("ragflow-sdk not installed, skipping auto-parse. Install with: pip install ragflow-sdk")
+            except Exception as e:
+                logger.warning(f"Auto-parse failed for document {doc_id}: {e}")
+        
+        return result
 
 
 class GeoRAGFlowIntegration:
