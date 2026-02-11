@@ -7,6 +7,9 @@
 import asyncio
 import json
 import uuid
+import os
+import sys
+import subprocess
 from typing import Dict, Any, Optional, List
 from datetime import datetime, timedelta
 from loguru import logger
@@ -617,6 +620,8 @@ class AuthService:
     async def _launch_browser_for_auth(self) -> tuple:
         """
         启动用于授权的浏览器（禁用远程调试）
+        优先使用本地Chrome，如果不存在则使用Playwright内置浏览器
+        如果都失败，尝试自动安装Playwright浏览器
         
         Returns:
             (browser, context, page, debug_url) 元组
@@ -631,25 +636,86 @@ class AuthService:
             logger.info("启动Playwright...")
             playwright = await async_playwright().start()
             
+            # 1. 尝试查找本地 Chrome 路径
+            chrome_paths = [
+                r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+                r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
+                os.path.expandvars(r"%LOCALAPPDATA%\Google\Chrome\Application\chrome.exe")
+            ]
+            
+            # Mac OS 支持
+            if sys.platform == "darwin":
+                chrome_paths = [
+                    "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+                    os.path.expanduser("~/Applications/Google Chrome.app/Contents/MacOS/Google Chrome")
+                ]
+
+            executable_path = None
+            for path in chrome_paths:
+                if os.path.exists(path):
+                    executable_path = path
+                    logger.info(f"✅ 找到本地 Chrome 浏览器: {path}")
+                    break
+            
+            # 准备启动参数
+            launch_options = {
+                "headless": False,
+                "args": BROWSER_ARGS,
+                "timeout": 30000  # 30秒超时
+            }
+            
+            if executable_path:
+                launch_options["executable_path"] = executable_path
+            
             # 启动浏览器（禁用远程调试）
-            logger.info(f"启动Chromium浏览器... 参数: {BROWSER_ARGS}")
+            logger.info(f"启动Chromium浏览器... 参数: {BROWSER_ARGS}, Executable: {executable_path}")
+            
+            browser = None
             try:
-                browser = await playwright.chromium.launch(
-                    headless=False,
-                    args=BROWSER_ARGS,
-                    timeout=30000  # 30秒超时
-                )
+                browser = await playwright.chromium.launch(**launch_options)
             except Exception as browser_error:
                 error_msg = str(browser_error)
-                logger.error(f"浏览器启动失败: {error_msg}")
+                logger.warning(f"首次启动失败: {error_msg}")
                 
-                # 如果是缺失浏览器的错误，给出更明确的提示
-                if "Executable doesn't exist" in error_msg:
-                    logger.error("请执行 'playwright install' 安装浏览器")
+                # 如果指定了本地Chrome但启动失败，尝试不使用executable_path（使用内置浏览器）
+                if executable_path:
+                    logger.info("尝试使用Playwright内置浏览器...")
+                    launch_options.pop("executable_path", None)
+                    try:
+                        browser = await playwright.chromium.launch(**launch_options)
+                    except Exception as inner_error:
+                        error_msg = str(inner_error)
+                        logger.error(f"内置浏览器启动失败: {error_msg}")
                 
-                await playwright.stop()
-                # 抛出异常以便上层捕获具体错误
-                raise Exception(f"浏览器启动失败: {error_msg}")
+                # 如果还是失败，且是缺失浏览器的错误，尝试自动安装
+                if not browser and "Executable doesn't exist" in error_msg:
+                    logger.warning("检测到浏览器缺失，尝试自动安装...")
+                    try:
+                        # 运行 playwright install chromium
+                        logger.info("正在执行: playwright install chromium")
+                        process = await asyncio.create_subprocess_exec(
+                            sys.executable, "-m", "playwright", "install", "chromium",
+                            stdout=asyncio.subprocess.PIPE,
+                            stderr=asyncio.subprocess.PIPE
+                        )
+                        stdout, stderr = await process.communicate()
+                        
+                        if process.returncode == 0:
+                            logger.info("浏览器安装成功，重试启动...")
+                            # 安装成功后重试启动
+                            browser = await playwright.chromium.launch(**launch_options)
+                        else:
+                            logger.error(f"自动安装失败: {stderr.decode()}")
+                            raise Exception(f"自动安装浏览器失败，请手动执行 'playwright install'")
+                            
+                    except Exception as install_error:
+                        logger.error(f"自动安装过程异常: {install_error}")
+                        raise install_error
+
+                # 如果此时还没有browser，说明所有尝试都失败了
+                if not browser:
+                    await playwright.stop()
+                    raise Exception(f"浏览器启动失败: {error_msg}")
             
             # 创建上下文和页面
             logger.info("创建浏览器上下文...")
@@ -659,7 +725,8 @@ class AuthService:
                 page = await context.new_page()
             except Exception as context_error:
                 logger.error(f"创建上下文/页面失败: {context_error}")
-                await browser.close()
+                if browser:
+                    await browser.close()
                 await playwright.stop()
                 raise Exception(f"创建页面失败: {str(context_error)}")
             
