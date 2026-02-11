@@ -639,7 +639,7 @@ class AIPlatformChecker(ABC):
             result["confidence"] = min(result["confidence"] + 0.2, 0.95)
             result["reason"] += f", 公司名'{company}'出现{company_count}次"
 
-        if len(cleaned_text) < 100 and keyword_count > 0:
+        if len(text) < 100 and keyword_count > 0:
             result["confidence"] = min(result["confidence"] + 0.1, 0.85)
 
         self._log("info", f"关键词检测完成: 关键词={result['keyword_found']}({keyword_count}次), "
