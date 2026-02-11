@@ -38,7 +38,7 @@ from backend.api import (
     scheduler,
     knowledge,
     upload,
-    candidate,
+    client,  # 客户管理
     auth,
     article_collection,
     site_builder,  # [新增] 网站生成路由
@@ -176,7 +176,7 @@ app.include_router(notifications.router)
 app.include_router(scheduler.router)
 app.include_router(knowledge.router)
 app.include_router(upload.router)       # 文件上传
-app.include_router(candidate.router)
+app.include_router(client.router)       # 客户管理
 app.include_router(auth.router)
 app.include_router(article_collection.router)
 app.include_router(site_builder.router) # [新增] 网站生成器路由

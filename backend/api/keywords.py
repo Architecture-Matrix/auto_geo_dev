@@ -23,6 +23,7 @@ router = APIRouter(prefix="/api/keywords", tags=["关键词管理"])
 
 class ProjectCreate(BaseModel):
     """创建项目请求"""
+    client_id: Optional[int] = None
     name: str
     company_name: str
     domain_keyword: Optional[str] = None
@@ -112,6 +113,7 @@ async def list_projects(db: Session = Depends(get_db)):
 async def create_project(project_data: ProjectCreate, db: Session = Depends(get_db)):
     """创建项目"""
     project = Project(
+        client_id=project_data.client_id,
         name=project_data.name,
         company_name=project_data.company_name,
         domain_keyword=project_data.domain_keyword,
@@ -124,6 +126,38 @@ async def create_project(project_data: ProjectCreate, db: Session = Depends(get_
     db.refresh(project)
     logger.info(f"项目已创建: {project.name}")
     return project
+
+
+@router.put("/projects/{project_id}", response_model=ProjectResponse)
+async def update_project(project_id: int, project_data: ProjectCreate, db: Session = Depends(get_db)):
+    """更新项目"""
+    project = db.query(Project).filter(Project.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="项目不存在")
+
+    project.name = project_data.name
+    project.company_name = project_data.company_name
+    project.domain_keyword = project_data.domain_keyword
+    project.description = project_data.description
+    project.industry = project_data.industry
+
+    db.commit()
+    db.refresh(project)
+    logger.info(f"项目已更新: {project.name}")
+    return project
+
+
+@router.delete("/projects/{project_id}", response_model=ApiResponse)
+async def delete_project(project_id: int, db: Session = Depends(get_db)):
+    """删除项目（物理删除，级联删除关联关键词）"""
+    project = db.query(Project).filter(Project.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="项目不存在")
+
+    db.delete(project)  # 物理删除，关联的关键词会自动级联删除
+    db.commit()
+    logger.info(f"项目已物理删除: {project.name}")
+    return ApiResponse(success=True, message="项目已删除")
 
 
 @router.get("/projects/{project_id}/keywords", response_model=List[KeywordResponse])

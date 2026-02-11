@@ -57,7 +57,7 @@
   - `Knowledge` - 知识库条目表
   - `ReferenceArticle` - 参考文章表（爆火采集）
   - `ScheduledTask` - 定时任务配置表
-  - `Candidate` - AI 招聘候选人表
+  - `Client` - 客户表（一个客户可有多个项目）
   - `SiteProject` - AEO 智能建站项目表
   - `User` - 系统用户表
 - [x] 数据库会话管理 (get_db 依赖注入)
@@ -209,7 +209,7 @@
 
 | 文件 | 说明 |
 |------|------|
-| `candidate.py` | AI 招聘候选人管理 |
+| `client.py` | 客户管理（一个客户可有多个项目） |
 | `upload.py` | 文件上传 |
 
 ---
@@ -356,7 +356,7 @@ backend/
 │   ├── auth.py                 # 授权流程
 │   ├── article.py              # 文章管理
 │   ├── article_collection.py   # 文章采集
-│   ├── candidate.py            # AI 招聘候选人
+│   ├── client.py               # 客户管理
 │   ├── geo.py                  # GEO 文章
 │   ├── index_check.py          # 收录检测
 │   ├── keywords.py             # 关键词管理

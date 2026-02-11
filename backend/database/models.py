@@ -55,40 +55,38 @@ class ScheduledTask(Base):
         return f"<Task {self.name} : {self.cron_expression}>"
 
 
-class Candidate(Base):
+# ==================== 客户管理相关表 ====================
+
+class Client(Base):
     """
-    AI招聘候选人表
-    存储n8n AI招聘流程筛选的候选人数据
+    客户表
+    存储客户/公司信息，一个客户可以有多个项目
     """
-    __tablename__ = "candidates"
+    __tablename__ = "clients"
     __table_args__ = TABLE_ARGS
 
     id = Column(Integer, primary_key=True, autoincrement=True, comment="主键ID")
-    uid = Column(String(100), unique=True, nullable=False, index=True, comment="候选人唯一标识（来自招聘平台）")
-    detail = Column(Text, nullable=True, comment="候选人详细信息（JSON格式）")
+    name = Column(String(200), nullable=False, comment="客户名称")
+    company_name = Column(String(200), nullable=True, comment="公司名称")
+    contact_person = Column(String(100), nullable=True, comment="联系人")
+    phone = Column(String(50), nullable=True, comment="联系电话")
+    email = Column(String(200), nullable=True, comment="邮箱")
+    industry = Column(String(100), nullable=True, comment="行业")
+    address = Column(String(500), nullable=True, comment="地址")
 
-    # 附件相关
-    attached = Column(Text, nullable=True, comment="附件信息（JSON格式，存储简历链接等）")
-
-    # 发送状态
-    is_send = Column(Boolean, default=False, comment="是否已发送文章/消息")
-
-    # 关联文章（可选：如果发送了文章，记录文章ID）
-    article_id = Column(Integer, ForeignKey("articles.id", ondelete="SET NULL"), nullable=True, comment="关联的文章ID")
-
-    # 状态
-    status = Column(Integer, default=1, comment="状态：1=有效 0=无效 -1=已删除")
-
-    # 备注
-    remark = Column(Text, nullable=True, comment="备注信息")
+    # 备注和状态
+    description = Column(Text, nullable=True, comment="客户描述/备注")
+    status = Column(Integer, default=1, comment="状态：1=活跃 0=停用")
 
     # 时间戳
     created_at = Column(DateTime, default=func.now(), comment="创建时间")
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now(), comment="更新时间")
-    sent_at = Column(DateTime, nullable=True, comment="发送时间")
+
+    # 关联关系
+    projects = relationship("Project", back_populates="client", cascade="all, delete-orphan")
 
     def __repr__(self):
-        return f"<Candidate uid={self.uid} is_send={self.is_send}>"
+        return f"<Client {self.name}>"
 
 
 class Article(Base):
@@ -173,14 +171,19 @@ class PublishRecord(Base):
 class Project(Base):
     """
     项目表
-    存储客户/项目信息
+    存储项目信息，一个客户可以有多个项目
     """
     __tablename__ = "projects"
     __table_args__ = TABLE_ARGS
 
     id = Column(Integer, primary_key=True, autoincrement=True, comment="主键ID")
+
+    # 关联客户
+    client_id = Column(Integer, ForeignKey("clients.id", ondelete="CASCADE"), nullable=True, index=True, comment="客户ID")
+
+    # 项目信息
     name = Column(String(200), nullable=False, comment="项目名称")
-    company_name = Column(String(200), nullable=False, comment="公司名称")
+    company_name = Column(String(200), nullable=True, comment="公司名称")
     domain_keyword = Column(String(200), nullable=True, comment="领域关键词，用于关键词蒸馏")
     description = Column(Text, nullable=True, comment="项目描述")
     industry = Column(String(100), nullable=True, comment="行业")
@@ -193,6 +196,7 @@ class Project(Base):
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now(), comment="更新时间")
 
     # 关联关系
+    client = relationship("Client", back_populates="projects")
     keywords = relationship("Keyword", back_populates="project", cascade="all, delete-orphan")
 
     def __repr__(self):
