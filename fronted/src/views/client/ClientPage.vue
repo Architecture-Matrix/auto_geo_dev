@@ -220,20 +220,21 @@
     <el-dialog
       v-model="projectsDialogVisible"
       title="客户项目"
-      width="800px"
+      width="900px"
     >
       <div class="projects-header">
         <h4>{{ currentClient?.name }} 的项目列表</h4>
-        <el-button type="primary" size="small" @click="goToCreateProject">
+        <el-button type="primary" size="small" @click="showProjectForm(null)">
           <el-icon><Plus /></el-icon>
           新建项目
         </el-button>
       </div>
       <el-table :data="clientProjects" v-loading="loadingProjects" stripe>
         <el-table-column prop="id" label="ID" width="60" />
-        <el-table-column prop="name" label="项目名称" min-width="150" />
-        <el-table-column prop="domain_keyword" label="领域关键词" min-width="150" />
-        <el-table-column prop="description" label="描述" min-width="200" show-overflow-tooltip />
+        <el-table-column prop="name" label="项目名称" min-width="120" />
+        <el-table-column prop="company_name" label="公司名称" min-width="120" />
+        <el-table-column prop="domain_keyword" label="领域关键词" min-width="120" />
+        <el-table-column prop="description" label="描述" min-width="150" show-overflow-tooltip />
         <el-table-column label="状态" width="80">
           <template #default="{ row }">
             <el-tag :type="row.status === 1 ? 'success' : 'info'" size="small">
@@ -241,8 +242,48 @@
             </el-tag>
           </template>
         </el-table-column>
+        <el-table-column label="操作" width="150" fixed="right">
+          <template #default="{ row }">
+            <el-button type="primary" size="small" link @click="showProjectForm(row)">编辑</el-button>
+            <el-button type="danger" size="small" link @click="deleteProjectItem(row)">删除</el-button>
+          </template>
+        </el-table-column>
       </el-table>
       <el-empty v-if="!loadingProjects && clientProjects.length === 0" description="暂无项目" />
+    </el-dialog>
+
+    <!-- 项目新建/编辑对话框 -->
+    <el-dialog
+      v-model="projectFormVisible"
+      :title="editingProject ? '编辑项目' : '新建项目'"
+      width="520px"
+      append-to-body
+    >
+      <el-form :model="projectForm" label-width="100px">
+        <el-form-item label="项目名称" required>
+          <el-input v-model="projectForm.name" placeholder="请输入项目名称" />
+        </el-form-item>
+        <el-form-item label="公司名称" required>
+          <el-input v-model="projectForm.company_name" placeholder="请输入公司名称" />
+        </el-form-item>
+        <el-form-item label="领域关键词" required>
+          <el-input v-model="projectForm.domain_keyword" placeholder="用于AI蒸馏生成用户提问句" />
+        </el-form-item>
+        <el-form-item label="所属行业">
+          <el-select v-model="projectForm.industry" placeholder="选择行业" allow-create filterable style="width: 100%">
+            <el-option v-for="ind in projectIndustries" :key="ind" :label="ind" :value="ind" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="项目描述">
+          <el-input v-model="projectForm.description" type="textarea" :rows="3" placeholder="简要描述项目（可选）" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="projectFormVisible = false">取消</el-button>
+        <el-button type="primary" :loading="savingProject" @click="saveProjectItem">
+          {{ editingProject ? '保存修改' : '创建项目' }}
+        </el-button>
+      </template>
     </el-dialog>
 
     <!-- 知识库上传对话框 -->
@@ -324,8 +365,9 @@ import {
   OfficeBuilding, CircleCheck, Warning, TrendCharts, Search, Plus,
   Upload, ArrowDown, UploadFilled
 } from '@element-plus/icons-vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import type { UploadInstance, UploadUserFile, UploadRawFile } from 'element-plus'
+import { geoKeywordApi } from '@/services/api'
 
 // 状态
 const loading = ref(false)
@@ -381,6 +423,24 @@ const clientForm = ref({
   description: '',
   status: 1
 })
+
+// 项目管理
+const projectFormVisible = ref(false)
+const editingProject = ref<any>(null)
+const savingProject = ref(false)
+const projectForm = ref({
+  name: '',
+  company_name: '',
+  domain_keyword: '',
+  industry: '',
+  description: '',
+})
+const projectIndustries = [
+  'SaaS软件', '环保工程', '工业清洗', '无人机服务', '电商',
+  '教育培训', '金融服务', '医疗健康', '制造业', '房地产',
+  '餐饮美食', '旅游出行', '物流运输', '新能源', '化工行业',
+  '建筑工程', '其他',
+]
 
 // 加载客户列表
 const loadClients = async () => {
@@ -549,10 +609,92 @@ const viewProjects = async (client: any) => {
   }
 }
 
-// 跳转到创建项目页面
-const goToCreateProject = () => {
-  // 跳转到GEO项目管理页面，并传递客户ID
-  window.location.href = `#/geo/projects?client_id=${currentClient.value.id}&client_name=${encodeURIComponent(currentClient.value.name)}`
+// 显示项目表单（新建或编辑）
+const showProjectForm = (project: any) => {
+  if (project) {
+    editingProject.value = project
+    projectForm.value = {
+      name: project.name || '',
+      company_name: project.company_name || '',
+      domain_keyword: project.domain_keyword || '',
+      industry: project.industry || '',
+      description: project.description || '',
+    }
+  } else {
+    editingProject.value = null
+    projectForm.value = {
+      name: '',
+      company_name: currentClient.value?.company_name || '',
+      domain_keyword: '',
+      industry: currentClient.value?.industry || '',
+      description: '',
+    }
+  }
+  projectFormVisible.value = true
+}
+
+// 保存项目（新建或编辑）
+const saveProjectItem = async () => {
+  if (!projectForm.value.name?.trim()) {
+    ElMessage.warning('请输入项目名称')
+    return
+  }
+  if (!projectForm.value.company_name?.trim()) {
+    ElMessage.warning('请输入公司名称')
+    return
+  }
+  if (!projectForm.value.domain_keyword?.trim()) {
+    ElMessage.warning('请输入领域关键词')
+    return
+  }
+
+  savingProject.value = true
+  try {
+    if (editingProject.value) {
+      await geoKeywordApi.updateProject(editingProject.value.id, {
+        client_id: currentClient.value?.id,
+        ...projectForm.value,
+      })
+      ElMessage.success('项目已更新')
+    } else {
+      await geoKeywordApi.createProject({
+        client_id: currentClient.value?.id,
+        ...projectForm.value,
+      })
+      ElMessage.success('项目创建成功')
+    }
+    projectFormVisible.value = false
+    // 刷新项目列表
+    if (currentClient.value) {
+      viewProjects(currentClient.value)
+    }
+    loadClients()
+  } catch (e: any) {
+    ElMessage.error('操作失败: ' + (e.message || '未知错误'))
+  } finally {
+    savingProject.value = false
+  }
+}
+
+// 删除项目
+const deleteProjectItem = async (project: any) => {
+  try {
+    await ElMessageBox.confirm(
+      `确定要删除项目"${project.name}"吗？`,
+      '确认删除',
+      { type: 'warning', confirmButtonText: '确定删除', cancelButtonText: '取消' }
+    )
+    await geoKeywordApi.deleteProject(project.id)
+    ElMessage.success('项目已删除')
+    if (currentClient.value) {
+      viewProjects(currentClient.value)
+    }
+    loadClients()
+  } catch (e: any) {
+    if (e !== 'cancel') {
+      ElMessage.error('删除失败')
+    }
+  }
 }
 
 // 格式化日期

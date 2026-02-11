@@ -2,7 +2,7 @@
   "name": "auto-geo-frontend",
   "version": "2.3.0",
   "description": "AutoGeo 智能多平台文章发布助手 - 前端",
-  "main": "electron/main/index.js",
+  "main": "out/electron/main/index.js",
   "author": "AutoGeo Team",
   "license": "MIT",
   "private": true,
