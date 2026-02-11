@@ -86,7 +86,7 @@ if not exist "backend\requirements.txt" (
 
 REM Check if key Python packages are installed
 echo Checking Python dependencies...
-python backend\check_deps.py 2>nul
+python backend\scripts\check_deps.py 2>nul
 if errorlevel 1 (
     echo.
     echo [WARNING] Some dependencies are missing!
