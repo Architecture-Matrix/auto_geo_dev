@@ -17,7 +17,7 @@ from loguru import logger
 
 from playwright.async_api import async_playwright, Browser, Page
 
-from backend.config import DATA_DIR, ENCRYPTION_KEY, AI_PLATFORMS
+from backend.config import DATA_DIR, ENCRYPTION_KEY, AI_PLATFORMS, DEFAULT_USER_AGENT
 from backend.services.crypto import CryptoService
 
 
@@ -373,7 +373,10 @@ class SecureSessionManager:
 
                     try:
                         # 创建上下文并加载存储状态
-                        context = await browser.new_context(storage_state=storage_state)
+                        context = await browser.new_context(
+                            storage_state=storage_state,
+                            user_agent=DEFAULT_USER_AGENT
+                        )
                         page = await context.new_page()
 
                         # 导航到平台页面

@@ -15,7 +15,7 @@ import subprocess
 from datetime import datetime
 
 from backend.database.models import IndexCheckRecord, Keyword, QuestionVariant, Project
-from backend.config import AI_PLATFORMS, BROWSER_ARGS
+from backend.config import AI_PLATFORMS, BROWSER_ARGS, DEFAULT_USER_AGENT
 from backend.services.playwright.ai_platforms import DoubaoChecker, QianwenChecker, DeepSeekChecker
 
 
@@ -300,7 +300,10 @@ class IndexCheckService:
                         logger.warning(f"未找到平台 {checker.name} 的存储状态，将使用新的会话")
                     
                     # 为每个平台创建新的上下文和页面
-                    context = await browser.new_context(storage_state=storage_state)
+                    context = await browser.new_context(
+                        storage_state=storage_state,
+                        user_agent=DEFAULT_USER_AGENT
+                    )
                     page = await context.new_page()
                     
                     try:

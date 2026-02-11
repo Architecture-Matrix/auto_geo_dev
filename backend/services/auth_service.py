@@ -16,7 +16,7 @@ from loguru import logger
 
 from playwright.async_api import async_playwright, Browser, BrowserContext, Page
 
-from backend.config import AI_PLATFORMS, BROWSER_TYPE, BROWSER_ARGS
+from backend.config import AI_PLATFORMS, BROWSER_TYPE, BROWSER_ARGS, DEFAULT_USER_AGENT
 from backend.services.session_manager import secure_session_manager
 
 
@@ -817,7 +817,7 @@ class AuthService:
             # 创建上下文和页面
             logger.info("创建浏览器上下文...")
             try:
-                context = await browser.new_context()
+                context = await browser.new_context(user_agent=DEFAULT_USER_AGENT)
                 logger.info("创建新页面...")
                 page = await context.new_page()
             except Exception as context_error:
