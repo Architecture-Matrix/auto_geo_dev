@@ -12,35 +12,68 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/layout/MainLayout.vue'),
     redirect: '/dashboard',
     children: [
+      // ==================== 1. 首页 ====================
       {
         path: 'dashboard',
         name: 'Dashboard',
         component: () => import('@/views/dashboard/DashboardPage.vue'),
-        meta: { title: '首页', icon: 'House', order: 1 }, // 原来的概览改为首页，避免名字冲突
+        meta: { title: '首页', icon: 'House', order: 1 },
       },
+
+      // ==================== 2. 客户管理 ====================
       {
-        path: 'data-report',
-        name: 'DataReport',
-        component: () => import('@/views/report/DataReport.vue'),
-        meta: { title: '数据报表', icon: 'DataAnalysis',order:9 },
+        path: 'clients',
+        name: 'Clients',
+        component: () => import('@/views/client/ClientPage.vue'),
+        meta: { title: '客户管理', icon: 'OfficeBuilding', order: 2 },
       },
+
+      // ==================== 3. 项目管理 (去除GEO前缀) ====================
       {
-        path: 'accounts',
-        name: 'Accounts',
-        component: () => import('@/views/account/AccountList.vue'),
-        meta: { title: '账号管理', icon: 'User' },
+        path: 'projects',
+        name: 'Projects',
+        component: () => import('@/views/geo/Projects.vue'),
+        meta: { title: '项目管理', icon: 'Grid', order: 3 },
       },
+
+      // ==================== 4. 知识库管理 ====================
       {
-        path: 'accounts/add',
-        name: 'AccountAdd',
-        component: () => import('@/views/account/AccountAdd.vue'),
-        meta: { title: '添加账号', hidden: true },
+        path: 'knowledge',
+        name: 'Knowledge',
+        component: () => import('@/views/knowledge/KnowledgePage.vue'),
+        meta: { title: '知识库管理', icon: 'Reading', order: 4 },
       },
+
+      // ==================== 5. 智能建站 ====================
+      {
+        path: 'site-builder',
+        name: 'SiteBuilder',
+        component: () => import('@/views/site-builder/ConfigWizard.vue'),
+        meta: { title: '智能建站', icon: 'Platform', order: 5 },
+      },
+
+      // ==================== 6. 关键词蒸馏 ====================
+      {
+        path: 'keywords',
+        name: 'Keywords',
+        component: () => import('@/views/geo/Keywords.vue'),
+        meta: { title: '关键词蒸馏', icon: 'MagicStick', order: 6 },
+      },
+
+      // ==================== 7. 文章生成 ====================
+      {
+        path: 'article-generate',
+        name: 'ArticleGenerate',
+        component: () => import('@/views/geo/Articles.vue'),
+        meta: { title: '文章生成', icon: 'EditPen', order: 7 },
+      },
+
+      // ==================== 8. 文章管理 ====================
       {
         path: 'articles',
         name: 'Articles',
         component: () => import('@/views/article/ArticleList.vue'),
-        meta: { title: '文章管理', icon: 'Document' },
+        meta: { title: '文章管理', icon: 'Document', order: 8 },
       },
       {
         path: 'articles/add',
@@ -54,86 +87,67 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/article/ArticleEdit.vue'),
         meta: { title: '编辑文章', hidden: true },
       },
+
+      // ==================== 9. 账号管理 ====================
+      {
+        path: 'accounts',
+        name: 'Accounts',
+        component: () => import('@/views/account/AccountList.vue'),
+        meta: { title: '账号管理', icon: 'User', order: 9 },
+      },
+      {
+        path: 'accounts/add',
+        name: 'AccountAdd',
+        component: () => import('@/views/account/AccountAdd.vue'),
+        meta: { title: '添加账号', hidden: true },
+      },
+
+      // ==================== 10. 批量发布 ====================
       {
         path: 'publish',
         name: 'Publish',
         component: () => import('@/views/publish/PublishPage.vue'),
-        meta: { title: '批量发布', icon: 'Promotion',order:6 },
+        meta: { title: '批量发布', icon: 'Promotion', order: 10 },
       },
+
+      // ==================== 11. 发布记录 ====================
       {
         path: 'history',
         name: 'History',
         component: () => import('@/views/publish/PublishHistory.vue'),
-        meta: { title: '发布记录', icon: 'Clock',order:7 },
+        meta: { title: '发布记录', icon: 'Clock', order: 11 },
       },
-      {
-        path: 'settings',
-        name: 'Settings',
-        component: () => import('@/views/settings/SettingsPage.vue'),
-        meta: { title: '设置', icon: 'Setting',order:10 },
-      },
-// ==================== [新增] 智能建站模块 ====================
-      {
-        path: 'site-builder',
-        name: 'SiteBuilder',
-        component: () => import('@/views/site-builder/ConfigWizard.vue'),
-        meta: { title: '智能建站', icon: 'Platform', order: 3 }, // 图标建议用 Platform 或 Brush
-      },
-      // ===========================================================
 
-
-      // ==================== GEO系统路由 ====================
-      // 🌟 新增：数据概览（仪表盘）放在GEO的第一位
+      // ==================== 12. 收录监控 ====================
       {
-        path: 'geo/dashboard',
-        name: 'GeoDashboard',
-        component: () => import('@/views/geo/Dashboard.vue'),
-        meta: { title: '数据概览', icon: 'PieChart', order: 2 }, // 使用饼图图标，放在第一位
-      },
-      {
-        path: 'geo/projects',
-        name: 'GeoProjects',
-        component: () => import('@/views/geo/Projects.vue'),
-        meta: { title: 'GEO项目管理', icon: 'Grid' },
-      },
-      {
-        path: 'geo/keywords',
-        name: 'GeoKeywords',
-        component: () => import('@/views/geo/Keywords.vue'),
-        meta: { title: '关键词蒸馏', icon: 'MagicStick',order:4 },
-      },
-      {
-        path: 'geo/articles',
-        name: 'GeoArticles',
-        component: () => import('@/views/geo/Articles.vue'),
-        meta: { title: '文章生成', icon: 'EditPen', order: 5 },
-      },
-      {
-        path: 'geo/monitor',
-        name: 'GeoMonitor',
+        path: 'monitor',
+        name: 'Monitor',
         component: () => import('@/views/geo/Monitor.vue'),
-        meta: { title: '收录监控', icon: 'Monitor',order:8 },
-      },
-            {
-        path: 'candidates',
-        name: 'Candidates',
-        component: () => import('@/views/candidate/CandidatePage.vue'),
-        meta: { title: '候选人管理', icon: 'UserFilled' },
+        meta: { title: '收录监控', icon: 'Monitor', order: 12 },
       },
 
-      // ==================== 知识库管理路由 ====================
+      // ==================== 13. 数据报表 ====================
       {
-        path: 'knowledge',
-        name: 'Knowledge',
-        component: () => import('@/views/knowledge/KnowledgePage.vue'),
-        meta: { title: '知识库管理', icon: 'Reading' },
+        path: 'data-report',
+        name: 'DataReport',
+        component: () => import('@/views/report/DataReport.vue'),
+        meta: { title: '数据报表', icon: 'DataAnalysis', order: 13 },
       },
-      // ==================== 定时任务管理路由 ====================
+
+      // ==================== 14. 定时任务 ====================
       {
         path: 'scheduler',
         name: 'Scheduler',
         component: () => import('@/views/scheduler/SchedulerPage.vue'),
-        meta: { title: '定时任务', icon: 'Timer' },
+        meta: { title: '定时任务', icon: 'Timer', order: 14 },
+      },
+
+      // ==================== 15. 系统设置 ====================
+      {
+        path: 'settings',
+        name: 'Settings',
+        component: () => import('@/views/settings/SettingsPage.vue'),
+        meta: { title: '系统设置', icon: 'Setting', order: 15 },
       },
     ],
   },
