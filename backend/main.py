@@ -37,6 +37,8 @@ from backend.api.knowledge.router import knowledge
 from backend.api.auth.router import auth
 from backend.api.article_collection.router import article_collection
 from backend.api.site_builder.router import site_builder
+from backend.api.upload.router import upload
+from backend.api.client.router import client  # 客户管理
 
 # 导入服务组件
 from backend.services.websocket_manager import ws_manager
@@ -167,8 +169,8 @@ app.include_router(reports.router)
 app.include_router(notifications.router)
 app.include_router(scheduler.router)
 app.include_router(knowledge.router)
-app.include_router(upload.router)
-app.include_router(candidate.router)
+app.include_router(upload.router)       # 文件上传
+app.include_router(client.router)       # 客户管理
 app.include_router(auth.router)
 app.include_router(article_collection.router)
 app.include_router(site_builder.router)

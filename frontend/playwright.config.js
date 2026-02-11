@@ -3,10 +3,10 @@ const { defineConfig, devices } = require('@playwright/test');
 
 /**
  * Playwright 配置
- * 测试文件路径指向根目录的 tests/fronted_tests
+ * 测试文件路径指向根目录的 tests/frontend_tests
  */
 module.exports = defineConfig({
-  testDir: '../tests/fronted_tests',
+  testDir: '../tests/frontend_tests',
 
   fullyParallel: true,
   forbidOnly: !!process.env.CI,

@@ -158,10 +158,10 @@
 - [x] 启动/停止控制
 - [x] 任务列表
 
-### 11. AI 招聘候选人 🔄
-- [x] 候选人模型
+### 11. 客户管理 ✅
+- [x] 客户模型（一个客户可以有多个项目）
 - [x] CRUD 接口
-- [ ] 完整工作流
+- [x] 客户项目关联查询
 
 ### 12. 用户认证 🔄
 - [x] User 模型
@@ -179,7 +179,7 @@
 | `auth.py` | `/api/accounts/auth` | 浏览器授权流程管理 |
 | `article.py` | `/api/articles` | 文章CRUD、分页搜索、标记发布 |
 | `article_collection.py` | `/api/article-collection` | 爆火文章采集 |
-| `candidate.py` | `/api/candidates` | AI招聘候选人管理 |
+| `client.py` | `/api/clients` | 客户管理（一个客户可有多个项目） |
 | `geo.py` | `/api/geo` | GEO文章生成、质检、收录检测、列表、删除 |
 | `index_check.py` | `/api/index-check` | 收录检测、记录查询、命中率、趋势、分析 |
 | `keywords.py` | `/api/keywords` | 项目CRUD、关键词蒸馏、问题变体生成、关键词CRUD |
@@ -249,7 +249,7 @@
 | `article/ArticleEdit.vue` | `/articles/add`, `/articles/edit/:id` | 文章编辑/新建 |
 | `publish/PublishPage.vue` | `/publish` | 批量发布 |
 | `publish/PublishHistory.vue` | `/history` | 发布记录 |
-| `candidate/CandidatePage.vue` | `/candidates` | AI 招聘候选人 |
+| `client/ClientPage.vue` | `/clients` | 客户管理 |
 | `knowledge/KnowledgePage.vue` | `/knowledge` | 知识库管理 |
 | `scheduler/SchedulerPage.vue` | `/scheduler` | 定时任务管理 |
 | `report/DataReport.vue` | `/data-report` | 数据报表 |
@@ -289,7 +289,7 @@
 | `User` | `users` | 系统用户 |
 | `ReferenceArticle` | `reference_articles` | 参考文章 (爆火采集) |
 | `ScheduledTask` | `scheduled_tasks` | 定时任务配置 |
-| `Candidate` | `candidates` | AI 招聘候选人 |
+| `Client` | `clients` | 客户表（一个客户可有多个项目） |
 | `SiteProject` | `site_projects` | AEO 智能建站项目 |
 
 ---

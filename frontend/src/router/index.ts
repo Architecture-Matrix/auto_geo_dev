@@ -114,11 +114,12 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/geo/Monitor.vue'),
         meta: { title: '收录监控', icon: 'Monitor',order:8 },
       },
-            {
-        path: 'candidates',
-        name: 'Candidates',
-        component: () => import('@/views/candidate/CandidatePage.vue'),
-        meta: { title: '候选人管理', icon: 'UserFilled' },
+      // ==================== 客户管理路由 (新增) ====================
+      {
+        path: 'clients',
+        name: 'Clients',
+        component: () => import('@/views/client/ClientPage.vue'),
+        meta: { title: '客户管理', icon: 'UserFilled', order: 9 },
       },
 
       // ==================== 知识库管理路由 ====================
