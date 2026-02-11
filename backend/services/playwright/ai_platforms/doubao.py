@@ -61,8 +61,10 @@ class DoubaoChecker(AIPlatformChecker):
                 "[class*='account']",
                 "[class*='login']",
                 "[id*='login']",
-                "button*='登录'",
-                "button*='Sign in'"
+                "button:has-text('登录')",
+                "button:has-text('Sign in')",
+                "text='登录'",
+                "text='Sign in'"
             ]
 
             has_login = False

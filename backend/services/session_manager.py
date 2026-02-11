@@ -397,42 +397,63 @@ class SecureSessionManager:
                         await asyncio.sleep(2)
 
                         # 检查是否需要登录
+                        # 增强：使用与 AuthService 一致的精确检测逻辑
                         login_indicators = [
                             "[class*='login']",
                             "[id*='login']",
                             "[class*='auth']",
                             "[id*='auth']",
-                            "button*='登录'",
-                            "button*='Sign in'"
+                            "button:has-text('登录')",
+                            "button:has-text('Sign in')",
+                            "button:has-text('立即登录')",
+                            "div:has-text('登录'):visible"
                         ]
-
+                        
                         # 针对特定平台的额外检测
                         if platform == 'doubao':
                             login_indicators.extend([
-                                "[class*='login-btn']",
-                                "[class*='login-button']",
-                                "[href*='login']",
-                                "[class*='account']"
+                                "[data-testid*='login']",
+                                "header button:has-text('登录')",
+                                "div[class*='right'] :text('登录')"
                             ])
 
                         if platform == 'qianwen':
                             login_indicators.extend([
-                                "[class*='login-entry']",
-                                "[class*='user-login']"
+                                "div[class*='login']",
+                                "div[class*='sign-in']",
+                                "[class*='auth-btn']"
                             ])
-
+                            
                         has_login = False
                         for indicator in login_indicators:
                             try:
-                                element = await page.query_selector(indicator)
-                                if element and await element.is_visible():
-                                    has_login = True
-                                    logger.debug(f"检测到登录元素: {indicator}")
-                                    break
+                                # 同样增加文本长度检查，防止误判
+                                if "text=" in indicator or "has-text" in indicator:
+                                    elements = await page.query_selector_all(indicator)
+                                    for el in elements:
+                                        if await el.is_visible():
+                                            text = await el.inner_text()
+                                            if text and len(text.strip()) < 10 and ("登录" in text or "Sign" in text):
+                                                has_login = True
+                                                logger.debug(f"检测到登录元素: {indicator} ('{text}')")
+                                                break
+                                else:
+                                    element = await page.query_selector(indicator)
+                                    if element and await element.is_visible():
+                                        has_login = True
+                                        logger.debug(f"检测到登录元素: {indicator}")
+                                        break
                             except Exception:
                                 continue
+                            if has_login:
+                                break
 
                         if has_login:
+                            # 再次确认：有些时候可能是未登录态的横幅，但如果能找到输入框，其实是已登录的
+                            # 比如千问，未登录时也有输入框。所以单纯有输入框不能证明已登录。
+                            # 必须是：没有登录按钮 且 有输入框
+                            
+                            # 这里的逻辑是：只要有登录按钮，就一定是未登录/失效
                             logger.warning(f"心跳检测失败: 需要登录, platform={platform}")
                             return False
 
