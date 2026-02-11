@@ -9,10 +9,13 @@ from loguru import logger
 from sqlalchemy.orm import Session
 from playwright.async_api import async_playwright, Browser
 import asyncio
+import os
+import sys
+import subprocess
 from datetime import datetime
 
 from backend.database.models import IndexCheckRecord, Keyword, QuestionVariant, Project
-from backend.config import AI_PLATFORMS
+from backend.config import AI_PLATFORMS, BROWSER_ARGS
 from backend.services.playwright.ai_platforms import DoubaoChecker, QianwenChecker, DeepSeekChecker
 
 
@@ -36,6 +39,89 @@ class IndexCheckService:
             "qianwen": QianwenChecker("qianwen", AI_PLATFORMS["qianwen"]),
             "deepseek": DeepSeekChecker("deepseek", AI_PLATFORMS["deepseek"]),
         }
+
+    async def _launch_browser(self, playwright) -> Browser:
+        """
+        启动浏览器（包含自动查找本地Chrome和自动安装逻辑）
+        """
+        # 1. 尝试查找本地 Chrome 路径
+        chrome_paths = [
+            r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+            r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
+            os.path.expandvars(r"%LOCALAPPDATA%\Google\Chrome\Application\chrome.exe")
+        ]
+        
+        # Mac OS 支持
+        if sys.platform == "darwin":
+            chrome_paths = [
+                "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+                os.path.expanduser("~/Applications/Google Chrome.app/Contents/MacOS/Google Chrome")
+            ]
+
+        executable_path = None
+        for path in chrome_paths:
+            if os.path.exists(path):
+                executable_path = path
+                logger.info(f"✅ [IndexCheck] 找到本地 Chrome 浏览器: {path}")
+                break
+        
+        # 准备启动参数
+        launch_options = {
+            "headless": False,
+            "args": BROWSER_ARGS,
+            "timeout": 30000
+        }
+        
+        if executable_path:
+            launch_options["executable_path"] = executable_path
+        
+        # 启动浏览器
+        logger.info(f"🚀 [IndexCheck] 启动浏览器... Executable: {executable_path}")
+        
+        browser = None
+        try:
+            browser = await playwright.chromium.launch(**launch_options)
+        except Exception as browser_error:
+            error_msg = str(browser_error)
+            logger.warning(f"首次启动失败: {error_msg}")
+            
+            # 回退尝试：不使用本地Chrome
+            if executable_path:
+                logger.info("尝试使用Playwright内置浏览器...")
+                launch_options.pop("executable_path", None)
+                try:
+                    browser = await playwright.chromium.launch(**launch_options)
+                except Exception as inner_error:
+                    error_msg = str(inner_error)
+                    logger.error(f"内置浏览器启动失败: {error_msg}")
+            
+            # 自动安装逻辑
+            if not browser and "Executable doesn't exist" in error_msg:
+                logger.warning("检测到浏览器缺失，尝试自动安装...")
+                try:
+                    logger.info("正在执行: playwright install chromium")
+                    process = await asyncio.create_subprocess_exec(
+                        sys.executable, "-m", "playwright", "install", "chromium",
+                        stdout=asyncio.subprocess.PIPE,
+                        stderr=asyncio.subprocess.PIPE
+                    )
+                    stdout, stderr = await process.communicate()
+                    
+                    if process.returncode == 0:
+                        logger.info("浏览器安装成功，重试启动...")
+                        browser = await playwright.chromium.launch(**launch_options)
+                    else:
+                        logger.error(f"自动安装失败: {stderr.decode()}")
+                        raise Exception(f"自动安装浏览器失败，请手动执行 'playwright install'")
+                        
+                except Exception as install_error:
+                    logger.error(f"自动安装过程异常: {install_error}")
+                    raise install_error
+
+            if not browser:
+                raise Exception(f"浏览器启动失败: {error_msg}")
+                
+        return browser
 
     async def check_keyword(
         self,
@@ -126,7 +212,8 @@ class IndexCheckService:
         
         # 使用单个Playwright实例处理所有关键词，提高效率
         async with async_playwright() as p:
-            browser = await p.chromium.launch(headless=False, args=["--no-sandbox"])
+            # 使用统一的启动逻辑
+            browser = await self._launch_browser(p)
             
             try:
                 for keyword_obj in keywords:
@@ -186,7 +273,8 @@ class IndexCheckService:
         from datetime import datetime, timezone
         
         async with async_playwright() as p:
-            browser = await p.chromium.launch(headless=False, args=["--no-sandbox"])
+            # 使用统一的启动逻辑
+            browser = await self._launch_browser(p)
             
             try:
                 # 为每个平台创建一个新的上下文和页面
