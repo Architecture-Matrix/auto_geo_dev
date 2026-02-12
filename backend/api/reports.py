@@ -66,7 +66,74 @@ class PlatformStatsResponse(BaseModel):
     keyword_hit_rate: float
     company_hit_rate: float
 
+
+class ArticleStatsResponse(BaseModel):
+    """前端仪表盘统计数据响应"""
+    total_articles: int
+    published_count: int
+    indexed_count: int
+    index_rate: float
+    platform_distribution: Dict[str, int]
+
+
 # ==================== 报表API ====================
+
+@router.get("/article-stats", response_model=ArticleStatsResponse)
+async def get_article_stats(db: Session = Depends(get_db)):
+    """
+    获取文章统计数据（适配前端 Dashboard）
+    """
+    # 1. 统计文章总数
+    common_count = db.query(Article).count()
+    geo_count = db.query(GeoArticle).count()
+    total_articles = common_count + geo_count
+    
+    # 2. 统计已发布数
+    # 普通文章发布成功 (status=2)
+    common_pub = db.query(PublishRecord).filter(PublishRecord.publish_status == 2).count()
+    # GEO文章发布成功 (publish_status='published')
+    geo_pub = db.query(GeoArticle).filter(GeoArticle.publish_status == "published").count()
+    published_count = common_pub + geo_pub
+    
+    # 3. 统计AI收录数 (以关键词命中为准)
+    # 统计 IndexCheckRecord 中 keyword_found=True 的唯一关键词/项目? 
+    # 或者简单统计命中次数? 前端语义是 "AI收录数"，通常指被收录的文章/关键词数量
+    # 这里我们统计命中的检测记录数，或者命中的关键词数
+    # 参照 get_summary_stats，这里统计 keyword_found=True 的记录数
+    indexed_count = db.query(IndexCheckRecord).filter(IndexCheckRecord.keyword_found == True).count()
+    
+    # 4. 计算收录率
+    # 分母是总检测次数
+    total_checks = db.query(IndexCheckRecord).count()
+    index_rate = round((indexed_count / total_checks * 100), 1) if total_checks > 0 else 0.0
+    
+    # 5. 平台分布 (统计各平台命中数)
+    # 查出所有命中的记录，按平台分组
+    results = db.query(
+        IndexCheckRecord.platform, 
+        func.count(IndexCheckRecord.id)
+    ).filter(
+        IndexCheckRecord.keyword_found == True
+    ).group_by(IndexCheckRecord.platform).all()
+    
+    platform_map = {
+        "doubao": "豆包", "qianwen": "通义千问", "deepseek": "DeepSeek",
+        "chatgpt": "ChatGPT", "claude": "Claude", "gemini": "Gemini"
+    }
+    
+    dist = {}
+    for platform_code, count in results:
+        name = platform_map.get(platform_code, platform_code)
+        dist[name] = count
+        
+    return ArticleStatsResponse(
+        total_articles=total_articles,
+        published_count=published_count,
+        indexed_count=indexed_count,
+        index_rate=index_rate,
+        platform_distribution=dist
+    )
+
 
 @router.get("/projects", response_model=List[ProjectStatsResponse])
 async def get_project_stats(db: Session = Depends(get_db)):

@@ -603,12 +603,16 @@ class AIPlatformChecker(ABC):
         self._log("info", f"开始关键词检测, 文本长度: {len(text)}")
 
         import re
-        cleaned_text = re.sub(r'[^\w\s\u4e00-\u9fa5]', ' ', text)
-        cleaned_text = re.sub(r'\s+', ' ', cleaned_text).strip()
+        
+        def clean_str(s: str) -> str:
+            # 统一清理逻辑：替换非字字符为空格，合并空格，转小写
+            s = re.sub(r'[^\w\s\u4e00-\u9fa5]', ' ', s)
+            s = re.sub(r'\s+', ' ', s).strip()
+            return s.lower()
 
-        text_lower = cleaned_text.lower()
-        keyword_lower = keyword.lower()
-        company_lower = company.lower()
+        text_lower = clean_str(text)
+        keyword_lower = clean_str(keyword)
+        company_lower = clean_str(company)
 
         keyword_count = text_lower.count(keyword_lower)
         company_count = text_lower.count(company_lower)
@@ -635,7 +639,7 @@ class AIPlatformChecker(ABC):
             result["confidence"] = min(result["confidence"] + 0.2, 0.95)
             result["reason"] += f", 公司名'{company}'出现{company_count}次"
 
-        if len(cleaned_text) < 100 and keyword_count > 0:
+        if len(text) < 100 and keyword_count > 0:
             result["confidence"] = min(result["confidence"] + 0.1, 0.85)
 
         self._log("info", f"关键词检测完成: 关键词={result['keyword_found']}({keyword_count}次), "

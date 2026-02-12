@@ -19,7 +19,7 @@ from loguru import logger
 from sqlalchemy.orm import Session
 
 from backend.config import (
-    BROWSER_TYPE, BROWSER_ARGS,
+    BROWSER_TYPE, BROWSER_ARGS, DEFAULT_USER_AGENT,
     LOGIN_CHECK_INTERVAL, LOGIN_MAX_WAIT_TIME, PLATFORMS
 )
 from backend.services.crypto import encrypt_cookies, encrypt_storage_state, decrypt_cookies, decrypt_storage_state
@@ -206,7 +206,7 @@ class PlaywrightManager:
         # 创建浏览器上下文
         context = await self._browser.new_context(
             viewport={"width": 1280, "height": 800},
-            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            user_agent=DEFAULT_USER_AGENT
         )
         task.context = context
 
