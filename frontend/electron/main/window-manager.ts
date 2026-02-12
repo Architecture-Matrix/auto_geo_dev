@@ -48,7 +48,8 @@ export function createMainWindow(): BrowserWindow {
     mainWindow.webContents.openDevTools() // 打开开发者工具
   } else {
     // 生产模式：加载构建后的文件
-    mainWindow.loadFile(join(__dirname, '../renderer/index.hl'))
+    // __dirname 是 out/electron/main，需要向上两级到 out/，然后进入 renderer/
+    mainWindow.loadFile(join(__dirname, '../../renderer/index.html'))
   }
 
   // 窗口准备好后显示（避免白屏）

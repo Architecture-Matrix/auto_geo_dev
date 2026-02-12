@@ -190,8 +190,10 @@ class AIPlatformChecker(ABC):
                 "[id*='login']",
                 "[class*='auth']",
                 "[id*='auth']",
-                "button*='登录'",
-                "button*='Sign in'"
+                "button:has-text('登录')",
+                "button:has-text('Sign in')",
+                "text='登录'",
+                "text='Sign in'"
             ]
             
             has_login = False
@@ -306,13 +308,23 @@ class AIPlatformChecker(ABC):
             # 这可以解决因页面更新导致特定选择器失效的问题
             try:
                 self._log("info", "尝试兜底策略：查找页面上任意可见的输入框")
-                fallback_element = await page.evaluate_handle("""() => {
+                fallback_selector = await page.evaluate("""() => {
+                    // 辅助函数：获取元素的CSS选择器
+                    function getSelector(el) {
+                        if (el.id) return '#' + el.id;
+                        if (el.className) {
+                            const classes = el.className.split(' ').filter(c => c.trim().length > 0);
+                            if (classes.length > 0) return el.tagName.toLowerCase() + '.' + classes.join('.');
+                        }
+                        return el.tagName.toLowerCase();
+                    }
+
                     // 1. 查找所有 textarea
                     const textareas = Array.from(document.querySelectorAll('textarea'));
                     for (const el of textareas) {
                         const style = window.getComputedStyle(el);
                         if (style.display !== 'none' && style.visibility !== 'hidden' && el.offsetParent !== null) {
-                            return el;
+                            return getSelector(el);
                         }
                     }
                     
@@ -321,20 +333,13 @@ class AIPlatformChecker(ABC):
                     for (const el of editables) {
                         const style = window.getComputedStyle(el);
                         if (style.display !== 'none' && style.visibility !== 'hidden' && el.offsetParent !== null) {
-                            return el;
+                            return getSelector(el);
                         }
                     }
                     return null;
                 }""")
                 
-                if fallback_element:
-                    # 获取该元素的 CSS 选择器（简化版）
-                    fallback_selector = await page.evaluate("""(el) => {
-                        if (el.id) return '#' + el.id;
-                        if (el.className) return el.tagName.toLowerCase() + '.' + el.className.split(' ').join('.');
-                        return el.tagName.toLowerCase();
-                    }""", fallback_element)
-                    
+                if fallback_selector:
                     self._log("info", f"兜底策略成功，找到输入框: {fallback_selector}")
                     return True, fallback_selector
             except Exception as fallback_e:
@@ -598,12 +603,16 @@ class AIPlatformChecker(ABC):
         self._log("info", f"开始关键词检测, 文本长度: {len(text)}")
 
         import re
-        cleaned_text = re.sub(r'[^\w\s\u4e00-\u9fa5]', ' ', text)
-        cleaned_text = re.sub(r'\s+', ' ', cleaned_text).strip()
+        
+        def clean_str(s: str) -> str:
+            # 统一清理逻辑：替换非字字符为空格，合并空格，转小写
+            s = re.sub(r'[^\w\s\u4e00-\u9fa5]', ' ', s)
+            s = re.sub(r'\s+', ' ', s).strip()
+            return s.lower()
 
-        text_lower = cleaned_text.lower()
-        keyword_lower = keyword.lower()
-        company_lower = company.lower()
+        text_lower = clean_str(text)
+        keyword_lower = clean_str(keyword)
+        company_lower = clean_str(company)
 
         keyword_count = text_lower.count(keyword_lower)
         company_count = text_lower.count(company_lower)
@@ -630,7 +639,7 @@ class AIPlatformChecker(ABC):
             result["confidence"] = min(result["confidence"] + 0.2, 0.95)
             result["reason"] += f", 公司名'{company}'出现{company_count}次"
 
-        if len(cleaned_text) < 100 and keyword_count > 0:
+        if len(text) < 100 and keyword_count > 0:
             result["confidence"] = min(result["confidence"] + 0.1, 0.85)
 
         self._log("info", f"关键词检测完成: 关键词={result['keyword_found']}({keyword_count}次), "

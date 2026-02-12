@@ -75,6 +75,16 @@ class PlatformStatsResponse(BaseModel):
     keyword_hit_rate: float
     company_hit_rate: float
 
+
+class ArticleStatsResponse(BaseModel):
+    """前端仪表盘统计数据响应"""
+    total_articles: int
+    published_count: int
+    indexed_count: int
+    index_rate: float
+    platform_distribution: Dict[str, int]
+
+
 # ==================== 报表API ====================
 
 @router.get("/article-stats", response_model=ArticleStatsResponse)

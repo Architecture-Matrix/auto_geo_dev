@@ -65,6 +65,9 @@ BROWSER_ARGS = [
     "--disable-dev-shm-usage", # [新增] 避免容器环境内存不足
 ]
 
+# 默认 User-Agent (保持统一，防止 Session 因 UA 不一致失效)
+DEFAULT_USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
+
 # 用户数据目录
 USER_DATA_DIR = DATA_DIR / "browser_context"
 

@@ -102,6 +102,8 @@ export const geoKeywordApi = {
   getProjectKeywords: (projectId: number) => get(`/keywords/projects/${projectId}/keywords`),
   
   createProject: (data: any) => post('/keywords/projects', data),
+  updateProject: (id: number, data: any) => put(`/keywords/projects/${id}`, data),
+  deleteProject: (id: number) => del(`/keywords/projects/${id}`),
   createKeyword: (projectId: number, data: any) => post(`/keywords/projects/${projectId}/keywords`, data),
   
   distill: (data: any) => post('/keywords/distill', data),

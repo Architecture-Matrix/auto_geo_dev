@@ -16,7 +16,7 @@ from loguru import logger
 
 from playwright.async_api import async_playwright, Browser, BrowserContext, Page
 
-from backend.config import AI_PLATFORMS, BROWSER_TYPE, BROWSER_ARGS
+from backend.config import AI_PLATFORMS, BROWSER_TYPE, BROWSER_ARGS, DEFAULT_USER_AGENT
 from backend.services.session_manager import secure_session_manager
 
 
@@ -300,6 +300,7 @@ class AuthService:
                             logger.warning(f"页面加载超时: {e}, platform={platform}")
                     
                     # 检查是否存在登录元素（如果存在，说明还未登录）
+                    # 关键修改：增强对特定平台登录按钮的识别
                     login_indicators = [
                         "[class*='login']",
                         "[id*='login']",
@@ -307,24 +308,52 @@ class AuthService:
                         "[id*='auth']",
                         "button:has-text('登录')",
                         "button:has-text('Sign in')",
-                        "input[type='password']",
-                        "input[type='email']",
-                        "input[type='tel']",
-                        "[class*='password']",
-                        "[class*='email']",
-                        "[class*='phone']"
+                        "button:has-text('立即登录')",  # 千问侧边栏
+                        "div:has-text('登录'):visible", # 某些非button的登录入口
+                        # 排除输入框类型，只保留明确的登录入口/表单
+                        # "input[type='password']", # 移除这些通用项，避免误判
                     ]
+                    
+                    # 针对特定平台的精确登录选择器
+                    if platform == "doubao":
+                        login_indicators.extend([
+                            "[data-testid*='login']",
+                            "header button:has-text('登录')", # 豆包右上角
+                            "div[class*='right'] :text('登录')"
+                        ])
+                    elif platform == "qianwen":
+                        login_indicators.extend([
+                            "div[class*='login']",
+                            "div[class*='sign-in']",
+                            "[class*='auth-btn']"
+                        ])
                     
                     has_login_elements = False
                     try:
                         for selector in login_indicators:
                             try:
-                                elements = await page.query_selector_all(selector)
-                                if elements:
-                                    has_login_elements = True
-                                    break
+                                # 对于文本类选择器，要小心误匹配到正文，限制在较短长度或特定容器
+                                if "text=" in selector or "has-text" in selector:
+                                    elements = await page.query_selector_all(selector)
+                                    for el in elements:
+                                        if await el.is_visible():
+                                            # 二次确认：文本内容确实短，像个按钮
+                                            text = await el.inner_text()
+                                            if text and len(text.strip()) < 10 and ("登录" in text or "Sign" in text):
+                                                has_login_elements = True
+                                                logger.info(f"检测到登录入口: {selector} ('{text}'), platform={platform}")
+                                                break
+                                else:
+                                    # 常规 CSS 选择器
+                                    element = await page.query_selector(selector)
+                                    if element and await element.is_visible():
+                                        has_login_elements = True
+                                        logger.info(f"检测到登录入口: {selector}, platform={platform}")
+                                        break
                             except Exception:
                                 continue
+                            if has_login_elements:
+                                break
                     except Exception as e:
                         logger.error(f"检查登录元素失败: {e}")
                     
@@ -350,44 +379,112 @@ class AuthService:
                     except Exception as e:
                         logger.error(f"检查错误信息失败: {e}")
                     
-                    # 针对豆包平台的特殊处理
+                    # 优先检查明确的成功标志（正向验证）
+                    # 如果能找到输入框或特定的已登录元素，直接判定为成功
+                    success_indicators = [
+                        "textarea", 
+                        "[contenteditable='true']",
+                        "div[class*='chat-input']",
+                        "[data-testid*='input']",
+                        # 通义千问
+                        "textarea[placeholder*='提问']", 
+                        "textarea[placeholder*='千问']",
+                        "[class*='ant-input']",
+                        # 豆包
+                        "textarea[placeholder*='输入']",
+                        "textarea[placeholder*='发消息']",
+                        # DeepSeek
+                        "textarea[placeholder*='Message']",
+                        "textarea[placeholder*='消息']"
+                    ]
+                    
+                    has_success_element = False
+                    try:
+                        for selector in success_indicators:
+                            try:
+                                element = await page.query_selector(selector)
+                                if element and await element.is_visible():
+                                    has_success_element = True
+                                    logger.info(f"检测到明确的登录成功标志: {selector}, platform={platform}")
+                                    break
+                            except Exception:
+                                continue
+                    except Exception as e:
+                        logger.error(f"检查成功标志失败: {e}")
+
                     login_successful = False
                     
-                    if platform == "doubao":
-                        # 豆包平台需要特殊的加载时间
-                        logger.info(f"豆包平台特殊处理: 页面加载状态={page_loaded}, 登录元素={has_login_elements}, 错误={has_error}")
-                        # 简化豆包平台的检测逻辑，与其他平台一致
-                        # 当页面加载完成且没有登录元素且没有错误时，就认为登录成功
-                        if page_loaded and not has_login_elements and not has_error:
-                            logger.info(f"检测到豆包登录成功")
-                            # 统一逻辑：不在这里提前结束循环，而是设置标志位，
-                            # 让代码继续执行到外层的 "if login_successful:" 块，
-                            # 从而使用统一的 save_session 调用
+                    # 判定逻辑：
+                    # 1. 只要检测到登录入口 (has_login_elements)，无论有没有输入框，都视为未登录 (针对豆包/千问首页)
+                    # 2. 没有登录入口 且 (有成功标志 或 页面干净) -> 成功
+                    
+                    if has_login_elements:
+                        # 明确检测到登录按钮，肯定没成功
+                        login_successful = False
+                        logger.debug(f"{platform}平台等待登录: 检测到登录入口")
+                    elif has_success_element:
+                        # 有输入框且没有登录按钮 -> 成功
+                        # 增加稳定性检查 (防抖动)：尤其是对于豆包等加载可能有延迟的平台
+                        # 如果是第一次检测到成功，再等待一小段时间再次确认，防止是页面元素加载顺序导致的误判
+                        # (例如：输入框先加载出来，右上角的登录按钮过了几秒才出来)
+                        
+                        # 我们可以简单地通过不立即 break，而是要求连续两次检测都成功来解决
+                        # 但这里的 while 循环结构比较复杂，我们采用 "等待并二次确认" 的策略
+                        
+                        logger.info(f"初步检测到登录成功(有输入框): platform={platform}，进行二次确认...")
+                        await asyncio.sleep(3) # 等待3秒
+                        
+                        # 二次检查登录入口
+                        double_check_login = False
+                        try:
+                            for selector in login_indicators:
+                                try:
+                                    if "text=" in selector or "has-text" in selector:
+                                        elements = await page.query_selector_all(selector)
+                                        for el in elements:
+                                            if await el.is_visible():
+                                                text = await el.inner_text()
+                                                if text and len(text.strip()) < 10 and ("登录" in text or "Sign" in text):
+                                                    double_check_login = True
+                                                    break
+                                    else:
+                                        element = await page.query_selector(selector)
+                                        if element and await element.is_visible():
+                                            double_check_login = True
+                                            break
+                                except Exception:
+                                    continue
+                                if double_check_login:
+                                    break
+                        except Exception:
+                            pass
+                            
+                        if double_check_login:
+                            logger.info(f"二次确认发现登录入口，撤销成功判定: platform={platform}")
+                            login_successful = False
+                        else:
+                            logger.info(f"二次确认通过，登录成功: platform={platform}")
                             login_successful = True
                             
-                            # 这里不再需要break，while循环会在下面检测到 login_successful 为 True 后
-                            # 执行统一的保存逻辑并 return
+                    elif page_loaded and not has_error:
+                        # 兜底：页面加载完，没登录按钮，没错误，也没输入框(可能是DeepSeek加载中或UI变动)
+                        # DeepSeek 登录后应该有输入框，所以这里主要防抖动
+                        if platform == "deepseek":
+                             # DeepSeek 如果没有输入框，大概率是没加载完或者在排队，保守等待
+                             login_successful = False
                         else:
-                            # 豆包平台继续等待
-                            logger.info(f"豆包平台继续等待: 页面加载={page_loaded}, 登录元素={has_login_elements}, 错误={has_error}")
-                            # 等待更长时间
-                            await asyncio.sleep(5)
-                            elapsed_time += 5
-                            # 这里需要 continue 避免进入下方通用逻辑的判断
-                            if not login_successful:
-                                continue
+                             # 其他平台，如果没登录按钮，暂时视为成功
+                             logger.info(f"根据页面状态判定登录成功(无登录按钮且无错误): platform={platform}")
+                             login_successful = True
                     else:
-                        # 其他平台的正常处理
-                        if page_loaded and not has_login_elements and not has_error:
-                            logger.info(f"检测到登录成功: platform={platform}")
-                            login_successful = True
-                        else:
-                            # 其他平台继续等待
-                            logger.debug(f"{platform}平台继续等待: 页面加载={page_loaded}, 登录元素={has_login_elements}, 错误={has_error}")
-                            # 等待一段时间后再次检查
-                            await asyncio.sleep(check_interval)
-                            elapsed_time += check_interval
-                            continue
+                        # 继续等待
+                        if platform == "doubao" and not page_loaded:
+                             pass
+                        
+                        logger.debug(f"{platform}平台继续等待: 页面加载={page_loaded}, 登录元素={has_login_elements}, 成功元素={has_success_element}")
+                        await asyncio.sleep(check_interval)
+                        elapsed_time += check_interval
+                        continue
                     
                     # 检测到登录成功，获取存储状态并保存
                     if login_successful:
@@ -720,7 +817,7 @@ class AuthService:
             # 创建上下文和页面
             logger.info("创建浏览器上下文...")
             try:
-                context = await browser.new_context()
+                context = await browser.new_context(user_agent=DEFAULT_USER_AGENT)
                 logger.info("创建新页面...")
                 page = await context.new_page()
             except Exception as context_error:

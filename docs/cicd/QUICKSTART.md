@@ -132,9 +132,60 @@ git push origin v2.4.0
 | 文件 | 触发条件 | 内容 |
 |------|---------|------|
 | `frontend-ci.yml` | push/PR to fronted/** | Lint + Test + Build |
-| `frontend-release.yml` | push tag v*.*.* | 跨平台打包 + 发布 |
+| `frontend-release.yml` | push tag v\*.\*.\* | 跨平台打包 + 发布 |
 | `backend-ci.yml` | push/PR to backend/** | Lint + Test + 安全扫描 |
 | `backend-deploy.yml` | push to master | Docker 构建 + 部署 |
+| `dependency-review.yml` | PR to master/ dev | 依赖审查 |
+
+### 如何禁用 Workflows
+
+#### 方法 1：重命名文件（最简单）
+
+```bash
+# 在 workflow 文件名前面加下划线，GitHub 就不会识别
+cd .github/workflows
+mv frontend-ci.yml _frontend-ci.yml.disabled
+mv backend-ci.yml _backend-ci.yml.disabled
+```
+
+#### 方法 2：改为仅手动触发
+
+修改 workflow 文件，把 `on: push` 改为 `on: workflow_dispatch`：
+
+```yaml
+# 原来自动触发：
+# on:
+#   push:
+#     branches: ['**']
+
+# 改为手动触发：
+on:
+  workflow_dispatch:  # 只能在 GitHub 页面手动运行
+```
+
+手动运行位置：`Actions` → 选择 workflow → 点击 `Run workflow`
+
+#### 方法 3：添加禁用条件
+
+在 workflow 文件顶部添加 `if: false`：
+
+```yaml
+name: Frontend CI
+
+on:
+  push:
+    branches: ['**']
+
+# 添加这行来禁用整个 workflow
+if: false
+
+jobs:
+  # ...
+```
+
+#### 方法 4：仓库设置中禁用（不推荐，会禁用所有）
+
+`Settings` → `Actions` → `General` → `Disable all workflows`
 
 ---
 

@@ -9,6 +9,7 @@ import sys
 import json
 import hashlib
 import asyncio
+import subprocess
 from pathlib import Path
 from typing import Dict, Any, Optional, Tuple
 from datetime import datetime, timedelta
@@ -16,7 +17,7 @@ from loguru import logger
 
 from playwright.async_api import async_playwright, Browser, Page
 
-from backend.config import DATA_DIR, ENCRYPTION_KEY, AI_PLATFORMS
+from backend.config import DATA_DIR, ENCRYPTION_KEY, AI_PLATFORMS, DEFAULT_USER_AGENT
 from backend.services.crypto import CryptoService
 
 
@@ -257,7 +258,7 @@ class SecureSessionManager:
     ) -> bool:
         """
         执行心跳检测（打开平台页面验证会话）
-        优化：增加超时时间、添加重试机制、优化加载策略
+        优化：增加超时时间、添加重试机制、优化加载策略、支持自动安装浏览器
         
         Args:
             platform: AI平台标识
@@ -285,56 +286,107 @@ class SecureSessionManager:
                     logger.error(f"平台URL未配置: {platform}")
                     return False
 
-                # 尝试查找本地 Chrome 路径
-                chrome_paths = [
-                    r"C:\Program Files\Google\Chrome\Application\chrome.exe",
-                    r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
-                    os.path.expandvars(r"%LOCALAPPDATA%\Google\Chrome\Application\chrome.exe")
-                ]
-                
-                # Mac OS 支持
-                if sys.platform == "darwin":
-                    chrome_paths = [
-                        "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
-                        os.path.expanduser("~/Applications/Google Chrome.app/Contents/MacOS/Google Chrome")
-                    ]
-
-                executable_path = None
-                for path in chrome_paths:
-                    if os.path.exists(path):
-                        executable_path = path
-                        break
-
-                # 启动浏览器并使用存储状态
+                # 启动浏览器
                 async with async_playwright() as p:
+                    # 1. 尝试查找本地 Chrome 路径
+                    chrome_paths = [
+                        r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+                        r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
+                        os.path.expandvars(r"%LOCALAPPDATA%\Google\Chrome\Application\chrome.exe")
+                    ]
+                    
+                    # Mac OS 支持
+                    if sys.platform == "darwin":
+                        chrome_paths = [
+                            "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+                            os.path.expanduser("~/Applications/Google Chrome.app/Contents/MacOS/Google Chrome")
+                        ]
+
+                    executable_path = None
+                    for path in chrome_paths:
+                        if os.path.exists(path):
+                            executable_path = path
+                            logger.info(f"✅ [SessionManager] 找到本地 Chrome 浏览器: {path}")
+                            break
+
                     # 准备启动参数
+                    # 策略：前几次尝试使用headless=True，最后一次尝试headless=False（如果允许）
+                    # 为了不打扰用户，默认尽量headless。但如果之前的尝试失败了，尝试无头模式可能会继续失败
+                    # 这里保持 headless=True，除非特定平台需要
+                    
+                    use_headless = True
+                    # 如果是重试且不是第一次，尝试使用非无头模式（如果这是最后一次机会）
+                    if retry_count == max_retries:
+                         # 最后的挣扎：尝试显示浏览器窗口，看看是否能绕过检测
+                         # 但为了避免突然弹出窗口吓到用户，我们只在特定错误下这样做
+                         # 暂时还是保持True，或者可以改为False
+                         # use_headless = False 
+                         pass
+
                     launch_options = {
-                        "headless": True,
-                        "args": BROWSER_ARGS
+                        "headless": use_headless,
+                        "args": BROWSER_ARGS,
+                        "timeout": 30000
                     }
+                    
                     if executable_path:
                         launch_options["executable_path"] = executable_path
 
-                    # 使用统一的 BROWSER_ARGS 配置，确保兼容性
+                    # 启动浏览器
+                    browser = None
                     try:
                         browser = await p.chromium.launch(**launch_options)
-                    except Exception as e:
+                    except Exception as browser_error:
+                        error_msg = str(browser_error)
+                        logger.warning(f"浏览器启动失败: {error_msg}")
+                        
                         # 如果指定了executable_path但失败，尝试回退到内置浏览器
                         if executable_path:
                             launch_options.pop("executable_path", None)
-                            browser = await p.chromium.launch(**launch_options)
-                        else:
-                            raise e
+                            try:
+                                browser = await p.chromium.launch(**launch_options)
+                            except Exception as inner_error:
+                                logger.error(f"内置浏览器启动失败: {inner_error}")
+                        
+                        # 自动安装逻辑
+                        if not browser and "Executable doesn't exist" in str(error_msg):
+                            logger.warning("检测到浏览器缺失，尝试自动安装...")
+                            try:
+                                logger.info("正在执行: playwright install chromium")
+                                process = await asyncio.create_subprocess_exec(
+                                    sys.executable, "-m", "playwright", "install", "chromium",
+                                    stdout=asyncio.subprocess.PIPE,
+                                    stderr=asyncio.subprocess.PIPE
+                                )
+                                stdout, stderr = await process.communicate()
+                                
+                                if process.returncode == 0:
+                                    logger.info("浏览器安装成功，重试启动...")
+                                    browser = await p.chromium.launch(**launch_options)
+                                else:
+                                    logger.error(f"自动安装失败: {stderr.decode()}")
+                            except Exception as install_error:
+                                logger.error(f"自动安装过程异常: {install_error}")
+
+                        if not browser:
+                            raise Exception(f"无法启动浏览器: {error_msg}")
 
                     try:
                         # 创建上下文并加载存储状态
-                        context = await browser.new_context(storage_state=storage_state)
+                        context = await browser.new_context(
+                            storage_state=storage_state,
+                            user_agent=DEFAULT_USER_AGENT
+                        )
                         page = await context.new_page()
 
-                        # 导航到平台页面 - 使用更宽松的加载策略
+                        # 导航到平台页面
                         # 使用 domcontentloaded 代替 load，加快响应速度
-                        await page.goto(platform_url, wait_until="domcontentloaded", timeout=60000)
-
+                        try:
+                            await page.goto(platform_url, wait_until="domcontentloaded", timeout=60000)
+                        except Exception as nav_error:
+                            logger.warning(f"页面导航超时或失败: {nav_error}, platform={platform}")
+                            # 即使导航超时，也可能已经加载了部分内容，继续检查
+                        
                         # 等待关键元素出现（输入框或登录按钮）
                         try:
                             await page.wait_for_selector(
@@ -343,51 +395,68 @@ class SecureSessionManager:
                                 state="visible"
                             )
                         except Exception:
-                            # 即使超时也继续检查
                             pass
 
-                        # 额外等待一小段时间让页面稳定
                         await asyncio.sleep(2)
 
-                        # 检查是否需要登录（通过检测登录元素）
+                        # 检查是否需要登录
+                        # 增强：使用与 AuthService 一致的精确检测逻辑
                         login_indicators = [
                             "[class*='login']",
                             "[id*='login']",
                             "[class*='auth']",
                             "[id*='auth']",
-                            "button*='登录'",
-                            "button*='Sign in'"
+                            "button:has-text('登录')",
+                            "button:has-text('Sign in')",
+                            "button:has-text('立即登录')",
+                            "div:has-text('登录'):visible"
                         ]
-
+                        
                         # 针对特定平台的额外检测
                         if platform == 'doubao':
                             login_indicators.extend([
-                                "[class*='login-btn']",
-                                "[class*='login-button']",
-                                "[href*='login']",
-                                "[class*='account']"
+                                "[data-testid*='login']",
+                                "header button:has-text('登录')",
+                                "div[class*='right'] :text('登录')"
                             ])
 
-                        # 针对千问的特殊检测
                         if platform == 'qianwen':
                             login_indicators.extend([
-                                "[class*='login-entry']",
-                                "[class*='user-login']"
+                                "div[class*='login']",
+                                "div[class*='sign-in']",
+                                "[class*='auth-btn']"
                             ])
-
+                            
                         has_login = False
                         for indicator in login_indicators:
                             try:
-                                # 使用 query_selector 并检查可见性
-                                element = await page.query_selector(indicator)
-                                if element and await element.is_visible():
-                                    has_login = True
-                                    logger.debug(f"检测到登录元素: {indicator}")
-                                    break
+                                # 同样增加文本长度检查，防止误判
+                                if "text=" in indicator or "has-text" in indicator:
+                                    elements = await page.query_selector_all(indicator)
+                                    for el in elements:
+                                        if await el.is_visible():
+                                            text = await el.inner_text()
+                                            if text and len(text.strip()) < 10 and ("登录" in text or "Sign" in text):
+                                                has_login = True
+                                                logger.debug(f"检测到登录元素: {indicator} ('{text}')")
+                                                break
+                                else:
+                                    element = await page.query_selector(indicator)
+                                    if element and await element.is_visible():
+                                        has_login = True
+                                        logger.debug(f"检测到登录元素: {indicator}")
+                                        break
                             except Exception:
                                 continue
+                            if has_login:
+                                break
 
                         if has_login:
+                            # 再次确认：有些时候可能是未登录态的横幅，但如果能找到输入框，其实是已登录的
+                            # 比如千问，未登录时也有输入框。所以单纯有输入框不能证明已登录。
+                            # 必须是：没有登录按钮 且 有输入框
+                            
+                            # 这里的逻辑是：只要有登录按钮，就一定是未登录/失效
                             logger.warning(f"心跳检测失败: 需要登录, platform={platform}")
                             return False
 
@@ -411,22 +480,32 @@ class SecureSessionManager:
 
                         if not has_input:
                             logger.warning(f"心跳检测警告: 未找到输入框, platform={platform}")
-                            # 不直接返回False，因为有些页面结构可能不同
+                            # 不直接返回False，因为有些页面结构可能不同，只要没有出现登录按钮，且页面加载了，就倾向于认为是valid
+                            # 或者是页面结构变了。保守起见，如果也没发现登录按钮，我们返回True?
+                            # 但如果页面白屏（加载失败），既没登录按钮也没输入框。
+                            # 这种情况下，如果 retry_count < max_retries，会重试。
+                            if retry_count < max_retries:
+                                raise Exception("页面加载可能不完整，未找到明确状态指示")
+                            else:
+                                # 最后一次尝试，如果没有明确的登录按钮，且没有输入框，
+                                # 我们假设它是有效的（可能是UI变了），避免误报Unauthorized
+                                logger.info(f"未找到输入框但也没找到登录按钮，假定会话有效: platform={platform}")
+                                return True
 
                         logger.info(f"心跳检测成功: platform={platform}")
                         return True
 
                     finally:
-                        await browser.close()
+                        if browser:
+                            await browser.close()
 
             except Exception as e:
                 retry_count += 1
-                if retry_count <= max_retries:
-                    logger.warning(f"心跳检测失败，正在重试 ({retry_count}/{max_retries}): {e}, platform={platform}")
-                    await asyncio.sleep(2)  # 等待2秒后重试
-                else:
-                    logger.error(f"心跳检测异常，已重试{max_retries}次: {e}, platform={platform}")
+                logger.warning(f"心跳检测尝试 {retry_count} 失败: {e}, platform={platform}")
+                if retry_count > max_retries:
+                    logger.error(f"心跳检测最终失败: {e}")
                     return False
+                await asyncio.sleep(2)
 
         return False
 
