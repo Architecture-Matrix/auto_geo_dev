@@ -4,7 +4,91 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ meta_title }}</title>
-    
+
+    <!-- =========================
+         AI / SEO 增强（新增）
+         说明：以下变量建议在你的模板数据里提供：
+         meta_description, meta_keywords, canonical_url, site_url,
+         og_image_url(可选), logo_url(可选), ai_overview(可选),
+         has_site_search(可选，布尔值：有站内搜索则 true)
+         ========================= -->
+
+    <!-- 基础 SEO Meta -->
+    <meta name="description" content="{{ meta_description }}">
+    <meta name="keywords" content="{{ meta_keywords }}">
+    <meta name="author" content="{{ company_name }}">
+    <link rel="canonical" href="{{ canonical_url }}">
+
+    <!-- Open Graph（社交分享/很多AI摘要会优先读） -->
+    <meta property="og:locale" content="zh_CN">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="{{ company_name }}">
+    <meta property="og:title" content="{{ meta_title }}">
+    <meta property="og:description" content="{{ meta_description }}">
+    <meta property="og:url" content="{{ canonical_url }}">
+    <meta property="og:image" content="{{ og_image_url | default(image_hero_bg) }}">
+
+    <!-- Twitter Card（可选，但推荐） -->
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="{{ meta_title }}">
+    <meta name="twitter:description" content="{{ meta_description }}">
+    <meta name="twitter:image" content="{{ og_image_url | default(image_hero_bg) }}">
+
+    <!-- AI / 搜索引擎：结构化数据（JSON-LD） -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "WebSite",
+      "name": "{{ company_name }}",
+      "url": "{{ site_url }}",
+      "inLanguage": "zh-CN",
+      "description": "{{ meta_description }}",
+      "publisher": {
+        "@type": "Organization",
+        "name": "{{ company_name }}",
+        "url": "{{ site_url }}",
+        "email": "{{ contact_email }}",
+        "telephone": "{{ contact_phone }}",
+        "address": {
+          "@type": "PostalAddress",
+          "streetAddress": "{{ contact_address }}"
+        }
+      }
+      {% if has_site_search %}
+      ,
+      "potentialAction": {
+        "@type": "SearchAction",
+        "target": "{{ site_url }}/search?q={search_term_string}",
+        "query-input": "required name=search_term_string"
+      }
+      {% endif %}
+    }
+    </script>
+
+    <!-- 组织实体（增强品牌/公司识别） -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "Organization",
+      "name": "{{ company_name }}",
+      "url": "{{ site_url }}",
+      "logo": "{{ logo_url | default('') }}",
+      "contactPoint": [{
+        "@type": "ContactPoint",
+        "telephone": "{{ contact_phone }}",
+        "contactType": "customer service",
+        "email": "{{ contact_email }}",
+        "availableLanguage": ["Chinese"]
+      }]
+    }
+    </script>
+
+    <!-- 可选：给AI看的“页面摘要”，不影响页面展示 -->
+    <meta name="ai-overview" content="{{ ai_overview | default(meta_description) }}">
+
+    <!-- =========================
+         原有引入
+         ========================= -->
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
