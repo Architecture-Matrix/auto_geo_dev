@@ -84,9 +84,12 @@ if not exist "backend\requirements.txt" (
     goto menu_loop
 )
 
+REM Set PYTHONPATH to root directory so Python can find backend module
+set "PYTHONPATH=."
+
 REM Check if key Python packages are installed
 echo Checking Python dependencies...
-python backend\scripts\check_deps.py 2>nul
+python -m backend.scripts.check_deps 2>nul
 if errorlevel 1 (
     echo.
     echo [WARNING] Some dependencies are missing!
@@ -120,9 +123,7 @@ echo   - Backend: http://127.0.0.1:8001
 echo   - API Docs: http://127.0.0.1:8001/docs
 echo.
 
-cd backend
-start "AutoGeo-Backend" cmd /k "python main.py"
-cd ..
+start "AutoGeo-Backend" cmd /k "set PYTHONPATH=. && python -m backend.main"
 
 echo.
 echo [OK] Backend service started in new window!
@@ -231,9 +232,7 @@ echo.
 echo Starting backend service...
 echo.
 
-cd backend
-start "AutoGeo-Backend" cmd /k "python main.py"
-cd ..
+start "AutoGeo-Backend" cmd /k "set PYTHONPATH=. && python -m backend.main"
 
 timeout /t 3 /nobreak >nul
 echo.

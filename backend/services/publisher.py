@@ -21,7 +21,7 @@ from ..config import (
     RETRY_INTERVAL,
 )
 from .crypto import CryptoService
-from ..database.models import Account, Article, PublishRecord
+from ..database.models import Account, GeoArticle, PublishRecord
 from sqlalchemy.ext.asyncio import AsyncSession
 
 
@@ -53,7 +53,7 @@ class BasePlatformPublisher:
     async def publish(
         self,
         page: Page,
-        article: Article,
+        article: GeoArticle,
         account: Account,
     ) -> PublishResult:
         """
@@ -154,7 +154,7 @@ class ZhihuPublisher(BasePlatformPublisher):
             "publish_button": '.PublishButton, button[class*="Publish"]',
         }
 
-    async def publish(self, page: Page, article: Article, account: Account) -> PublishResult:
+    async def publish(self, page: Page, article: GeoArticle, account: Account) -> PublishResult:
         """发布到知乎"""
         try:
             logger.info(f"开始发布文章到知乎: {article.title}")
@@ -276,7 +276,7 @@ class BaijiahaoPublisher(BasePlatformPublisher):
                 continue
         return False
 
-    async def publish(self, page: Page, article: Article, account: Account) -> PublishResult:
+    async def publish(self, page: Page, article: GeoArticle, account: Account) -> PublishResult:
         """发布到百家号 - 重写的发布流程！"""
         try:
             logger.info(f"开始发布文章到百家号: {article.title}")
@@ -381,7 +381,7 @@ class SohuPublisher(BasePlatformPublisher):
             "publish_button": '.publish-btn, button[class*="publish"]',
         }
 
-    async def publish(self, page: Page, article: Article, account: Account) -> PublishResult:
+    async def publish(self, page: Page, article: GeoArticle, account: Account) -> PublishResult:
         """发布到搜狐号"""
         try:
             logger.info(f"开始发布文章到搜狐号: {article.title}")
@@ -440,7 +440,7 @@ class ToutiaoPublisher(BasePlatformPublisher):
             "publish_button": '.submit-btn, button[class*="submit"]',
         }
 
-    async def publish(self, page: Page, article: Article, account: Account) -> PublishResult:
+    async def publish(self, page: Page, article: GeoArticle, account: Account) -> PublishResult:
         """发布到头条号"""
         try:
             logger.info(f"开始发布文章到头条号: {article.title}")
@@ -502,7 +502,7 @@ class PublishTask:
     def __init__(
         self,
         task_id: str,
-        article: Article,
+        article: GeoArticle,
         account: Account,
         db: AsyncSession,
         crypto: CryptoService,
@@ -617,7 +617,7 @@ class PublishManager:
     async def create_task(
         self,
         task_id: str,
-        article: Article,
+        article: GeoArticle,
         account: Account,
         db: AsyncSession,
     ) -> PublishTask:

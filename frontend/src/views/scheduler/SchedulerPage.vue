@@ -18,99 +18,165 @@
       </div>
     </header>
 
-    <!-- 任务列表 -->
-    <div class="tasks-section">
-      <el-table 
-        :data="tasks" 
-        v-loading="loading" 
-        style="width: 100%" 
-        :header-cell-style="{ background: '#f9fafb', color: '#606266' }"
-      >
-        <el-table-column prop="name" label="任务名称" width="220">
-          <template #default="{ row }">
-            <span class="task-name">{{ row.name }}</span>
-          </template>
-        </el-table-column>
+    <!-- 任务卡片网格 -->
+    <div class="tasks-section" v-loading="loading">
+      <el-row :gutter="20">
+        <el-col
+          v-for="task in tasks"
+          :key="task.id"
+          :xs="24"
+          :sm="12"
+          :md="12"
+          :lg="8"
+          :xl="6"
+        >
+          <el-card class="task-card" shadow="hover">
+            <!-- 卡片头部 -->
+            <template #header>
+              <div class="card-header">
+                <div class="header-left">
+                  <div class="task-icon" :class="{ active: task.is_active }">
+                    <el-icon>
+                      <component :is="getTaskIcon(task.task_key)" />
+                    </el-icon>
+                  </div>
+                  <div>
+                    <h3 class="task-name">{{ task.name }}</h3>
+                    <div class="status-badge" :class="{ active: task.is_active }">
+                      <span class="status-dot"></span>
+                      <span class="status-text">{{ task.is_active ? '运行中' : '已暂停' }}</span>
+                    </div>
+                  </div>
+                </div>
+                <el-switch
+                  v-model="task.is_active"
+                  inline-prompt
+                  active-text=""
+                  inactive-text=""
+                  style="--el-switch-on-color: #52c41a; --el-switch-off-color: #d9d9d9"
+                  @change="handleStatusChange(task)"
+                />
+              </div>
+            </template>
 
-        <el-table-column prop="description" label="功能描述" min-width="300">
-          <template #default="{ row }">
-            <span class="task-desc">{{ row.description }}</span>
-          </template>
-        </el-table-column>
-        
-        <el-table-column label="执行频率 (Cron)" width="250">
-          <template #default="{ row }">
-            <el-tag effect="plain" class="cron-tag" type="info">
-              {{ row.cron_expression }}
-            </el-tag>
-            <span class="cron-desc">{{ getCronDesc(row.cron_expression) }}</span>
-          </template>
-        </el-table-column>
+            <!-- 卡片内容 -->
+            <div class="card-content">
+              <p class="task-description">{{ task.description }}</p>
 
-        <el-table-column label="运行状态" width="120">
-          <template #default="{ row }">
-            <el-switch
-              v-model="row.is_active"
-              inline-prompt
-              active-text="运行"
-              inactive-text="暂停"
-              style="--el-switch-on-color: #13ce66; --el-switch-off-color: #ff4949"
-              @change="handleStatusChange(row)"
-            />
-          </template>
-        </el-table-column>
+              <div class="schedule-info">
+                <div class="schedule-icon">
+                  <el-icon><Clock /></el-icon>
+                </div>
+                <div class="schedule-text">
+                  <span class="schedule-label">执行频率</span>
+                  <span class="schedule-value">{{ formatCronToText(task.cron_expression) }}</span>
+                </div>
+              </div>
+            </div>
 
-        <el-table-column label="操作" width="150" fixed="right">
-          <template #default="{ row }">
-            <el-button type="primary" link @click="openEdit(row)">
-              <el-icon class="mr-1"><Edit /></el-icon> 修改频率
-            </el-button>
-          </template>
-        </el-table-column>
-      </el-table>
+            <!-- 卡片底部操作按钮 -->
+            <div class="card-footer">
+              <el-button
+                type="primary"
+                link
+                @click="openEdit(task)"
+                class="action-btn"
+              >
+                <el-icon class="btn-icon"><Edit /></el-icon>
+                修改频率
+              </el-button>
+              <el-divider direction="vertical" />
+              <el-button
+                type="primary"
+                link
+                @click="triggerTask(task)"
+                class="action-btn"
+              >
+                <el-icon class="btn-icon"><VideoPlay /></el-icon>
+                立即执行
+              </el-button>
+            </div>
+          </el-card>
+        </el-col>
+      </el-row>
+
+      <!-- 空状态 -->
+      <el-empty
+        v-if="!loading && tasks.length === 0"
+        description="暂无定时任务"
+        :image-size="120"
+      />
     </div>
 
-    <!-- 修改频率对话框 -->
-    <el-dialog 
-      v-model="showEditDialog" 
-      title="修改执行频率" 
-      width="500px"
+    <!-- 修改频率对话框 (人性化表单) -->
+    <el-dialog
+      v-model="showEditDialog"
+      title="修改执行频率"
+      width="480px"
       destroy-on-close
+      :close-on-click-modal="false"
     >
-      <el-form label-width="100px" class="edit-form">
+      <el-form label-width="80px" class="edit-form">
         <el-form-item label="任务名称">
-          <el-input v-model="currentTask.name" disabled />
+          <span class="task-name-display">{{ currentTask.name }}</span>
         </el-form-item>
-        <el-form-item label="Cron表达式">
-          <el-input v-model="currentTask.cron_expression" placeholder="例如: */5 * * * *" />
+
+        <el-form-item label="模式选择">
+          <el-radio-group v-model="frequencyMode">
+            <el-radio-button label="interval">按间隔</el-radio-button>
+            <el-radio-button label="time">按时间</el-radio-button>
+          </el-radio-group>
         </el-form-item>
-        
-        <div class="cron-tips">
-          <p class="tips-title">常用配置参考：</p>
-          <ul>
-            <li @click="quickSetCron('*/1 * * * *')"><code>*/1 * * * *</code> 每 1 分钟执行一次 (测试用)</li>
-            <li @click="quickSetCron('*/5 * * * *')"><code>*/5 * * * *</code> 每 5 分钟执行一次</li>
-            <li @click="quickSetCron('0 * * * *')"><code>0 * * * *</code> 每小时执行一次</li>
-            <li @click="quickSetCron('0 2 * * *')"><code>0 2 * * *</code> 每天凌晨 2:00 执行</li>
-            <li @click="quickSetCron('0 9 * * 1-5')"><code>0 9 * * 1-5</code> 工作日早上 9:00 执行</li>
-          </ul>
-        </div>
+
+        <!-- 按间隔模式 -->
+        <el-form-item label="执行间隔" v-if="frequencyMode === 'interval'">
+          <el-input-number
+            v-model="intervalMinutes"
+            :min="1"
+            :max="1440"
+            controls-position="right"
+            class="interval-input"
+          />
+          <span class="interval-unit">分钟</span>
+        </el-form-item>
+
+        <!-- 按时间模式 -->
+        <el-form-item label="执行时间" v-if="frequencyMode === 'time'">
+          <el-time-picker
+            v-model="executionTime"
+            format="HH:mm"
+            value-format="HH:mm"
+            placeholder="选择执行时间"
+            :clearable="false"
+            class="time-picker"
+          />
+        </el-form-item>
+
+        <!-- 预览 -->
+        <el-form-item label="频率预览">
+          <span class="preview-text">{{ frequencyPreview }}</span>
+        </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="showEditDialog = false">取消</el-button>
-        <el-button type="primary" @click="saveCron" :loading="saving">保存并生效</el-button>
+        <el-button type="primary" @click="saveFrequency" :loading="saving">
+          <el-icon class="mr-1"><Check /></el-icon> 保存并生效
+        </el-button>
       </template>
     </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
-import { Timer, Refresh, Edit } from '@element-plus/icons-vue'
-import { ElMessage } from 'element-plus'
+import { ref, computed, onMounted } from 'vue'
+import {
+  Timer, Refresh, Edit, VideoPlay, Check, Clock,
+  Paperclip, Promotion, Search, RefreshLeft, Document,
+  Connection, DataLine, Monitor, Setting
+} from '@element-plus/icons-vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import axios from 'axios'
 
-// 假设后端地址，如果配置了代理可以直接写 /api/...
 const API_BASE = 'http://127.0.0.1:8001/api/scheduler'
 
 interface Task {
@@ -127,6 +193,80 @@ const loading = ref(false)
 const saving = ref(false)
 const showEditDialog = ref(false)
 const currentTask = ref<any>({})
+
+// 频率配置模式：interval=按间隔, time=按时间
+const frequencyMode = ref<'interval' | 'time'>('interval')
+const intervalMinutes = ref(5)
+const executionTime = ref('02:00')
+
+// 任务图标映射
+const getTaskIcon = (taskKey: string) => {
+  const iconMap: Record<string, any> = {
+    'publish_articles': Promotion,
+    'sync_zhihu': Paperclip,
+    'check收录': Search,
+    'auto_reply': Document,
+    'heartbeat': Connection,
+    'analytics': DataLine,
+    'monitor': Monitor,
+    'cleanup': RefreshLeft,
+  }
+  return iconMap[taskKey] || Setting
+}
+
+// Cron 转自然语言
+const formatCronToText = (cron: string): string => {
+  if (!cron) return '未配置'
+
+  const parts = cron.trim().split(/\s+/)
+  if (parts.length !== 5) return '自定义频率'
+
+  const [minute, hour, day, month, weekday] = parts
+
+  // 按间隔执行：*/N * * * *
+  const intervalMatch = minute.match(/^\*\/(\d+)$/)
+  if (intervalMatch && hour === '*' && day === '*' && month === '*' && weekday === '*') {
+    const n = parseInt(intervalMatch[1])
+    if (n === 1) return '每 1 分钟执行一次'
+    return `每 ${n} 分钟执行一次`
+  }
+
+  // 按小时执行：0 * * * *
+  if (minute === '0' && hour === '*' && day === '*' && month === '*' && weekday === '*') {
+    return '每小时执行一次'
+  }
+
+  // 按时间执行：0 H * * *
+  const hourMatch = hour.match(/^(\d+)$/)
+  if (minute === '0' && hourMatch && day === '*' && month === '*' && weekday === '*') {
+    const h = parseInt(hourMatch[1])
+    return `每天 ${h.toString().padStart(2, '0')}:00 执行`
+  }
+
+  // 工作日特定时间：0 H * * 1-5
+  const workdayMatch = weekday.match(/^1-5$/)
+  if (minute === '0' && hourMatch && day === '*' && month === '*' && workdayMatch) {
+    const h = parseInt(hourMatch[1])
+    return `工作日 ${h.toString().padStart(2, '0')}:00 执行`
+  }
+
+  return '自定义频率'
+}
+
+// 根据配置生成 Cron
+const generateCron = (): string => {
+  if (frequencyMode.value === 'interval') {
+    return `*/${intervalMinutes.value} * * * *`
+  } else {
+    const [h, m] = executionTime.value.split(':')
+    return `${m} ${h} * * *`
+  }
+}
+
+// 频率预览
+const frequencyPreview = computed(() => {
+  return formatCronToText(generateCron())
+})
 
 // 加载任务列表
 const loadTasks = async () => {
@@ -155,24 +295,75 @@ const handleStatusChange = async (row: Task) => {
 // 打开编辑
 const openEdit = (row: Task) => {
   currentTask.value = { ...row }
+
+  // 解析现有 Cron，设置初始值
+  const parts = row.cron_expression.trim().split(/\s+/)
+  if (parts.length === 5) {
+    const [minute, hour] = parts
+
+    // 判断是否为间隔模式
+    const intervalMatch = minute.match(/^\*\/(\d+)$/)
+    if (intervalMatch && hour === '*') {
+      frequencyMode.value = 'interval'
+      intervalMinutes.value = parseInt(intervalMatch[1])
+    } else {
+      frequencyMode.value = 'time'
+      // 解析时间
+      if (minute === '0' && hour.match(/^\d+$/)) {
+        const h = parseInt(hour).toString().padStart(2, '0')
+        executionTime.value = `${h}:00`
+      } else {
+        // 尝试解析复杂的时间格式
+        const hNum = parseInt(hour) || 0
+        const mNum = parseInt(minute) || 0
+        executionTime.value = `${hNum.toString().padStart(2, '0')}:${mNum.toString().padStart(2, '0')}`
+      }
+    }
+  }
+
   showEditDialog.value = true
 }
 
-// 快速设置 Cron
-const quickSetCron = (cron: string) => {
-  currentTask.value.cron_expression = cron
+// 立即执行任务
+const triggerTask = async (task: Task) => {
+  try {
+    await ElMessageBox.confirm(
+      `确定要立即执行任务 "${task.name}" 吗？`,
+      '立即执行',
+      {
+        confirmButtonText: '执行',
+        cancelButtonText: '取消',
+        type: 'info',
+      }
+    )
+    loading.value = true
+    // 使用 task_key 而不是 id，因为 APScheduler 的 Job ID 是 task_key (字符串)
+    await axios.post(`${API_BASE}/jobs/${task.task_key}/run`)
+    ElMessage.success('任务已触发执行')
+  } catch (error: any) {
+    if (error !== 'cancel') {
+      ElMessage.error('触发执行失败')
+    }
+  } finally {
+    loading.value = false
+  }
 }
 
-// 保存 Cron 修改
-const saveCron = async () => {
+// 保存频率修改
+const saveFrequency = async () => {
   saving.value = true
   try {
-    await updateTaskApi(currentTask.value)
+    const newCron = generateCron()
+    const task = {
+      ...currentTask.value,
+      cron_expression: newCron
+    }
+    await updateTaskApi(task)
     ElMessage.success('执行频率已更新，下次执行将按新规则')
     showEditDialog.value = false
     loadTasks() // 刷新列表
   } catch (error) {
-    ElMessage.error('更新失败，请检查Cron格式')
+    ElMessage.error('更新失败')
   } finally {
     saving.value = false
   }
@@ -187,15 +378,6 @@ const updateTaskApi = async (task: Task) => {
   await axios.put(`${API_BASE}/jobs/${task.id}`, payload)
 }
 
-// 简单的 Cron 描述辅助函数
-const getCronDesc = (cron: string) => {
-  if (cron.startsWith('*/1 *')) return ' (每分钟)'
-  if (cron.startsWith('*/5 *')) return ' (每5分钟)'
-  if (cron === '0 * * * *') return ' (每小时)'
-  if (cron.includes('0 2 * * *')) return ' (凌晨2点)'
-  return ''
-}
-
 onMounted(() => {
   loadTasks()
 })
@@ -204,7 +386,7 @@ onMounted(() => {
 <style scoped lang="scss">
 .scheduler-page {
   padding: 24px;
-  background: #f3f4f6;
+  background: #f5f7fa;
   min-height: 100vh;
 }
 
@@ -215,8 +397,8 @@ onMounted(() => {
   justify-content: space-between;
   padding: 24px;
   background: white;
-  border-radius: 12px;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.05);
+  border-radius: 16px;
+  box-shadow: 0 2px 16px rgba(0, 0, 0, 0.04);
   margin-bottom: 24px;
 
   .header-left {
@@ -225,109 +407,237 @@ onMounted(() => {
     gap: 16px;
 
     .header-icon {
-      width: 48px;
-      height: 48px;
-      background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
-      border-radius: 12px;
+      width: 52px;
+      height: 52px;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      border-radius: 14px;
       display: flex;
       align-items: center;
       justify-content: center;
       color: white;
-      font-size: 24px;
+      font-size: 26px;
+      box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
     }
 
     .page-title {
-      margin: 0 0 4px 0;
-      font-size: 20px;
+      margin: 0 0 6px 0;
+      font-size: 22px;
       font-weight: 600;
-      color: #1f2937;
+      color: #1a1a2e;
     }
 
     .page-desc {
       margin: 0;
-      font-size: 13px;
-      color: #6b7280;
+      font-size: 14px;
+      color: #8b9bb4;
     }
   }
 }
 
-/* 任务列表区 */
+/* 任务卡片区域 */
 .tasks-section {
-  background: white;
+  min-height: 300px;
+}
+
+.task-card {
+  height: 100%;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  border: none;
   border-radius: 12px;
-  padding: 20px;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.05);
-  
-  .task-name {
-    font-weight: 600;
-    color: #374151;
-  }
-  
-  .task-desc {
-    color: #6b7280;
-    font-size: 13px;
+
+  &:hover {
+    transform: translateY(-4px);
   }
 
-  .cron-tag {
-    font-family: 'Consolas', monospace;
-    font-size: 13px;
-    letter-spacing: 0.5px;
+  :deep(.el-card__header) {
+    padding: 16px 20px;
+    border-bottom: 1px solid #f0f0f0;
   }
-  
-  .cron-desc {
-    margin-left: 8px;
-    font-size: 12px;
-    color: #9ca3af;
-  }
-  
-  .mr-1 {
-    margin-right: 4px;
+
+  :deep(.el-card__body) {
+    padding: 20px;
   }
 }
 
-/* 弹窗样式 */
-.cron-tips {
-  margin-top: 20px;
-  padding: 15px;
-  background: #f9fafb;
-  border-radius: 8px;
-  border: 1px solid #e5e7eb;
+/* 卡片头部 */
+.card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
 
-  .tips-title {
-    margin: 0 0 10px 0;
-    font-size: 13px;
-    font-weight: 600;
-    color: #4b5563;
+  .header-left {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex: 1;
   }
 
-  ul {
-    padding-left: 0;
-    margin: 0;
-    list-style: none;
+  .task-icon {
+    width: 42px;
+    height: 42px;
+    background: #f5f7fa;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #8b9bb4;
+    font-size: 20px;
+    transition: all 0.3s ease;
 
-    li {
-      font-size: 12px;
-      color: #6b7280;
-      margin-bottom: 8px;
-      cursor: pointer;
-      transition: color 0.2s;
+    &.active {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      box-shadow: 0 4px 10px rgba(102, 126, 234, 0.25);
+    }
+  }
 
-      code {
-        background: #e5e7eb;
-        padding: 2px 6px;
-        border-radius: 4px;
-        color: #ef4444;
-        margin-right: 8px;
-        font-family: monospace;
-      }
+  .task-name {
+    margin: 0 0 4px 0;
+    font-size: 16px;
+    font-weight: 600;
+    color: #1a1a2e;
+  }
 
-      &:hover {
-        color: #6366f1;
-        code {
-          background: #e0e7ff;
-        }
+  .status-badge {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: #8b9bb4;
+    transition: all 0.3s ease;
+
+    &.active {
+      color: #52c41a;
+    }
+
+    .status-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: #d9d9d9;
+      transition: all 0.3s ease;
+
+      .status-badge.active & {
+        background: #52c41a;
+        box-shadow: 0 0 8px rgba(82, 196, 26, 0.5);
       }
     }
   }
+}
+
+/* 卡片内容 */
+.card-content {
+  .task-description {
+    margin: 0 0 20px 0;
+    font-size: 13px;
+    color: #8b9bb4;
+    line-height: 1.6;
+    min-height: 40px;
+  }
+
+  .schedule-info {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 14px 16px;
+    background: #f8f9fc;
+    border-radius: 10px;
+    border-left: 3px solid #667eea;
+
+    .schedule-icon {
+      width: 36px;
+      height: 36px;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-size: 18px;
+    }
+
+    .schedule-text {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+
+      .schedule-label {
+        font-size: 11px;
+        color: #8b9bb4;
+      }
+
+      .schedule-value {
+        font-size: 16px;
+        font-weight: 600;
+        color: #1a1a2e;
+      }
+    }
+  }
+}
+
+/* 卡片底部 */
+.card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid #f0f0f0;
+
+  .action-btn {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 0;
+    font-size: 13px;
+
+    .btn-icon {
+      font-size: 15px;
+    }
+  }
+
+  :deep(.el-divider--vertical) {
+    height: 14px;
+    margin: 0;
+    border-color: #e0e0e0;
+  }
+}
+
+/* 编辑弹窗样式 */
+.edit-form {
+  .task-name-display {
+    font-size: 15px;
+    font-weight: 500;
+    color: #1a1a2e;
+  }
+
+  .interval-input {
+    width: 140px;
+  }
+
+  .interval-unit {
+    margin-left: 8px;
+    color: #8b9bb4;
+  }
+
+  .time-picker {
+    width: 100%;
+  }
+
+  .preview-text {
+    font-size: 15px;
+    font-weight: 500;
+    color: #667eea;
+    padding: 8px 12px;
+    background: #f8f9fc;
+    border-radius: 6px;
+    display: inline-block;
+  }
+}
+
+.mr-1 {
+  margin-right: 4px;
 }
 </style>

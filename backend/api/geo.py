@@ -4,6 +4,7 @@ GEO文章管理 API - 工业加固版
 处理文章生成、质检、列表、收录检测触发等
 """
 
+import asyncio
 from typing import List, Optional, Any
 from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
@@ -13,7 +14,7 @@ from sqlalchemy import desc
 
 from backend.database import get_db, SessionLocal
 from backend.services.geo_article_service import GeoArticleService
-from backend.database.models import GeoArticle, Project
+from backend.database.models import GeoArticle, Project, Keyword
 from backend.schemas import ApiResponse
 from backend.config import N8N_CALLBACK_URL
 from loguru import logger
@@ -27,6 +28,10 @@ class GenerateArticleRequest(BaseModel):
     """文章生成请求模型"""
     keyword_id: int
     company_name: str
+    # 发布策略相关（新增）
+    target_platforms: Optional[List[str]] = Field(None, description="预设目标平台列表")
+    publish_strategy: Optional[str] = Field("draft", description="发布策略：draft=仅生成草稿 immediate=生成后立即发布 scheduled=定时发布")
+    scheduled_at: Optional[str] = Field(None, description="定时发布时间（ISO格式）")
 
 
 class ArticleCallbackRequest(BaseModel):
@@ -56,7 +61,12 @@ class ArticleResponse(BaseModel):
     quality_status: Optional[str] = "pending"
     publish_status: Optional[str] = "draft"
     index_status: Optional[str] = "uncheck"
-    platform: Optional[str] = "zhihu"
+    platform: Optional[str] = None
+    account_id: Optional[int] = None
+
+    # 发布策略字段（新增）
+    target_platforms: Optional[List[str]] = None
+    publish_strategy: Optional[str] = "draft"
 
     # 评分字段
     quality_score: Optional[int] = None
@@ -72,6 +82,7 @@ class ArticleResponse(BaseModel):
 
     # 时间戳
     publish_time: Optional[datetime] = None
+    scheduled_at: Optional[datetime] = None
     last_check_time: Optional[datetime] = None
     created_at: Optional[datetime] = None
 
@@ -88,12 +99,24 @@ class ProjectResponse(BaseModel):
 
 # ==================== 异步辅助逻辑 ====================
 
-async def run_generate_task(keyword_id: int, company_name: str):
+async def run_generate_task(
+    keyword_id: int,
+    company_name: str,
+    target_platforms: Optional[List[str]] = None,
+    publish_strategy: str = "draft",
+    scheduled_at: Optional[str] = None
+):
     """后台执行生成任务的闭包"""
     db = SessionLocal()
     try:
         service = GeoArticleService(db)
-        await service.generate(keyword_id, company_name)
+        await service.generate(
+            keyword_id,
+            company_name,
+            target_platforms=target_platforms,
+            publish_strategy=publish_strategy,
+            scheduled_at=scheduled_at
+        )
     except Exception as e:
         logger.error(f"❌ 后台生成任务失败: {str(e)}")
     finally:
@@ -113,30 +136,58 @@ async def generate_article(request: GenerateArticleRequest, background_tasks: Ba
     """
     提交文章生成任务
     使用 BackgroundTasks 实现非阻塞响应
+
+    支持发布策略：
+    - draft: 仅生成草稿
+    - immediate: 生成后立即发布
+    - scheduled: 定时发布
     """
     background_tasks.add_task(
         run_generate_task,
         request.keyword_id,
-        request.company_name
+        request.company_name,
+        request.target_platforms,
+        request.publish_strategy,
+        request.scheduled_at
     )
     return ApiResponse(success=True, message="生成任务已提交，请在列表查看进度")
 
 
 @router.get("/articles", response_model=List[ArticleResponse])
 async def list_articles(
+    project_id: Optional[int] = Query(None, description="项目ID筛选"),
     limit: int = Query(100),
-    publish_status: Optional[str] = Query(None, description="发布状态过滤: generating/scheduled/publishing/published/failed"),
+    publish_status: Optional[str] = Query(None, description="发布状态过滤: generating/completed/scheduled/publishing/published/failed"),
     db: Session = Depends(get_db)
 ):
     """
     获取文章列表（按创建时间倒序）
-    支持按 publish_status 过滤，用于批量发布时只获取待发布的文章
+
+    支持按 publish_status 和 project_id 过滤。
+
+    状态说明：
+    - generating: AI 生成中
+    - completed: 已生成/待分发（生成完成，等待用户配置发布）
+    - scheduled: 已配置定时发布
+    - publishing: 发布中
+    - published: 已发布
+    - failed: 失败
+
+    批量发布页面应使用 publish_status=completed 获取待配置发布的文章。
     """
     query = db.query(GeoArticle).order_by(desc(GeoArticle.created_at))
 
+    # 如果指定了项目，进行过滤
+    if project_id:
+        query = query.join(Keyword).filter(Keyword.project_id == project_id)
+
     # 如果指定了状态，进行过滤
     if publish_status:
-        query = query.filter(GeoArticle.publish_status == publish_status)
+        # 🌟 支持数组过滤：如果 publish_status 是列表，使用 in_ 方法
+        if isinstance(publish_status, list):
+            query = query.filter(GeoArticle.publish_status.in_(publish_status))
+        else:
+            query = query.filter(GeoArticle.publish_status == publish_status)
 
     # 应用分页限制
     if limit:
@@ -227,13 +278,48 @@ async def handle_n8n_callback(request: ArticleCallbackRequest, db: Session = Dep
             article.ai_score = request.seo_score
             logger.info(f"✅ 更新SEO评分: {request.seo_score}")
 
-        # 将状态改为 scheduled（待发布），等待用户手动触发发布或调度器处理
-        article.publish_status = "scheduled"
-        article.error_msg = None
-        article.publish_time = datetime.now()
+        # 🌟 根据发布策略执行不同逻辑
+        strategy = article.publish_strategy or "draft"
+        logger.info(f"📋 文章生成完成，发布策略: {strategy}")
 
-        db.commit()
-        logger.success(f"✅ 文章 {article.id} 生成完成，状态已更新为 scheduled")
+        if strategy == "immediate":
+            # 立即发布：设为 publishing 并立即调用发布逻辑
+            article.publish_status = "publishing"
+            article.error_msg = None
+            # 从 target_platforms 获取第一个平台
+            if article.target_platforms and len(article.target_platforms) > 0:
+                article.platform = article.target_platforms[0]
+
+            db.commit()
+            logger.success(f"✅ 文章 {article.id} 生成完成，策略为立即发布，开始执行发布")
+
+            # 异步调用发布逻辑
+            from backend.services.geo_article_service import GeoArticleService
+            service = GeoArticleService(db)
+            asyncio.create_task(service.execute_publish(article.id))
+
+        elif strategy == "scheduled":
+            # 定时发布：设为 scheduled，保留 scheduled_at 时间
+            article.publish_status = "scheduled"
+            article.error_msg = None
+            # 从 target_platforms 获取第一个平台
+            if article.target_platforms and len(article.target_platforms) > 0:
+                article.platform = article.target_platforms[0]
+
+            db.commit()
+            logger.success(f"✅ 文章 {article.id} 生成完成，策略为定时发布，将在 {article.scheduled_at} 执行")
+
+        else:
+            # draft：仅生成草稿，设为 completed
+            article.publish_status = "completed"
+            article.error_msg = None
+            # 清除发布相关字段
+            article.platform = None
+            article.scheduled_at = None
+            article.publish_time = None
+
+            db.commit()
+            logger.success(f"✅ 文章 {article.id} 生成完成，策略为仅生成草稿，等待用户配置发布")
 
     else:
         # 生成失败：记录错误信息

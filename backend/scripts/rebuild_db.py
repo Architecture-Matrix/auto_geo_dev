@@ -7,13 +7,13 @@
 import sys
 from pathlib import Path
 
-# 添加项目根目录到路径
-project_root = Path(__file__).parent.parent
+# 添加项目根目录到路径（backend 的父目录）
+project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
 
 from backend.database import engine, Base, SessionLocal
 from backend.database.models import (
-    Account, Article, PublishRecord,
+    Account, PublishRecord,
     Project, Keyword, QuestionVariant,
     IndexCheckRecord, GeoArticle,
     KnowledgeCategory, Knowledge

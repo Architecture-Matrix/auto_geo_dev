@@ -244,10 +244,11 @@ const projectForm = ref({
 const loadProjects = async () => {
   loading.value = true
   try {
-    const result = await geoKeywordApi.getProjects()
-    projects.value = result || []
+    const result: any = await geoKeywordApi.getProjects()
+    projects.value = Array.isArray(result) ? result : (result?.data || [])
   } catch (error) {
     console.error('加载项目失败:', error)
+    projects.value = [] // 确保始终是数组
   } finally {
     loading.value = false
   }

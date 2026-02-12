@@ -12,7 +12,7 @@
             @change="onProjectChange"
           >
             <el-option
-              v-for="project in projects"
+              v-for="project in validProjects"
               :key="project.id"
               :label="project.name"
               :value="project.id"
@@ -34,6 +34,45 @@
               :value="keyword.id"
             />
           </el-select>
+        </el-form-item>
+
+        <el-form-item label="发布平台">
+          <el-select
+            v-model="generateForm.targetPlatforms"
+            placeholder="请选择发布平台"
+            multiple
+            style="width: 220px"
+            clearable
+          >
+            <el-option
+              v-for="platform in PLATFORM_OPTIONS"
+              :key="platform.value"
+              :label="platform.label"
+              :value="platform.value"
+            />
+          </el-select>
+        </el-form-item>
+
+        <el-form-item label="发布策略">
+          <el-radio-group v-model="generateForm.publishStrategy" size="small">
+            <el-radio label="draft">仅生成草稿</el-radio>
+            <el-radio label="immediate">生成后立即发布</el-radio>
+            <el-radio label="scheduled">定时发布</el-radio>
+          </el-radio-group>
+        </el-form-item>
+
+        <el-form-item v-if="generateForm.publishStrategy === 'scheduled'" label="发布时间">
+          <el-date-picker
+            v-model="generateForm.scheduledAt"
+            type="datetime"
+            placeholder="选择发布时间"
+            format="YYYY-MM-DD HH:mm:ss"
+            value-format="YYYY-MM-DDTHH:mm:ss"
+            :disabled-date="disabledDate"
+            :disabled-hours="disabledHours"
+            :disabled-minutes="disabledMinutes"
+            style="width: 220px"
+          />
         </el-form-item>
 
         <el-form-item>
@@ -64,7 +103,7 @@
           >
             <el-option label="全部项目" :value="null" />
             <el-option
-              v-for="p in projects"
+              v-for="p in validProjects"
               :key="p.id"
               :label="p.name"
               :value="p.id"
@@ -79,7 +118,8 @@
             size="small"
           >
             <el-option label="全部状态" :value="null" />
-            <el-option label="待发布" value="scheduled" />
+            <el-option label="已生成/待分发" value="completed" />
+            <el-option label="已配置定时" value="scheduled" />
             <el-option label="生成中" value="generating" />
             <el-option label="生成失败" value="failed" />
             <el-option label="发布中" value="publishing" />
@@ -115,6 +155,14 @@
             <el-tag :type="getGenerateStatusType(row.publish_status)" size="small">
               {{ getGenerateStatusText(row.publish_status) }}
             </el-tag>
+          </template>
+        </el-table-column>
+
+        <el-table-column label="发布策略" width="120">
+          <template #default="{ row }">
+            <span class="text-muted" style="font-size: 12px;">
+              {{ getStrategyDisplay(row) }}
+            </span>
           </template>
         </el-table-column>
 
@@ -171,10 +219,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, onUnmounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { MagicStick, Refresh } from '@element-plus/icons-vue'
 import { useRouter } from 'vue-router'
+import { useWebSocket } from '@/composables/useWebSocket'
 import { geoKeywordApi, geoArticleApi } from '@/services/api'
 import MarkdownIt from 'markdown-it'
 
@@ -193,9 +242,25 @@ const currentArticle = ref<any>(null)
 const filterProjectId = ref<number | null>(null)
 const filterPublishStatus = ref<string | null>(null)
 
+// 发布平台选项
+const PLATFORM_OPTIONS = [
+  { label: '知乎', value: 'zhihu' },
+  { label: '搜狐', value: 'sohu' },
+  { label: '百家号', value: 'baijiahao' },
+  { label: '头条', value: 'toutiao' }
+]
+
 const generateForm = ref({
   projectId: null as number | null,
-  keywordId: null as number | null
+  keywordId: null as number | null,
+  targetPlatforms: [] as string[],
+  publishStrategy: 'draft' as 'draft' | 'immediate' | 'scheduled',
+  scheduledAt: '' as string
+})
+
+// 🌟 有效项目列表（过滤掉没有 id 的项目，防止 el-option 报错）
+const validProjects = computed(() => {
+  return (projects.value || []).filter(p => p?.id !== undefined && p?.id !== null)
 })
 
 // 过滤后的文章
@@ -220,7 +285,7 @@ const filteredArticles = computed(() => {
 
 // 状态判断辅助函数
 const isGenerating = (row: any) => row.publish_status === 'generating'
-const isGenerated = (row: any) => ['scheduled', 'published', 'publishing'].includes(row.publish_status)
+const isGenerated = (row: any) => ['completed', 'scheduled', 'published', 'publishing'].includes(row.publish_status)
 
 // 数据加载
 const loadProjects = async () => {
@@ -275,10 +340,19 @@ const generateArticle = async () => {
   try {
     const res = await geoArticleApi.generate({
       keyword_id: generateForm.value.keywordId as number,
-      company_name: project?.company_name || '默认公司'
+      company_name: project?.company_name || '默认公司',
+      // 新增：发布策略相关参数
+      target_platforms: generateForm.value.targetPlatforms,
+      publish_strategy: generateForm.value.publishStrategy,
+      scheduled_at: generateForm.value.publishStrategy === 'scheduled' ? generateForm.value.scheduledAt : undefined
     })
     if (res.success) {
-      ElMessage.success('任务提交成功')
+      const strategyText = {
+        draft: '仅生成草稿',
+        immediate: '立即发布',
+        scheduled: '定时发布'
+      }
+      ElMessage.success(`任务提交成功，策略：${strategyText[generateForm.value.publishStrategy]}`)
       // 立即刷新列表以显示 generating 状态
       await loadArticles()
 
@@ -302,9 +376,9 @@ const pollArticleGeneration = async () => {
     pollCount++
     await loadArticles()
 
-    // 检查是否有刚刚生成的文章变为 scheduled 状态
+    // 检查是否有刚刚生成的文章变为 completed 状态
     const updatedArticle = articles.value.find(a => a.keyword_id === generateForm.value.keywordId)
-    if (updatedArticle && updatedArticle.publish_status === 'scheduled') {
+    if (updatedArticle && updatedArticle.publish_status === 'completed') {
       console.log('文章生成完成')
       ElMessage.success('文章生成完成')
       return
@@ -355,20 +429,21 @@ const goToBulkPublish = () => {
     path: '/publish/bulk',
     query: {
       projectId: filterProjectId.value,
-      publishStatus: 'scheduled'
+      publishStatus: 'completed'
     }
   })
 }
 
 // 渲染工具
 const getGenerateStatusType = (s: string) => {
-  const statusMap: {
+  const statusMap: Record<string, string> = {
     generating: 'warning',     // 生成中
-    scheduled: 'info',         // 生成成功/待发布
-    failed: 'danger'           // 生成失败
-    publishing: 'primary',      // 发布中
-    published: 'success'        // 已发布
-    draft: 'info'
+    completed: 'success',      // 已生成/待分发
+    scheduled: 'primary',      // 已配置定时发布
+    failed: 'danger',          // 生成失败
+    publishing: 'primary',     // 发布中
+    published: 'success',      // 已发布
+    draft: 'info'             // 草稿
   }
   return statusMap[s] || 'info'
 }
@@ -376,7 +451,8 @@ const getGenerateStatusType = (s: string) => {
 const getGenerateStatusText = (s: string) => {
   const textMap = {
     generating: '生成中',
-    scheduled: '待发布',
+    completed: '已生成/待分发',
+    scheduled: '已配置定时发布',
     failed: '生成失败',
     publishing: '发布中',
     published: '已发布',
@@ -388,9 +464,95 @@ const getGenerateStatusText = (s: string) => {
 const getScoreClass = (s: number) => s >= 80 ? 'text-success' : (s >= 60 ? 'text-warning' : 'text-danger')
 const formatDate = (d?: string) => d ? new Date(d).toLocaleString() : '-'
 
+// 日期选择器辅助方法 - 禁用过去日期
+const disabledDate = (time: Date) => {
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  return time.getTime() < today.getTime()
+}
+
+// 日期选择器辅助方法 - 禁用过去的小时
+const disabledHours = (hour: number) => {
+  const now = new Date()
+  const selectedDate = generateForm.value.scheduledAt ? new Date(generateForm.value.scheduledAt) : now
+  if (selectedDate.toDateString() === now.toDateString()) {
+    return hour < now.getHours()
+  }
+  return []
+}
+
+// 日期选择器辅助方法 - 禁用过去的分钟
+const disabledMinutes = (hour: number, minute: number) => {
+  const now = new Date()
+  const selectedDate = generateForm.value.scheduledAt ? new Date(generateForm.value.scheduledAt) : now
+  if (selectedDate.toDateString() === now.toDateString() && hour === now.getHours()) {
+    return minute < now.getMinutes()
+  }
+  return []
+}
+
+// 获取发布策略显示文本
+const getStrategyDisplay = (article: any) => {
+  if (!article.publish_strategy || article.publish_strategy === 'draft') {
+    return '仅草稿'
+  }
+  if (article.publish_strategy === 'immediate') {
+    return '立即发布'
+  }
+  if (article.publish_strategy === 'scheduled' && article.scheduled_at) {
+    const date = new Date(article.scheduled_at)
+    return `定时: ${date.toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}`
+  }
+  return article.publish_strategy || '未知'
+}
+
 onMounted(() => {
   loadProjects()
   loadArticles()
+
+  // 🌟 连接 WebSocket 监听发布进度
+  const { connect, disconnect, onPublishProgress } = useWebSocket()
+  connect()
+
+  // 监听发布进度事件，实时更新文章状态
+  onPublishProgress((progressData: any) => {
+    if (progressData.article_id && progressData.publish_status) {
+      const articleIndex = articles.value.findIndex(a => a.id === progressData.article_id)
+      if (articleIndex !== -1) {
+        const oldStatus = articles.value[articleIndex].publish_status
+        articles.value[articleIndex].publish_status = progressData.publish_status
+
+        // 如果有 platform_url，也更新
+        if (progressData.platform_url) {
+          articles.value[articleIndex].platform_url = progressData.platform_url
+        }
+
+        // 如果有 error_msg，也更新
+        if (progressData.error_msg) {
+          articles.value[articleIndex].error_msg = progressData.error_msg
+        }
+
+        console.log(`[Articles] 文章状态已同步: article_id=${progressData.article_id}, ${oldStatus} -> ${progressData.publish_status}`)
+
+        // 发布成功时显示提示
+        if (progressData.status === 2 && oldStatus !== 'published') {
+          const article = articles.value[articleIndex]
+          ElMessage.success(`《${article.title?.substring(0, 20)}...》已成功发布`)
+        }
+      }
+    }
+  })
+
+  // 保存 disconnect 函数用于清理
+  ;(window as any).__wsDisconnect = disconnect
+})
+
+// 组件卸载时断开 WebSocket
+onUnmounted(() => {
+  if ((window as any).__wsDisconnect) {
+    (window as any).__wsDisconnect()
+    delete (window as any).__wsDisconnect
+  }
 })
 </script>
 

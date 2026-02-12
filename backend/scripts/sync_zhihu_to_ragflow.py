@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 from loguru import logger
 
 # 添加项目根目录到系统路径
-sys.path.append(str(Path(__file__).resolve().parent))
+sys.path.append(str(Path(__file__).resolve().parent.parent.parent))
 
 from backend.services.article_collector_service import ArticleCollectorService
 from backend.services.ragflow_integration_colleague import RAGFlowClient

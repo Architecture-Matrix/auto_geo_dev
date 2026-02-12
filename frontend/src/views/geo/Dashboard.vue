@@ -50,8 +50,7 @@
 <script setup lang="ts">
 import { ref, onMounted, computed, nextTick } from 'vue'
 import * as echarts from 'echarts'
-// 假设你有一个封装好的 axios 实例，或者直接用 fetch
-import axios from 'axios' 
+import { reportsApi } from '@/services/api'
 
 // ==================== 状态定义 ====================
 const stats = ref({
@@ -77,32 +76,37 @@ const pieChartRef = ref(null)
 const lineChartRef = ref(null)
 
 // ==================== 数据加载 ====================
-// fronted/src/views/geo/Dashboard.vue
 
 const loadData = async () => {
   try {
     // 1. 获取文章统计
-    // 🌟 修正点1：确保地址是 8001 且拼写是 article-stats (复数)
-    const res1 = await axios.get('http://127.0.0.1:8001/api/reports/article-stats')
-    
-    // 🌟 修正点2：看你的浏览器截图，后端直接返回了数据对象，没有包裹 {code: 200, data: ...}
-    // 所以直接用 res1.data 即可，不需要判断 success
-    stats.value = res1.data
-    
+    const res1 = await reportsApi.getArticleStats()
+    // 后端返回: { total, generating, completed, published, failed }
+    // 映射到前端状态
+    stats.value = {
+      total_articles: res1.total || 0,
+      published_count: res1.published || 0,
+      indexed_count: res1.published || 0, // 暂时用 published 代替
+      index_rate: res1.total ? Math.round((res1.published / res1.total) * 100) : 0,
+      platform_distribution: {}
+    }
+
     // 数据拿到后，初始化图表
     initFunnelChart()
     initPieChart()
 
     // 2. 获取概览
-    const res2 = await axios.get('http://127.0.0.1:8001/api/reports/overview')
-    overview.value = res2.data
+    const res2 = await reportsApi.getOverview()
+    // 后端返回: { total_keywords, keyword_found, company_found, overall_hit_rate }
+    overview.value = {
+      total_projects: res2.total_keywords || 0
+    }
 
     // 3. 趋势图
     initLineChart()
-    
+
   } catch (error) {
     console.error("加载报表失败", error)
-    // 可以在这里加个 ElMessage.error('数据加载失败')
   }
 }
 

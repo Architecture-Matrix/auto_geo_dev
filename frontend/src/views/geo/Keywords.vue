@@ -22,7 +22,7 @@
           @change="handleProjectChange"
         >
           <el-option
-            v-for="project in projects"
+            v-for="project in validProjects"
             :key="project.id"
             :label="`${project.name} - ${project.company_name}`"
             :value="project.id"
@@ -456,6 +456,11 @@ const distillForm = ref({
 const results = ref<DistillResult[]>([])
 
 // ==================== 计算属性 ====================
+// 🌟 有效项目列表（过滤掉没有 id 的项目，防止 el-option 报错）
+const validProjects = computed(() => {
+  return (projects.value || []).filter(p => p?.id !== undefined && p?.id !== null)
+})
+
 const currentProject = computed(() => {
   if (!selectedProjectId.value) return null
   return projects.value.find(p => p.id === selectedProjectId.value) || null
@@ -500,10 +505,11 @@ const currentQuestions = computed(() => {
 // 加载项目列表
 const loadProjects = async () => {
   try {
-    const result = await geoKeywordApi.getProjects()
-    projects.value = result || []
+    const result: any = await geoKeywordApi.getProjects()
+    projects.value = Array.isArray(result) ? result : (result?.data || [])
   } catch (error) {
     console.error('加载项目失败:', error)
+    projects.value = [] // 确保始终是数组
   }
 }
 

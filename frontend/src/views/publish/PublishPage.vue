@@ -31,12 +31,13 @@
             size="small"
             @change="loadArticles"
           >
-            <el-option label="全部项目" :value="null" />
+            <!-- 🌟 修复：使用空字符串作为保底值，避免 null 导致渲染错误 -->
+            <el-option label="全部项目" :value="''" />
             <el-option
-              v-for="p in projects"
+              v-for="p in validProjects"
               :key="p.id"
               :label="p.name"
-              :value="p.id"
+              :value="p?.id || 0"
             />
           </el-select>
 
@@ -48,26 +49,34 @@
 
         <div v-loading="articlesLoading" class="article-selector">
           <div
-            v-for="article in articles"
-            :key="article.id"
+            v-for="article in (articles || [])"
+            :key="article?.id || Math.random()"
             class="article-option"
-            :class="{ selected: selectedArticles.includes(article.id), disabled: !isPublishable(article) }"
-            @click="toggleArticle(article.id)"
+            :class="{
+              selected: selectedArticles.includes(article?.id),
+              disabled: !isPublishable(article),
+              'is-published': article?.publish_status === 'published'
+            }"
+            @click="article?.id && toggleArticle(article.id)"
           >
-            <el-checkbox :model-value="selectedArticles.includes(article.id)" @click.stop :disabled="!isPublishable(article)" />
+            <el-checkbox :model-value="selectedArticles.includes(article?.id)" @click.stop :disabled="!isPublishable(article)" />
+            <!-- 🌟 已发布锁定图标 -->
+            <div v-if="article?.publish_status === 'published'" class="published-lock-icon">
+              <el-icon><Lock /></el-icon>
+            </div>
             <div class="article-info">
               <div class="article-header">
-                <h4>{{ article.title }}</h4>
+                <h4>{{ article?.title || '无标题' }}</h4>
                 <div class="article-meta">
-                  <el-tag :type="getGenerateStatusType(article.publish_status)" size="small">
-                    {{ getGenerateStatusText(article.publish_status) }}
+                  <el-tag :type="getGenerateStatusType(article?.publish_status)" size="small">
+                    {{ getGenerateStatusText(article?.publish_status) }}
                   </el-tag>
-                  <el-tag v-if="article.quality_score" type="info" size="small">
+                  <el-tag v-if="article?.quality_score" type="info" size="small">
                     评分: {{ article.quality_score }}
                   </el-tag>
                 </div>
               </div>
-              <p>{{ getPreview(article.content) }}</p>
+              <p>{{ getPreview(article?.content) }}</p>
             </div>
           </div>
         </div>
@@ -80,46 +89,68 @@
       <!-- 步骤2: 选择账号 -->
       <div v-show="currentStep === 1" class="step-panel">
         <h2>选择发布账号</h2>
-        <div class="platform-sections">
-          <div
-            v-for="platform in platforms"
-            :key="platform.id"
-            class="platform-section"
-          >
-            <div class="platform-header">
-              <div
-                class="platform-badge"
-                :style="{ background: platform.color }"
-              >
-                {{ platform.code }}
-              </div>
-              <h3>{{ platform.name }}</h3>
-              <el-checkbox
-                :model-value="allAccountsSelected(platform.id)"
-                @change="togglePlatformAccounts(platform.id, $event)"
-              >
-                全选
-              </el-checkbox>
-            </div>
-            <div class="account-list">
-              <div
-                v-for="account in platformAccounts(platform.id)"
-                :key="account.id"
-                class="account-option"
-                :class="{ selected: selectedAccounts.includes(account.id), disabled: account.status !== 1 }"
-                @click="account.status === 1 && toggleAccount(account.id)"
-              >
-                <el-checkbox
-                  :model-value="selectedAccounts.includes(account.id)"
-                  :disabled="account.status !== 1"
-                  @click.stop
-                />
-                <span>{{ account.account_name }}</span>
-                <el-tag v-if="account.status !== 1" type="danger" size="small">未授权</el-tag>
-              </div>
-            </div>
-          </div>
+
+        <!-- 无账号提示 -->
+        <div v-if="accountsLoading" class="loading-tip">
+          <el-icon class="is-loading"><Loading /></el-icon>
+          加载账号中...
         </div>
+        <div v-if="!accountsLoading && accounts.length === 0" class="empty-state">
+          <el-empty description="暂无授权账号，请先去授权">
+            <el-button type="primary" @click="router.push('/account')">
+              去授权账号
+            </el-button>
+          </el-empty>
+        </div>
+
+        <el-collapse v-model="activeCollapseNames" accordion class="platform-collapse">
+          <el-collapse-item
+            v-for="platform in platformsWithAccounts"
+            :key="platform.id"
+            :name="platform.id"
+            class="platform-collapse-item"
+          >
+            <template #title>
+              <div class="platform-collapse-header">
+                <div
+                  class="platform-badge"
+                  :style="{ background: platform.color }"
+                >
+                  {{ platform.code }}
+                </div>
+                <h3>{{ platform.name }}</h3>
+                <span class="account-count">({{ platformAccounts(platform.id).length }})</span>
+                <div class="header-actions">
+                  <el-checkbox
+                    :model-value="allAccountsSelected(platform.id)"
+                    @change="(val: boolean) => togglePlatformAccounts(platform.id, val)"
+                  >
+                    全选
+                  </el-checkbox>
+                </div>
+              </div>
+            </template>
+
+            <template #default>
+              <div class="account-list-expanded">
+                <div
+                  v-for="account in platformAccounts(platform.id)"
+                  :key="account.id"
+                  class="account-option"
+                  :class="{ selected: selectedAccounts.includes(account.id) }"
+                  @click="toggleAccount(account.id)"
+                >
+                  <el-checkbox
+                    :model-value="selectedAccounts.includes(account.id)"
+                    @click.stop
+                  />
+                  <span class="account-name">{{ account.account_name }}</span>
+                  <span v-if="account.remark" class="account-remark">({{ account.remark }})</span>
+                </div>
+              </div>
+            </template>
+          </el-collapse-item>
+        </el-collapse>
       </div>
 
       <!-- 步骤3: 确认发布 -->
@@ -127,28 +158,57 @@
         <h2>确认发布信息</h2>
         <div class="confirm-info">
           <div class="info-section">
-            <h3>待发布文章 ({{ selectedArticleList.length }})</h3>
+            <h3>待发布文章 ({{ selectedArticleList?.length || 0 }})</h3>
             <ul>
-              <li v-for="article in selectedArticleList" :key="article.id">
-                {{ article.title }}
+              <li v-for="article in (selectedArticleList || [])" :key="article?.id || Math.random()">
+                {{ article?.title || '无标题' }}
               </li>
             </ul>
           </div>
           <div class="info-section">
-            <h3>目标账号 ({{ selectedAccounts.length }})</h3>
+            <h3>目标账号 ({{ selectedAccounts?.length || 0 }})</h3>
             <div class="platform-summary">
               <div
-                v-for="platform in platformSummary"
-                :key="platform.id"
+                v-for="platform in (platformSummary || [])"
+                :key="platform?.id || Math.random()"
                 class="summary-item"
               >
-                <span class="platform-name">{{ platform.name }}</span>
-                <span class="account-count">{{ platform.count }} 个账号</span>
+                <span class="platform-name">{{ platform?.name || '未知' }}</span>
+                <span class="account-count">{{ platform?.count || 0 }} 个账号</span>
               </div>
             </div>
           </div>
           <div class="info-section">
-            <h3>预计生成 {{ selectedArticleList.length * selectedAccounts.length }} 个发布任务</h3>
+            <h3>预计生成 {{ (selectedArticleList?.length || 0) * (selectedAccounts?.length || 0) }} 个发布任务</h3>
+          </div>
+          <div class="info-section publish-mode-section">
+            <h3>发布方式</h3>
+            <el-radio-group v-model="publishMode" size="default">
+              <el-radio value="immediate" border>
+                <div class="publish-mode-option">
+                  <div class="mode-title">立即发布</div>
+                  <div class="mode-desc">点击后立即开始发布</div>
+                </div>
+              </el-radio>
+              <el-radio value="scheduled" border>
+                <div class="publish-mode-option">
+                  <div class="mode-title">定时发布</div>
+                  <div class="mode-desc">设置发布时间，系统自动执行</div>
+                </div>
+              </el-radio>
+            </el-radio-group>
+            <el-date-picker
+              v-if="publishMode === 'scheduled'"
+              v-model="scheduledTime"
+              type="datetime"
+              placeholder="选择定时发布时间"
+              :disabled-date="disabledDate"
+              :disabled-hours="disabledHours"
+              :disabled-minutes="disabledMinutes"
+              format="YYYY-MM-DD HH:mm:ss"
+              value-format="YYYY-MM-DDTHH:mm:ss"
+              style="margin-top: 16px; width: 100%;"
+            />
           </div>
         </div>
       </div>
@@ -158,15 +218,15 @@
         <h2>发布进度</h2>
         <div class="progress-summary">
           <div class="progress-stat">
-            <span class="stat-value">{{ publishProgress.completed }}</span>
+            <span class="stat-value">{{ publishProgress?.completed || 0 }}</span>
             <span class="stat-label">已完成</span>
           </div>
           <div class="progress-stat">
-            <span class="stat-value">{{ publishProgress.total }}</span>
+            <span class="stat-value">{{ publishProgress?.total || 0 }}</span>
             <span class="stat-label">总数</span>
           </div>
           <div class="progress-stat">
-            <span class="stat-value">{{ publishProgress.failed }}</span>
+            <span class="stat-value">{{ publishProgress?.failed || 0 }}</span>
             <span class="stat-label">失败</span>
           </div>
         </div>
@@ -177,24 +237,24 @@
         />
         <div class="task-list">
           <div
-            v-for="task in publishTasks"
-            :key="task.id"
+            v-for="task in (publishTasks || [])"
+            :key="task?.id || Math.random()"
             class="task-item"
-            :class="`status-${task.status}`"
+            :class="`status-${task?.status}`"
           >
             <div class="task-info">
-              <span class="task-article">{{ task.articleTitle }}</span>
+              <span class="task-article">{{ task?.articleTitle || '未知任务' }}</span>
               <span class="task-arrow">→</span>
-              <el-tag :color="getPlatformColor(task.platform)" size="small">
-                {{ task.platformName }}
+              <el-tag :color="getPlatformColor(task?.platform)" size="small">
+                {{ task?.platformName || '未知' }}
               </el-tag>
-              <span class="task-account">{{ task.accountName }}</span>
+              <span class="task-account">{{ task?.accountName || '未知账号' }}</span>
             </div>
             <div class="task-status">
-              <el-icon v-if="task.status === 0" class="is-loading"><Loading /></el-icon>
-              <el-icon v-else-if="task.status === 2" color="#4caf50"><CircleCheck /></el-icon>
-              <el-icon v-else-if="task.status === 3" color="#f44336"><CircleClose /></el-icon>
-              <span v-if="task.errorMsg" class="error-msg">{{ task.errorMsg }}</span>
+              <el-icon v-if="task?.status === 0" class="is-loading"><Loading /></el-icon>
+              <el-icon v-else-if="task?.status === 2" color="#4caf50"><CircleCheck /></el-icon>
+              <el-icon v-else-if="task?.status === 3" color="#f44336"><CircleClose /></el-icon>
+              <span v-if="task?.errorMsg" class="error-msg">{{ task.errorMsg }}</span>
             </div>
           </div>
         </div>
@@ -225,16 +285,22 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch, onUnmounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { Loading, CircleCheck, CircleClose, Refresh } from '@element-plus/icons-vue'
+import { useWebSocket } from '@/composables/useWebSocket'
+import { Loading, CircleCheck, CircleClose, Refresh, Lock } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { geoKeywordApi, geoArticleApi, publishApi, accountApi } from '@/services/api'
 import { PLATFORMS } from '@/core/config/platform'
-import { useAccountStore } from '@/stores/modules/account'
 
 const router = useRouter()
 const route = useRoute()
+
+// WebSocket 连接
+const { connect, disconnect, onPublishProgress } = useWebSocket()
+
+// 平台列表（数组形式，方便遍历）
+const PLATFORMS_LIST = Object.values(PLATFORMS)
 
 // 步骤
 const steps = ['选择文章', '选择账号', '确认发布', '发布进度']
@@ -254,8 +320,27 @@ const publishing = ref(false)
 const publishProgress = ref({ completed: 0, total: 0, failed: 0 })
 const publishTasks = ref<any[]>([])
 
+// 发布方式：immediate=立即发布, scheduled=定时发布
+const publishMode = ref<'immediate' | 'scheduled'>('immediate')
+const scheduledTime = ref<string>('')
+
 // 账号数据
 const accounts = ref<any[]>([])
+const accountsLoading = ref(false)
+
+// 平台展开/收起状态（使用数组管理）
+const activeCollapseNames = ref<string[]>([])
+
+// 初始化：默认展开第一个有账号的平台
+const initializeCollapsedStates = () => {
+  activeCollapseNames.value = []
+  PLATFORMS_LIST.forEach((platform: any) => {
+    const platformAccounts = accounts.value.filter(a => a.platform === platform.id && a.status === 1)
+    if (platformAccounts.length > 0) {
+      activeCollapseNames.value.push(platform.id)
+    }
+  })
+}
 
 // 过滤
 const filterProjectId = ref<number | null>(null)
@@ -263,7 +348,136 @@ const filterProjectId = ref<number | null>(null)
 // 平台列表
 const platforms = Object.values(PLATFORMS)
 
+// 平台 ID 映射：处理后端返回的 platform ID 与前端平台名的对应关系
+// 例如：后端返回 'zhihu'，需要映射到 '知乎' 平台
+const PLATFORM_ID_MAPPING: Record<string, string> = {
+  'zhihu': 'zhihu',
+  'sohu': 'sohu',
+  'baijiahao': 'baijiahao',
+  'toutiao': 'toutiao',
+  'bilibili': 'bilibili',
+  'xigua': 'xigua',
+  'weibo': 'weibo',
+  'dayu': 'dayu',
+  'xueqiu': 'xueqiu',
+  'iqiyi': 'iqiyi',
+  'huxiu': 'huxiu',
+  'douyin': 'douyin',
+  'kuaishou': 'kuaishou',
+  'haokan': 'haokan',
+  'pipixia': 'pipixia',
+  'meipai': 'meipai',
+  'wenku': 'wenku',
+  'douban': 'douban',
+  'weixin': 'weixin',
+  'douyin_company': 'douyin_company',
+  '36kr': '36kr',
+  'acfun': 'acfun',
+  'video_account': 'video_account',
+  'sohu_video': 'sohu_video',
+  'jianshu': 'jianshu',
+  'yidian': 'yidian',
+  'chejia': 'chejia',
+  'alipay': 'alipay',
+  'xiaohongshu': 'xiaohongshu',
+  'ximalaya': 'ximalaya',
+  'meituan': 'meituan',
+  'haokan_bili': 'haokan',
+  'penguin': 'penguin',
+  'woshipm': 'woshipm',
+  'dafeng': 'dafeng'
+}
+
+// 规范化平台 ID：将后端返回的 platform ID 转换为前端平台名
+const normalizePlatformId = (platformId: string | undefined): string => {
+  if (!platformId || platformId === '') return ''
+  return PLATFORM_ID_MAPPING[platformId] || platformId
+}
+
+// 监听账号列表变化，自动更新折叠状态
+watch(accounts, () => {
+  initializeCollapsedStates()
+})
+
 onMounted(async () => {
+  // 连接 WebSocket
+  connect()
+
+  // 监听发布进度事件
+  onPublishProgress((progressData: any) => {
+    // === 显微镜日志 ===
+    console.log("=== 收到WS原始消息 ===", progressData);
+    // 🌟 修复：强制字符串对比，解决数字 vs 字符串 ID 匹配问题
+    const target = articles.value.find(a => String(a.id) === String(progressData.article_id));
+    console.log("=== 匹配到的文章对象 ===", target ? JSON.parse(JSON.stringify(target)) : null);
+    // =================
+
+    // 1. 更新对应的任务状态
+    // 🌟 修复：强制字符串对比
+    const taskIndex = publishTasks.value.findIndex(t =>
+      String(t.articleId) === String(progressData.article_id) && String(t.accountId) === String(progressData.account_id)
+    )
+
+    if (taskIndex !== -1) {
+      const task = publishTasks.value[taskIndex]
+      const oldStatus = task.status
+
+      // 更新任务状态
+      task.status = progressData.status
+      task.errorMsg = progressData.error_msg || null
+
+      // 更新进度统计
+      if (oldStatus === 0 && (progressData.status === 2 || progressData.status === 3)) {
+        publishProgress.value.completed++
+        if (progressData.status === 3) {
+          publishProgress.value.failed++
+        }
+      }
+
+      // 检查是否所有任务都已完成
+      if (publishProgress.value.completed >= publishProgress.value.total) {
+        publishing.value = false
+      }
+    }
+
+    // 🌟 2. 同步更新 articles 数组中的文章状态
+    // 这样"选择文章"列表中的标签会立即变色
+    if (progressData.article_id) {
+      // 🌟 修复：强制字符串对比
+      const targetArticle = articles.value.find(a => String(a.id) === String(progressData.article_id))
+      if (targetArticle) {
+        const oldStatus = targetArticle.publish_status
+        // 如果后端返回了 publish_status，使用它；否则根据 status 推断
+        const newStatus = progressData.publish_status || (progressData.status === 2 ? 'published' : 'failed')
+        targetArticle.publish_status = newStatus
+
+        // 如果有 platform_url，也更新
+        if (progressData.platform_url) {
+          targetArticle.platform_url = progressData.platform_url
+        }
+
+        // 🌟 强制触发 Vue 深度响应式更新，确保标签立即变色
+        articles.value = [...articles.value]
+
+        console.log(`[PublishPage] 文章状态已同步: article_id=${progressData.article_id}, ${oldStatus} -> ${newStatus}`)
+
+        // === 状态回滚补丁：失败时显示错误提示 ===
+        if (progressData.status === 3 || newStatus === 'failed') {
+          ElMessage.error('发布失败：' + (progressData.error_msg || '未知错误'))
+        }
+      }
+    }
+
+    // 🌟 3. 自动清理选中状态：当发布成功后，从 selectedArticles 中移除该文章
+    if (progressData.status === 2 && progressData.article_id) {
+      const selectedIndex = selectedArticles.value.indexOf(progressData.article_id)
+      if (selectedIndex !== -1) {
+        selectedArticles.value.splice(selectedIndex, 1)
+        console.log(`[PublishPage] 已从选中列表移除已发布的文章: article_id=${progressData.article_id}`)
+      }
+    }
+  })
+
   // 从路由参数中获取过滤条件
   if (route.query.projectId) {
     filterProjectId.value = Number(route.query.projectId) as number
@@ -273,7 +487,16 @@ onMounted(async () => {
   await loadAccounts()
 })
 
+// 组件卸载时断开 WebSocket
+onUnmounted(() => {
+  disconnect()
+})
+
 // 计算属性
+const validProjects = computed(() => {
+  return (projects.value || []).filter(p => p?.id !== undefined && p?.id !== null)
+})
+
 const selectedArticleList = computed(() => {
   return articles.value.filter(a => selectedArticles.value.includes(a.id))
 })
@@ -311,20 +534,47 @@ const progressStatus = computed(() => {
   return undefined
 })
 
-// 判断文章是否可发布（已生成完成且状态为待发布）
+// 判断文章是否可发布
+// 🌟 允许 completed、scheduled 或 failed 状态的文章可以被勾选发布
+// 已发布(published)或正在发布(publishing)的文章必须锁定，不可重复操作
+// failed 状态的文章可以被重新勾选进行重试
 const isPublishable = (article: any) => {
-  return article.publish_status === 'scheduled'
+  if (!article) return false
+  // 只允许 completed、scheduled 或 failed 状态的文章被勾选
+  // published 或 publishing 状态的文章必须返回 false
+  return ['completed', 'scheduled', 'failed'].includes(article.publish_status)
 }
+
+// 计算属性 - 获取有账号的平台列表
+const platformsWithAccounts = computed(() => {
+  const platformsWithData: any[] = []
+  PLATFORMS_LIST.forEach((platform: any) => {
+    const platformAccounts = accounts.value.filter((a: any) => {
+      return a.platform === platform.id && a.status === 1
+    })
+    if (platformAccounts.length > 0) {
+      platformsWithData.push(platform)
+    }
+  })
+  return platformsWithData
+})
 
 // 方法
 const platformAccounts = (platformId: string) => {
-  return accountStore.accounts.filter(a => a.platform === platformId)
+  return accounts.value.filter(a => {
+    return a.platform === platformId && a.status === 1
+  })
 }
 
 const allAccountsSelected = (platformId: string) => {
-  const platformAccs = platformAccounts(platformId).filter(a => a.status === 1)
+  const platformAccs = platformAccounts(platformId)
   return platformAccs.length > 0 && platformAccs.every(a => selectedAccounts.value.includes(a.id))
 }
+
+// 切换平台展开/收起状态（现在由 el-collapse 自动管理）
+// const togglePlatformCollapse = (platformId: string) => {
+//   collapsedPlatforms.value[platformId] = !collapsedPlatforms.value[platformId]
+// }
 
 // 加载数据
 const loadProjects = async () => {
@@ -333,34 +583,43 @@ const loadProjects = async () => {
     projects.value = Array.isArray(res) ? res : (res?.data || [])
   } catch (error) {
     console.error('加载项目失败:', error)
+    projects.value = [] // 确保始终是数组
   }
 }
 
 const loadArticles = async () => {
   articlesLoading.value = true
   try {
-    // 只获取状态为 scheduled（待发布）的文章
-    const params: any = { publish_status: 'scheduled' }
+    // 获取状态为 completed、scheduled、published 或 failed 的文章
+    // published 状态的文章也显示在列表中，方便用户查看发布状态
+    // failed 状态的文章也需要显示，允许用户重新发布
+    const params: any = { publish_status: ['completed', 'scheduled', 'published', 'failed'] }
     if (filterProjectId.value !== null) {
-      // 如果选择了项目，需要获取该项目的关键词，然后过滤文章
-      // 这里简化处理，直接获取所有文章然后在前端过滤
+      // 传递 project_id 参数，后端通过 join Keyword 表进行过滤
+      params.project_id = filterProjectId.value
     }
     const res: any = await geoArticleApi.getArticles(params)
-    articles.value = Array.isArray(res) ? res : (res?.data || [])
+    articles.value = Array.isArray(res) ? res : (res?.data || res?.items || [])
   } catch (error) {
-    console.error('加载文章失败:', error)
+    console.error('[PublishPage] 加载文章失败:', error)
     ElMessage.error('加载文章失败')
+    articles.value = [] // 确保始终是数组
   } finally {
     articlesLoading.value = false
   }
 }
 
 const loadAccounts = async () => {
+  accountsLoading.value = true
   try {
-    const res: any = await accountApi.getList()
+    const res: any = await accountApi.getList({ status: 1 })
     accounts.value = Array.isArray(res) ? res : (res?.data || [])
   } catch (error) {
-    console.error('加载账号失败:', error)
+    console.error('[PublishPage] 加载账号失败:', error)
+    ElMessage.error('加载账号失败')
+    accounts.value = [] // 确保始终是数组
+  } finally {
+    accountsLoading.value = false
   }
 }
 
@@ -418,6 +677,12 @@ const startPublish = async () => {
     return
   }
 
+  // 如果是定时发布，必须选择时间
+  if (publishMode.value === 'scheduled' && !scheduledTime.value) {
+    ElMessage.warning('请选择定时发布时间')
+    return
+  }
+
   publishing.value = true
 
   // 初始化发布任务
@@ -443,18 +708,41 @@ const startPublish = async () => {
 
   currentStep.value = 3
 
-  // 调用后端API创建批量发布任务
+  // 根据发布方式调用不同的 API
   try {
-    const response = await publishApi.batch({
-      article_ids: selectedArticles.value,
-      account_ids: selectedAccounts.value
-    })
+    let response: any
+    let message = ''
+
+    if (publishMode.value === 'immediate') {
+      // 立即发布
+      response = await publishApi.start({
+        article_ids: selectedArticles.value,
+        account_ids: selectedAccounts.value
+      })
+      message = '立即发布任务已创建，正在执行中'
+    } else {
+      // 定时发布
+      response = await publishApi.schedule({
+        article_ids: selectedArticles.value,
+        account_ids: selectedAccounts.value,
+        scheduled_time: scheduledTime.value
+      })
+      message = `定时发布已配置，将在 ${new Date(scheduledTime.value).toLocaleString('zh-CN')} 执行`
+    }
+
     const data = response.data || response
 
     if (data.success !== false) {
-      ElMessage.success('批量发布任务已创建')
-      // 模拟进度更新（实际应该通过WebSocket获取）
-      simulateProgress(tasks)
+      ElMessage.success(message)
+      if (publishMode.value === 'immediate') {
+        // 立即发布：监听 WebSocket 进度
+        // 进度将由后端通过 publish_progress 事件实时推送
+      } else {
+        // 定时发布，直接完成
+        publishing.value = false
+        publishProgress.value = { completed: tasks.length, total: tasks.length, failed: 0 }
+        publishTasks.value = tasks.map(t => ({ ...t, status: 2 }))
+      }
     } else {
       ElMessage.error(data.message || '创建发布任务失败')
       publishing.value = false
@@ -462,39 +750,17 @@ const startPublish = async () => {
     }
   } catch (e: any) {
     console.error('发布失败:', e)
-    // 如果后端接口出错，也模拟进度
-    simulateProgress(tasks)
+    ElMessage.error('发布失败，请检查后端服务')
+    publishing.value = false
+    currentStep.value = 2
   }
-}
-
-const simulateProgress = (tasks: any[]) => {
-  let index = 0
-  const interval = setInterval(() => {
-    if (index >= tasks.length) {
-      clearInterval(interval)
-      publishing.value = false
-      return
-    }
-
-    const task = tasks[index]
-    // 模拟成功/失败（90%成功率）
-    const success = Math.random() > 0.1
-
-    task.status = success ? 2 : 3
-    task.errorMsg = success ? null : '模拟失败错误'
-
-    publishProgress.value.completed++
-    if (!success) {
-      publishProgress.value.failed++
-    }
-
-    index++
-  }, 1500)
 }
 
 const finishPublish = () => {
   ElMessage.success('发布任务已完成')
-  router.push('/publish/history')
+  // 🌟 修复：路由路径是 /history（不是 /publish/history）
+  // 或者跳转到 GEO 文章列表 /geo/articles
+  router.push('/history')
 }
 
 const getPreview = (content: string) => {
@@ -508,13 +774,14 @@ const getPlatformColor = (platform: string) => {
 }
 
 const getGenerateStatusType = (s: string) => {
-  const statusMap: {
+  const statusMap: Record<string, string> = {
     generating: 'warning',     // 生成中
-    scheduled: 'info',         // 生成成功/待发布
-    failed: 'danger',           // 生成失败
-    publishing: 'primary',      // 发布中
-    published: 'success'        // 已发布
-    draft: 'info'
+    completed: 'success',      // 已生成/待分发
+    scheduled: 'primary',      // 已配置定时发布
+    failed: 'danger',         // 生成/发布失败
+    publishing: 'primary',     // 发布中
+    published: 'success',     // 已发布
+    draft: 'info'              // 草稿
   }
   return statusMap[s] || 'info'
 }
@@ -522,13 +789,48 @@ const getGenerateStatusType = (s: string) => {
 const getGenerateStatusText = (s: string) => {
   const textMap = {
     generating: '生成中',
-    scheduled: '待发布',
-    failed: '生成失败',
+    completed: '已生成/待分发',
+    scheduled: '已配置定时发布',
+    failed: '发布失败/待重试',
     publishing: '发布中',
     published: '已发布',
-    draft: '草稿'
+    draft: '草稿',
+    0: '发布中',
+    1: '排队中',
+    2: '发布成功',
+    3: '发布失败'
   }
-  return textMap[s] || s
+  return textMap[s] || s || '未知状态'
+}
+
+// 日期选择器辅助方法 - 禁用过去日期
+const disabledDate = (time: Date) => {
+  // 不能选择今天之前的时间
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  return time.getTime() < today.getTime()
+}
+
+// 日期选择器辅助方法 - 禁用过去的小时
+const disabledHours = (hour: number) => {
+  const now = new Date()
+  const selectedDate = scheduledTime.value ? new Date(scheduledTime.value) : now
+  // 如果选择的是今天，禁用已经过去的小时
+  if (selectedDate.toDateString() === now.toDateString()) {
+    return hour < now.getHours()
+  }
+  return []
+}
+
+// 日期选择器辅助方法 - 禁用过去的分钟
+const disabledMinutes = (hour: number, minute: number) => {
+  const now = new Date()
+  const selectedDate = scheduledTime.value ? new Date(scheduledTime.value) : now
+  // 如果选择的是今天且小时相同，禁用已经过去的分钟
+  if (selectedDate.toDateString() === now.toDateString() && hour === now.getHours()) {
+    return minute < now.getMinutes()
+  }
+  return []
 }
 </script>
 
@@ -665,6 +967,33 @@ const getGenerateStatusText = (s: string) => {
       cursor: not-allowed;
     }
 
+    // 🌟 已发布文章样式：半透明 + 锁定图标
+    &.is-published {
+      opacity: 0.7;
+      background: rgba(76, 175, 80, 0.15);
+      border-color: rgba(76, 175, 80, 0.3);
+      position: relative;
+
+      &:hover {
+        background: rgba(76, 175, 80, 0.15);
+      }
+    }
+
+    .published-lock-icon {
+      position: absolute;
+      top: 12px;
+      right: 12px;
+      width: 32px;
+      height: 32px;
+      background: rgba(76, 175, 80, 0.2);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 10;
+      color: #4caf50;
+    }
+
     .article-header {
       flex: 1;
 
@@ -698,69 +1027,128 @@ const getGenerateStatusText = (s: string) => {
   text-align: center;
 }
 
-// 平台分组
-.platform-sections {
+.loading-tip {
   display: flex;
-  flex-direction: column;
-  gap: 24px;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  color: var(--text-secondary, #6b7280);
+  padding: 40px 0;
 
-  .platform-section {
+  .is-loading {
+    animation: rotate 1s linear infinite;
+  }
+}
+
+// 平台分组折叠面板
+.platform-collapse {
+  margin-top: 8px;
+
+  :deep(.el-collapse-item) {
     background: var(--bg-secondary, #2a2a2a);
     border-radius: 12px;
-    padding: 20px;
+    margin-bottom: 12px;
+    overflow: hidden;
+    transition: all 0.3s;
 
-    .platform-header {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      margin-bottom: 16px;
-
-      .platform-badge {
-        width: 36px;
-        height: 36px;
-        border-radius: 8px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 12px;
-        font-weight: 600;
-        color: white;
-      }
-
-      h3 {
-        margin: 0;
-        flex: 1;
-        color: var(--text-primary, #fff);
-      }
+    &:hover {
+      background: var(--bg-tertiary, #3a3a3a);
     }
 
-    .account-list {
+    &.is-active {
+      border-color: var(--primary, #1890ff);
+    }
+
+    .el-collapse-item__header {
+      height: auto;
+      min-height: 60px;
+      padding: 0;
+      border: none;
+      background: transparent;
+    }
+
+    .el-collapse-item__wrap {
+      border: none;
+    }
+  }
+
+  .platform-collapse-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+    padding: 16px 20px;
+
+    .platform-badge {
+      width: 40px;
+      height: 40px;
+      border-radius: 8px;
       display: flex;
-      flex-direction: column;
-      gap: 8px;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      font-weight: 600;
+      color: white;
+    }
 
-      .account-option {
-        display: flex;
-        align-items: center;
-        gap: 12px;
-        padding: 12px;
-        border-radius: 8px;
-        cursor: pointer;
-        transition: all 0.2s;
+    h3 {
+      margin: 0;
+      flex: 1;
+      color: var(--text-primary, #fff);
+      font-size: 16px;
+    }
 
-        &:hover:not(.disabled) {
-          background: var(--bg-tertiary, #3a3a3a);
-        }
+    .account-count {
+      font-size: 13px;
+      color: var(--text-secondary, #6b7280);
+    }
 
-        &.selected {
-          background: rgba(74, 144, 226, 0.1);
-        }
+    .header-actions {
+      margin-left: auto;
+    }
+  }
+}
 
-        &.disabled {
-          opacity: 0.5;
-          cursor: not-allowed;
-        }
-      }
+// 展开的账号列表
+.account-list-expanded {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 0 20px 20px;
+
+  .account-option {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 16px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s;
+
+    &:hover {
+      background: var(--bg-tertiary, #3a3a3a);
+    }
+
+    &.selected {
+      background: rgba(74, 144, 226, 0.15);
+      border: 1px solid var(--primary, #1890ff);
+    }
+
+    .account-name {
+      flex: 1;
+      font-size: 14px;
+      color: var(--text-primary, #fff);
+    }
+
+    .account-remark {
+      font-size: 12px;
+      color: var(--text-secondary, #6b7280);
+    }
+
+    :deep(.el-checkbox) {
+      --el-checkbox-bg-color: transparent;
+      --el-checkbox-border-color: var(--border, #3a3a3a);
+      --el-checkbox-disabled-border-color: var(--border, #3a3a3a);
     }
   }
 }
@@ -813,6 +1201,55 @@ const getGenerateStatusText = (s: string) => {
           font-weight: 600;
           color: var(--primary, #1890ff);
         }
+      }
+    }
+  }
+
+  // 发布方式选择
+  .publish-mode-section {
+    :deep(.el-radio-group) {
+      display: flex;
+      gap: 16px;
+      width: 100%;
+    }
+
+    :deep(.el-radio.is-bordered) {
+      flex: 1;
+      height: auto;
+      padding: 16px;
+      border-color: var(--border, #3a3a3a);
+      background: var(--bg-tertiary, #3a3a3a);
+      transition: all 0.2s;
+
+      &:hover {
+        border-color: var(--primary, #1890ff);
+      }
+
+      &.is-checked {
+        border-color: var(--primary, #1890ff);
+        background: rgba(24, 144, 226, 0.1);
+      }
+
+      .el-radio__label {
+        padding: 0;
+        width: 100%;
+      }
+    }
+
+    .publish-mode-option {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+
+      .mode-title {
+        font-size: 16px;
+        font-weight: 600;
+        color: var(--text-primary, #fff);
+      }
+
+      .mode-desc {
+        font-size: 13px;
+        color: var(--text-secondary, #6b7280);
       }
     }
   }

@@ -104,7 +104,7 @@ PLATFORMS = {
         "name": "头条号",
         "code": "TT",
         "login_url": "https://mp.toutiao.com/",
-        "publish_url": "https://mp.toutiao.com/profile/article/article_edit",
+        "publish_url": "https://mp.toutiao.com/profile_v4/graphic/publish",
         "color": "#333333",
     },
     "wenku": {

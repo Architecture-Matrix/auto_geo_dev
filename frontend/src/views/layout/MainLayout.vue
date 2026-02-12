@@ -151,6 +151,25 @@ const closeWindow = () => {
     display: flex;
     flex-direction: column;
     gap: 4px;
+    overflow-y: auto;
+
+    // 滚动条样式优化
+    &::-webkit-scrollbar {
+      width: 6px;
+    }
+
+    &::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    &::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 3px;
+
+      &:hover {
+        background: rgba(255, 255, 255, 0.2);
+      }
+    }
 
     .nav-item {
       display: flex;

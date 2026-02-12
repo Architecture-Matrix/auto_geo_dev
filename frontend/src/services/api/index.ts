@@ -111,11 +111,17 @@ export const geoKeywordApi = {
 // ==================== 3. GEO 文章 API ====================
 export const geoArticleApi = {
   // 获取文章列表 (对应 Articles.vue)
-  // 支持按 publish_status 过滤，用于批量发布时只获取待发布的文章
-  getArticles: (params?: { limit?: number; publish_status?: string }) => get('/geo/articles', params),
+  // 支持按 publish_status 和 project_id 过滤，用于批量发布时只获取待发布的文章
+  getArticles: (params?: { limit?: number; publish_status?: string; project_id?: number }) => get('/geo/articles', params),
 
-  // 生成文章 (5分钟超时) - 移除 platform 和 publish_time 参数
-  generate: (data: { keyword_id: number; company_name?: string }) =>
+  // 生成文章 (5分钟超时) - 新增发布策略参数
+  generate: (data: {
+    keyword_id: number;
+    company_name?: string;
+    target_platforms?: string[];
+    publish_strategy?: string;
+    scheduled_at?: string;
+  }) =>
     post('/geo/generate', data, { timeout: 300000 }),
 
   // 质检
@@ -191,6 +197,9 @@ export const reportsApi = {
   // 获取项目统计
   getProjectStats: (projectId: number) => get<any>(`/reports/stats/project/${projectId}`),
 
+  // 🌟 [新增] 获取文章统计
+  getArticleStats: (params?: { project_id?: number }) => get<any>('/reports/article-stats', params),
+
   // 趋势图数据 (Monitor.vue 使用)
   getTrends: (days: number = 30) => get('/reports/trends', { days }),
 
@@ -226,6 +235,16 @@ export const publishApi = {
   // 批量发布 GEO 文章（针对 GeoArticle，支持状态过滤）
   batch: (data: { article_ids: number[]; account_ids: number[]; scheduled_time?: string }) =>
     post('/publish/batch', data),
+
+  // 🌟 立即发布 - 将文章状态设为 publishing 并立即启动
+  start: (data: { article_ids: number[]; account_ids: number[] }) => post('/publish/start', data),
+
+  // 🌟 定时发布 - 设置 scheduled_at 时间，等待调度器执行
+  schedule: (data: { article_ids: number[]; account_ids: number[]; scheduled_time: string }) =>
+    put('/publish/schedule', data),
+
+  // 🌟 手动插队发布 - 无视定时时间，直接执行发布
+  trigger: (articleId: number) => post(`/publish/trigger/${articleId}`),
 
   // 获取发布进度
   getProgress: (taskId: string) => get(`/publish/progress/${taskId}`),

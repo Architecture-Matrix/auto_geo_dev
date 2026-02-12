@@ -10,6 +10,7 @@ from pathlib import Path
 from contextlib import asynccontextmanager
 from typing import List
 import uuid
+import uvicorn
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -24,21 +25,21 @@ from backend.database import init_db, get_db, engine, SessionLocal
 from backend.scripts.fix_database import check_and_fix_database
 
 # 导入所有 API 路由模块
-from backend.api.account.router import account
-from backend.api.article.router import article
-from backend.api.publish.router import publish
-from backend.api.keywords.router import keywords
-from backend.api.geo.router import geo
-from backend.api.index_check.router import index_check
-from backend.api.reports.router import reports
-from backend.api.notifications.router import notifications
-from backend.api.scheduler.router import scheduler
-from backend.api.knowledge.router import knowledge
-from backend.api.auth.router import auth
-from backend.api.article_collection.router import article_collection
-from backend.api.site_builder.router import site_builder
-from backend.api.upload.router import upload
-from backend.api.client.router import client  # 客户管理
+import backend.api.account as account
+import backend.api.article as article
+import backend.api.publish as publish
+import backend.api.keywords as keywords
+import backend.api.geo as geo
+import backend.api.index_check as index_check
+import backend.api.reports as reports
+import backend.api.notifications as notifications
+import backend.api.scheduler as scheduler
+import backend.api.knowledge as knowledge
+import backend.api.auth as auth
+import backend.api.article_collection as article_collection
+import backend.api.site_builder as site_builder
+import backend.api.upload as upload
+import backend.api.client as client  # 客户管理
 
 # 导入服务组件
 from backend.services.websocket_manager import ws_manager
@@ -98,7 +99,6 @@ async def lifespan(app: FastAPI):
     # 2. 注入全局 WebSocket 管理器
     account.set_ws_manager(ws_manager)
     publish.set_ws_manager(ws_manager)
-    notifications.set_ws_manager(ws_manager)
     notifications.set_ws_callback(ws_manager.broadcast)
 
     # 3. 初始化 Playwright 管理器
@@ -233,7 +233,7 @@ if __name__ == "__main__":
         logger.info(f"服务地址: http://{HOST}:{PORT}")
 
         uvicorn.run(
-            "main:app",
+            "backend.main:app",
             host=HOST,
             port=PORT,
             reload=RELOAD,
