@@ -258,6 +258,26 @@ export const publishApi = {
   retry: (recordId: number) => post(`/publish/retry/${recordId}`)
 }
 
+// ==================== 8. 知识库管理 API ====================
+export const knowledgeApi = {
+  // 分类管理
+  getCategories: (search?: string) => get('/knowledge/categories', { params: { search } }),
+  createCategory: (data: any) => post('/knowledge/categories', data),
+  updateCategory: (id: number, data: any) => put(`/knowledge/categories/${id}`, data),
+  deleteCategory: (id: number) => del(`/knowledge/categories/${id}`),
+
+  // 知识条目管理
+  getKnowledgeList: (categoryId: number, search?: string) =>
+    get(`/knowledge/categories/${categoryId}/knowledge`, { params: { search } }),
+  createKnowledge: (data: any) => post('/knowledge/knowledge', data),
+  updateKnowledge: (id: number, data: any) => put(`/knowledge/knowledge/${id}`, data),
+  deleteKnowledge: (id: number) => del(`/knowledge/knowledge/${id}`),
+
+  // 全局搜索
+  searchKnowledge: (keyword: string) =>
+    get('/knowledge/knowledge/search', { params: { keyword } })
+}
+
 // 导出统一的api对象
 export const api = {
   account: accountApi,
@@ -266,7 +286,8 @@ export const api = {
   indexCheck: indexCheckApi,
   reports: reportsApi,
   scheduler: schedulerApi,
-  publish: publishApi
+  publish: publishApi,
+  knowledge: knowledgeApi
 }
 
 // 导出默认实例
