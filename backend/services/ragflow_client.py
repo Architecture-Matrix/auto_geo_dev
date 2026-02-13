@@ -8,6 +8,11 @@ import os
 import requests
 from typing import List, Dict, Optional, Tuple, Any
 from loguru import logger
+from backend.config import (
+    RAGFLOW_BASE_URL,
+    RAGFLOW_API_KEY,
+    RAGFLOW_DATASET_ID,
+)
 
 
 class RAGFlowClient:
@@ -26,12 +31,12 @@ class RAGFlowClient:
         初始化 RAGFlow 客户端
 
         Args:
-            base_url: RAGFlow 服务地址，默认从环境变量读取
-            api_key: API Key，默认从环境变量读取
+            base_url: RAGFlow 服务地址，默认从 config.py 读取
+            api_key: API Key，默认从 config.py 读取
         """
-        self.base_url = base_url or os.getenv("RAGFLOW_BASE_URL", "http://localhost:9380")
-        self.api_key = api_key or os.getenv("RAGFLOW_API_KEY", "")
-        self.dataset_id = os.getenv("RAGFLOW_DATASET_ID", "")
+        self.base_url = base_url or RAGFLOW_BASE_URL
+        self.api_key = api_key or RAGFLOW_API_KEY
+        self.dataset_id = os.getenv("RAGFLOW_DATASET_ID", "") or RAGFLOW_DATASET_ID
 
         self.session = requests.Session()
         self.session.headers.update({
