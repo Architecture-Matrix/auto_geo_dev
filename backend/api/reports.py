@@ -6,7 +6,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from sqlalchemy import func, cast, Integer, desc, case
 from backend.database import get_db
-from backend.database.models import Project, Keyword, IndexCheckRecord, GeoArticle, Article, PublishRecord, Account, QuestionVariant
+from backend.database.models import Project, Keyword, IndexCheckRecord, GeoArticle, PublishRecord, Account, QuestionVariant
 from backend.schemas import ApiResponse
 from loguru import logger
 
@@ -39,6 +39,15 @@ class ProjectRank(BaseModel):
     content_volume: int
     ai_mention_rate: float
     brand_relevance: float
+
+
+class ArticleStatsResponse(BaseModel):
+    """文章统计响应模型"""
+    total: int = 0
+    generating: int = 0
+    completed: int = 0  # 待发布 (scheduled)
+    published: int = 0
+    failed: int = 0
 
 class TrendDataPoint(BaseModel):
     """趋势数据点"""
@@ -79,59 +88,47 @@ class ArticleStatsResponse(BaseModel):
 # ==================== 报表API ====================
 
 @router.get("/article-stats", response_model=ArticleStatsResponse)
-async def get_article_stats(db: Session = Depends(get_db)):
+async def get_article_stats(
+    project_id: Optional[int] = Query(None, description="项目ID筛选"),
+    db: Session = Depends(get_db)
+):
     """
-    获取文章统计数据（适配前端 Dashboard）
+    获取 GeoArticle 文章统计信息
+
+    统计不同状态的文章数量：
+    - total: 总数
+    - generating: 生成中
+    - completed: 已生成/待分发 (completed)
+    - published: 已发布
+    - failed: 生成失败
     """
-    # 1. 统计文章总数
-    common_count = db.query(Article).count()
-    geo_count = db.query(GeoArticle).count()
-    total_articles = common_count + geo_count
-    
-    # 2. 统计已发布数
-    # 普通文章发布成功 (status=2)
-    common_pub = db.query(PublishRecord).filter(PublishRecord.publish_status == 2).count()
-    # GEO文章发布成功 (publish_status='published')
-    geo_pub = db.query(GeoArticle).filter(GeoArticle.publish_status == "published").count()
-    published_count = common_pub + geo_pub
-    
-    # 3. 统计AI收录数 (以关键词命中为准)
-    # 统计 IndexCheckRecord 中 keyword_found=True 的唯一关键词/项目? 
-    # 或者简单统计命中次数? 前端语义是 "AI收录数"，通常指被收录的文章/关键词数量
-    # 这里我们统计命中的检测记录数，或者命中的关键词数
-    # 参照 get_summary_stats，这里统计 keyword_found=True 的记录数
-    indexed_count = db.query(IndexCheckRecord).filter(IndexCheckRecord.keyword_found == True).count()
-    
-    # 4. 计算收录率
-    # 分母是总检测次数
-    total_checks = db.query(IndexCheckRecord).count()
-    index_rate = round((indexed_count / total_checks * 100), 1) if total_checks > 0 else 0.0
-    
-    # 5. 平台分布 (统计各平台命中数)
-    # 查出所有命中的记录，按平台分组
-    results = db.query(
-        IndexCheckRecord.platform, 
-        func.count(IndexCheckRecord.id)
+    # 构建基础查询
+    query = db.query(GeoArticle)
+
+    # 如果指定了项目，则通过关键词关联筛选
+    if project_id:
+        query = query.join(Keyword).filter(Keyword.project_id == project_id)
+
+    # 统计各状态数量（使用聚合查询提高性能）
+    stats = db.query(
+        GeoArticle.publish_status,
+        func.count(GeoArticle.id).label("count")
     ).filter(
-        IndexCheckRecord.keyword_found == True
-    ).group_by(IndexCheckRecord.platform).all()
-    
-    platform_map = {
-        "doubao": "豆包", "qianwen": "通义千问", "deepseek": "DeepSeek",
-        "chatgpt": "ChatGPT", "claude": "Claude", "gemini": "Gemini"
-    }
-    
-    dist = {}
-    for platform_code, count in results:
-        name = platform_map.get(platform_code, platform_code)
-        dist[name] = count
-        
+        GeoArticle.publish_status.in_(["generating", "completed", "scheduled", "published", "failed"])
+    ).group_by(GeoArticle.publish_status).all()
+
+    # 将查询结果转换为字典
+    stats_dict = {row.publish_status: row.count for row in stats}
+
+    # 统计总数（包含其他状态如 draft）
+    total = query.count()
+
     return ArticleStatsResponse(
-        total_articles=total_articles,
-        published_count=published_count,
-        indexed_count=indexed_count,
-        index_rate=index_rate,
-        platform_distribution=dist
+        total=total,
+        generating=stats_dict.get("generating", 0),
+        completed=stats_dict.get("completed", 0),
+        published=stats_dict.get("published", 0),
+        failed=stats_dict.get("failed", 0)
     )
 
 
@@ -299,41 +296,20 @@ async def get_summary_stats(
     """获取数据总览卡片数据"""
     start_date = datetime.now() - timedelta(days=days)
     
-    # 1. 文章生成数
-    common_query = db.query(Article).filter(Article.created_at >= start_date)
+    # 1. 文章生成数（仅统计 GeoArticle）
     geo_query = db.query(GeoArticle).filter(GeoArticle.created_at >= start_date)
-    
+
     if project_id:
-        # Article表没有project_id，假设通过关键词关联（如果有的话），或者在此项目中不统计普通文章
-        # 这里为了简化，如果指定了项目，普通文章数设为0，或者以后端模型关联为准
-        # 根据模型，Article没有直接关联Project。GeoArticle有关联Keyword->Project
+        # GeoArticle 有关联 Keyword -> Project
         geo_query = geo_query.join(Keyword).filter(Keyword.project_id == project_id)
-        common_count = 0 
-    else:
-        common_count = common_query.count()
-    
-    geo_count = geo_query.count()
-    total_articles = common_count + geo_count
-    
-    # 2. 发布成功率
-    # 统计 PublishRecord (普通文章的发布记录)
-    # 注意：Article 不关联 Project，所以如果指定了 project_id，普通文章的发布记录不计入
-    if project_id:
-        pr_total = 0
-        pr_success = 0
-    else:
-        pr_query = db.query(PublishRecord).filter(PublishRecord.created_at >= start_date)
-        pr_total = pr_query.count()
-        pr_success = pr_query.filter(PublishRecord.publish_status == 2).count()
-    
+
+    total_articles = geo_query.count()
+
+    # 2. 发布成功率（仅统计 GeoArticle）
     # 统计 GeoArticle 的发布状态
-    geo_pub_query = geo_query.filter(GeoArticle.publish_status == "published")
+    geo_pub_published = geo_query.filter(GeoArticle.publish_status == "published").count()
     geo_pub_total = geo_query.filter(GeoArticle.publish_status.in_(["published", "failed"])).count()
-    geo_pub_success = geo_pub_query.count()
-    
-    total_pub_count = pr_total + geo_pub_total
-    total_pub_success = pr_success + geo_pub_success
-    pub_rate = round((total_pub_success / total_pub_count * 100), 2) if total_pub_count > 0 else 0
+    pub_rate = round((geo_pub_published / geo_pub_total * 100), 2) if geo_pub_total > 0 else 0
     
     # 3. 关键词/公司名命中率
     idx_query = db.query(IndexCheckRecord).filter(IndexCheckRecord.check_time >= start_date)

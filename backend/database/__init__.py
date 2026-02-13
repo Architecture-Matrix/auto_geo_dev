@@ -64,7 +64,7 @@ def init_db():
     """
     # 必须在这里导入模型，否则 Base.metadata 不知道有哪些表
     from backend.database.models import (
-        Account, Article, PublishRecord,
+        Account, PublishRecord,
         Project, Keyword, QuestionVariant,
         IndexCheckRecord, GeoArticle,
         ScheduledTask, KnowledgeCategory, Knowledge  # 🌟 补齐了之前遗漏的表

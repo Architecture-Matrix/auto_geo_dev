@@ -84,9 +84,12 @@ if not exist "backend\requirements.txt" (
     goto menu_loop
 )
 
+REM Set PYTHONPATH to root directory so Python can find backend module
+set "PYTHONPATH=."
+
 REM Check if key Python packages are installed
 echo Checking Python dependencies...
-python backend\check_deps.py 2>nul
+python -m backend.scripts.check_deps 2>nul
 if errorlevel 1 (
     echo.
     echo [WARNING] Some dependencies are missing!
@@ -120,9 +123,7 @@ echo   - Backend: http://127.0.0.1:8001
 echo   - API Docs: http://127.0.0.1:8001/docs
 echo.
 
-cd backend
-start "AutoGeo-Backend" cmd /k "python main.py"
-cd ..
+start "AutoGeo-Backend" cmd /k "set PYTHONPATH=. && python -m backend.main"
 
 echo.
 echo [OK] Backend service started in new window!
@@ -160,19 +161,19 @@ if not errorlevel 1 (
 
 REM Check frontend dependencies
 echo Checking frontend dependencies...
-if not exist "fronted\package.json" (
-    echo [ERROR] fronted\package.json not found!
+if not exist "frontend\package.json" (
+    echo [ERROR] frontend\package.json not found!
     pause
     goto menu_loop
 )
 
-if not exist "fronted\node_modules" (
+if not exist "frontend\node_modules" (
     echo [WARNING] node_modules not found!
     echo.
     echo Installing frontend dependencies...
     echo This may take a few minutes, please wait...
     echo.
-    cd fronted
+    cd frontend
     call npm install
     if errorlevel 1 (
         echo.
@@ -195,7 +196,7 @@ echo.
 echo   - Frontend: http://127.0.0.1:5173
 echo.
 
-cd fronted
+cd frontend
 start "AutoGeo-Frontend" cmd /k "npm run dev"
 cd ..
 
@@ -231,9 +232,7 @@ echo.
 echo Starting backend service...
 echo.
 
-cd backend
-start "AutoGeo-Backend" cmd /k "python main.py"
-cd ..
+start "AutoGeo-Backend" cmd /k "set PYTHONPATH=. && python -m backend.main"
 
 timeout /t 3 /nobreak >nul
 echo.
@@ -268,7 +267,7 @@ echo.
 echo Starting frontend service...
 echo.
 
-cd fronted
+cd frontend
 start "AutoGeo-Frontend" cmd /k "npm run dev"
 cd ..
 
@@ -351,8 +350,8 @@ echo   [OK] Python cache cleaned
 
 REM Node.js cache
 echo Cleaning Node.js cache...
-if exist "fronted\.vite" (
-    rd /s /q "fronted\.vite" 2>nul
+if exist "frontend\.vite" (
+    rd /s /q "frontend\.vite" 2>nul
     echo   [OK] Vite cache cleaned
 )
 
@@ -421,7 +420,7 @@ REM Run quick cleanup first
 for /d /r %%d in (__pycache__) do @if exist "%%d" rd /s /q "%%d" 2>nul
 del /s /q *.pyc 2>nul
 del /s /q *.pyo 2>nul
-if exist "fronted\.vite" rd /s /q "fronted\.vite" 2>nul
+if exist "frontend\.vite" rd /s /q "frontend\.vite" 2>nul
 if exist "backend\database\*.wal" del /s /q "backend\database\*.wal" 2>nul
 if exist "backend\database\*.shm" del /s /q "backend\database\*.shm" 2>nul
 if exist "logs\*.log" del /s /q "logs\*.log" 2>nul
@@ -435,8 +434,8 @@ if exist "htmlcov" rd /s /q htmlcov 2>nul
 REM Node.js dependencies
 echo.
 echo Removing node_modules...
-if exist "fronted\node_modules" (
-    rd /s /q "fronted\node_modules" 2>nul
+if exist "frontend\node_modules" (
+    rd /s /q "frontend\node_modules" 2>nul
     echo   [OK] node_modules removed
 )
 
@@ -449,12 +448,12 @@ echo   [OK] Python virtual environments cleaned
 
 REM Build artifacts
 echo Cleaning build artifacts...
-if exist "fronted\dist" (
-    rd /s /q "fronted\dist" 2>nul
+if exist "frontend\dist" (
+    rd /s /q "frontend\dist" 2>nul
     echo   [OK] dist folder removed
 )
-if exist "fronted\build" (
-    rd /s /q "fronted\build" 2>nul
+if exist "frontend\build" (
+    rd /s /q "frontend\build" 2>nul
     echo   [OK] build folder removed
 )
 
@@ -471,7 +470,7 @@ echo [OK] Full cleanup completed!
 echo ========================================
 echo.
 echo To restore dependencies, run:
-echo   cd fronted ^&^& npm install
+echo   cd frontend ^&^& npm install
 echo   cd ..\backend ^&^& pip install -r requirements.txt
 echo   playwright install chromium
 echo.

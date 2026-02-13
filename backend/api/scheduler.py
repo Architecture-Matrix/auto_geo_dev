@@ -54,3 +54,24 @@ async def update_job(task_id: int, data: TaskUpdate, db: Session = Depends(get_d
     scheduler.reload_task(task_id)
 
     return ApiResponse(success=True, message="任务配置已更新并生效")
+
+
+@router.post("/jobs/{job_id}/run", response_model=ApiResponse)
+async def trigger_job(job_id: str):
+    """
+    立即触发任务执行
+
+    参数:
+        job_id: APScheduler 的 Job ID (task_key，如 "publish_task")
+
+    实现:
+        使用 job.modify(next_run_time=datetime.now()) 将任务下一次运行时间设置为现在，
+        调度器会立即捡起并执行，且不影响原来的周期计划。
+    """
+    scheduler = get_scheduler_service()
+    success = scheduler.trigger_job(job_id)
+
+    if success:
+        return ApiResponse(success=True, message=f"任务 [{job_id}] 已触发执行")
+    else:
+        raise HTTPException(status_code=404, detail=f"任务 [{job_id}] 不存在或未运行")

@@ -107,7 +107,7 @@ PLATFORMS = {
         "name": "头条号",
         "code": "TT",
         "login_url": "https://mp.toutiao.com/",
-        "publish_url": "https://mp.toutiao.com/profile/article/article_edit",
+        "publish_url": "https://mp.toutiao.com/profile_v4/graphic/publish",
         "color": "#333333",
     },
     "wenku": {
@@ -459,6 +459,8 @@ RETRY_INTERVAL = 5
 N8N_WEBHOOK_URL = os.getenv("N8N_WEBHOOK_URL", "http://localhost:5678/webhook")
 # n8n工作流超时时间（秒）
 N8N_TIMEOUT = 300
+# n8n回调URL（用于异步接收生成结果）
+N8N_CALLBACK_URL = os.getenv("N8N_CALLBACK_URL", f"http://{HOST}:{PORT}/api/geo/callback")
 # DeepSeek API配置
 DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY", "")
 DEEPSEEK_API_URL = os.getenv("DEEPSEEK_API_URL", "https://api.deepseek.com/v1")

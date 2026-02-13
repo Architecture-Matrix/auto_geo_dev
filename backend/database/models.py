@@ -89,41 +89,21 @@ class Client(Base):
         return f"<Client {self.name}>"
 
 
-class Article(Base):
-    """
-    文章表
-    存储文章内容和基本信息
-    """
-    __tablename__ = "articles"
-    __table_args__ = TABLE_ARGS
-
-    id = Column(Integer, primary_key=True, autoincrement=True, comment="主键ID")
-    title = Column(String(200), nullable=False, comment="文章标题")
-    content = Column(Text, nullable=False, comment="文章正文内容（Markdown/HTML）")
-
-    # 标签和分类
-    tags = Column(String(500), nullable=True, comment="标签，逗号分隔")
-    category = Column(String(100), nullable=True, comment="文章分类")
-
-    # 封面图
-    cover_image = Column(String(500), nullable=True, comment="封面图片URL")
-
-    # 状态
-    status = Column(Integer, default=0, comment="状态：0=草稿 1=已发布")
-
-    # 统计
-    view_count = Column(Integer, default=0, comment="查看次数")
-
-    # 时间戳
-    created_at = Column(DateTime, default=func.now(), comment="创建时间")
-    updated_at = Column(DateTime, default=func.now(), onupdate=func.now(), comment="更新时间")
-    published_at = Column(DateTime, nullable=True, comment="首次发布时间")
-
-    # 关联关系
-    publish_records = relationship("PublishRecord", back_populates="article", cascade="all, delete-orphan")
-
-    def __repr__(self):
-        return f"<Article {self.title}>"
+# ==================== 已废弃的 Article 类 ====================
+# 旧的 Article 模型已被 GeoArticle 替代，保留此注释以防历史引用问题
+# class Article(Base):
+#     """
+#     文章表
+#     存储文章内容和基本信息
+#     """
+#     __tablename__ = "articles"
+#     __table_args__ = TABLE_ARGS
+#
+#     id = Column(Integer, primary_key=True, autoincrement=True, comment="主键ID")
+#     title = Column(String(200), nullable=False, comment="文章标题")
+#     content = Column(Text, nullable=False, comment="文章正文内容（Markdown/HTML）")
+#     ... (其余字段已移除)
+# =========================================================
 
 
 class PublishRecord(Base):
@@ -137,7 +117,7 @@ class PublishRecord(Base):
     id = Column(Integer, primary_key=True, autoincrement=True, comment="主键ID")
 
     # 外键
-    article_id = Column(Integer, ForeignKey("articles.id", ondelete="CASCADE"), nullable=False, index=True, comment="文章ID")
+    article_id = Column(Integer, ForeignKey("geo_articles.id", ondelete="CASCADE"), nullable=False, index=True, comment="文章ID")
     account_id = Column(Integer, ForeignKey("accounts.id", ondelete="CASCADE"), nullable=False, index=True, comment="账号ID")
 
     # 发布状态
@@ -159,7 +139,7 @@ class PublishRecord(Base):
     published_at = Column(DateTime, nullable=True, comment="实际发布时间")
 
     # 关联关系
-    article = relationship("Article", back_populates="publish_records")
+    article = relationship("GeoArticle", back_populates="publish_records")
     account = relationship("Account", back_populates="publish_records")
 
     def __repr__(self):
@@ -292,6 +272,7 @@ class GeoArticle(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True, comment="主键ID")
     keyword_id = Column(Integer, ForeignKey("keywords.id", ondelete="CASCADE"), nullable=False, index=True, comment="关键词ID")
+    project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=True, index=True, comment="项目ID")
     title = Column(Text, nullable=True, comment="文章标题")
     content = Column(Text, nullable=False, comment="文章正文内容")
 
@@ -302,9 +283,15 @@ class GeoArticle(Base):
     quality_status = Column(String(20), default="pending", comment="质检状态：pending=待检查 passed=通过 failed=未通过")
 
     # 发布相关
-    platform = Column(String(50), nullable=True, comment="目标发布平台")
-    publish_status = Column(String(20), default="draft", comment="发布状态：draft=草稿 published=已发布 failed=发布失败")
+    platform = Column(String(50), nullable=True, comment="目标发布平台：仅在配置发布时填写，生成阶段为空")
+    account_id = Column(Integer, nullable=True, comment="目标账号ID：仅在配置发布时填写，生成阶段为空")
+    publish_status = Column(String(20), default="draft", comment="发布状态：draft=草稿 generating=生成中 completed=已生成待分发 scheduled=已配置定时发布 publishing=发布中 published=已发布 failed=发布失败")
     publish_time = Column(DateTime, nullable=True, comment="发布时间")
+    scheduled_at = Column(DateTime, nullable=True, comment="定时发布时间：仅在定时发布时设置")
+
+    # 发布策略字段（新增）
+    target_platforms = Column(JSON, nullable=True, comment="预设目标平台列表（JSON数组）：如 ['zhihu', 'sohu', 'baijiahao']，用于多平台发布")
+    publish_strategy = Column(String(20), default="draft", comment="发布策略：draft=仅生成草稿 immediate=生成后立即发布 scheduled=定时发布")
 
     # 强壮性与重试 (Added back from v1)
     retry_count = Column(Integer, default=0)
@@ -323,6 +310,7 @@ class GeoArticle(Base):
 
     # 关联关系
     keyword = relationship("Keyword", back_populates="articles")
+    publish_records = relationship("PublishRecord", back_populates="article", cascade="all, delete-orphan")
 
     def __repr__(self):
         return f"<GeoArticle id={self.id} keyword_id={self.keyword_id}>"

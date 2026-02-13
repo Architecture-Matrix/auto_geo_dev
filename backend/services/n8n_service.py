@@ -1,9 +1,10 @@
 # -*- coding: utf-8 -*-
 """
-n8n 服务封装 - v2.0 生产环境对齐版
+n8n 服务封装 - v2.1 异步回调版
 1. 支持环境变量配置 N8N 地址 (Docker/生产环境必备)
 2. 注入 User-Agent 防止被 WAF/Cloudflare 拦截
 3. 增强响应解析兼容性
+4. 支持异步回调模式，n8n生成完成后通过回调通知
 """
 
 import httpx
@@ -12,6 +13,8 @@ import os
 from typing import Any, Literal, Optional, List, Dict
 from loguru import logger
 from pydantic import BaseModel, Field, ConfigDict
+
+from backend.config import N8N_CALLBACK_URL
 
 
 # ==================== 配置 ====================
@@ -27,6 +30,9 @@ class N8nConfig:
 
     # 重试配置
     MAX_RETRIES = 1
+
+    # 回调URL（异步回调模式下使用）
+    CALLBACK_URL = N8N_CALLBACK_URL
 
 
 # ==================== 请求模型 (保持不变) ====================
@@ -47,9 +53,11 @@ class GenerateQuestionsRequest(BaseModel):
 
 class GeoArticleRequest(BaseModel):
     keyword: str
-    platform: str = "zhihu"
     requirements: str = ""
     word_count: int = 1200
+    # 异步回调模式新增字段
+    callback_url: Optional[str] = None
+    article_id: Optional[int] = None
 
 
 class IndexCheckAnalysisRequest(BaseModel):
@@ -162,9 +170,9 @@ class N8nService:
                     return N8nResponse(status="error", error=f"JSON解析失败: {raw_text[:100]}")
 
             except httpx.TimeoutException:
-                self.log.warning(f"⏳ 请求超时 (尝试 {attempt + 1}/{self.config.MAX_RETRIES + 1})")
+                self.log.warning(f"⏳ n8n Webhook 请求超时 (尝试 {attempt + 1}/{self.config.MAX_RETRIES + 1})，当前设置等待时间为 {timeout_val}s，请检查 AI 模型响应速度")
                 if attempt == self.config.MAX_RETRIES:
-                    return N8nResponse(status="error", error="AI 生成超时，请检查 n8n 资源占用")
+                    return N8nResponse(status="error", error=f"AI 生成超时 (超时设置: {timeout_val}s)，请检查 n8n 资源占用或 AI 模型响应速度")
 
             except Exception as e:
                 self.log.error(f"🚨 传输层异常: {str(e)}")
@@ -203,18 +211,28 @@ class N8nService:
     async def generate_geo_article(
             self,
             keyword: str,
-            platform: str = "zhihu",
             requirements: str = "",
-            word_count: int = 1200
+            word_count: int = 1200,
+            callback_url: Optional[str] = None,
+            article_id: Optional[int] = None
     ) -> N8nResponse:
-        self.log.info(f"📝 正在撰写适用于 [{platform}] 的 GEO 文章...")
+        """
+        异步生成GEO文章
+        n8n将立即返回，生成结果通过callback_url异步回调
+        """
+        # 使用配置的回调URL，如果未提供则使用默认值
+        final_callback_url = callback_url or self.config.CALLBACK_URL
+
+        self.log.info(f"📝 正在撰写GEO文章 (关键词: {keyword}), 回调URL: {final_callback_url})...")
         payload = GeoArticleRequest(
             keyword=keyword,
-            platform=platform,
             requirements=requirements,
-            word_count=word_count
-        ).model_dump()
-        return await self._call_webhook("geo-article-generate", payload, timeout=self.config.TIMEOUT_LONG)
+            word_count=word_count,
+            callback_url=final_callback_url,
+            article_id=article_id
+        ).model_dump(exclude_none=True)
+        # 使用短超时（触发成功即可），生成结果通过回调返回
+        return await self._call_webhook("geo-article-generate", payload, timeout=self.config.TIMEOUT_SHORT)
 
     async def analyze_index_check(
             self,

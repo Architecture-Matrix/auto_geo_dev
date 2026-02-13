@@ -139,29 +139,72 @@ class SchedulerService:
             db.close()
         return False
 
+    def trigger_job(self, job_id: str) -> bool:
+        """
+        立即触发任务执行
+
+        使用 job.modify(next_run_time=datetime.now()) 将任务下一次运行时间设置为现在，
+        调度器会立即捡起并执行，且不影响原来的周期计划。
+
+        参数:
+            job_id: APScheduler 的 Job ID (task_key，如 "publish_task")
+
+        返回:
+            bool: 是否触发成功
+        """
+        job = self.scheduler.get_job(job_id)
+        if not job:
+            log.warning(f"⚠️ 尝试触发的任务不存在: {job_id}")
+            return False
+
+        try:
+            # 将下一次运行时间设置为现在
+            job.modify(next_run_time=datetime.now())
+            log.success(f"🚀 任务已触发执行: [{job_id}]")
+            return True
+        except Exception as e:
+            log.error(f"❌ 触发任务失败 [{job_id}]: {e}")
+            return False
+
     # ================= 🚀 核心业务逻辑 Job =================
 
     async def check_and_publish_scheduled_articles(self):
         """
         [Job] 自动扫描并发布
+
+        扫描条件：
+        1. publish_status = 'scheduled'（已配置定时发布）
+        2. platform 不为空（已配置发布平台）
+        3. account_id 不为空（已配置发布账号）
+        4. scheduled_at 时间已到
+
+        注意：不扫描 completed 状态的文章（等待用户在批量发布页面配置）
         """
         if not self.db_factory: return
         db = self.db_factory()
         try:
             now = datetime.now()
-            # 搜索：待发布(scheduled) 或 失败重试(failed 且 次数<3) 且 时间已到
+            # 搜索：已配置定时发布 且 平台/账号已配置 且 时间已到
+            # 同时也支持失败重试（failed 且 次数<3）
+            from sqlalchemy import and_
+
             pending = db.query(GeoArticle).filter(
-                ((GeoArticle.publish_status == "scheduled") |
-                 ((GeoArticle.publish_status == "failed") & (GeoArticle.retry_count < 3))),
-                GeoArticle.publish_time <= now
+                and_(
+                    GeoArticle.publish_status == "scheduled",
+                    GeoArticle.platform.isnot(None),
+                    GeoArticle.account_id.isnot(None),
+                    GeoArticle.scheduled_at <= now
+                )
             ).all()
 
             if pending:
-                log.info(f"🔍 [发布扫描] 发现 {len(pending)} 篇待发布文章，准备触发脚本...")
+                log.info(f"🔍 [发布扫描] 发现 {len(pending)} 篇定时发布文章，准备触发脚本...")
                 service = GeoArticleService(db)
                 for article in pending:
-                    # 🌟 关键：使用 create_task 异步处理，防止多篇文章发布时互相阻塞
+                    # 使用 create_task 异步处理，防止多篇文章发布时互相阻塞
                     asyncio.create_task(service.execute_publish(article.id))
+            else:
+                log.debug(f"🔍 [发布扫描] 无定时发布文章待处理")
         except Exception as e:
             log.error(f"发布 Job 运行异常: {e}")
         finally:

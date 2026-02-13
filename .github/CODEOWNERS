@@ -9,7 +9,7 @@
 # ============================================
 # 前端相关
 # ============================================
-fronted/ @Architecture-Matrix
+frontend/ @Architecture-Matrix
 
 # ============================================
 # 后端相关
@@ -48,8 +48,8 @@ docs/ @Architecture-Matrix
 # ============================================
 # 构建配置
 # ============================================
-fronted/package.json @Architecture-Matrix
-fronted/vite.config.* @Architecture-Matrix
-fronted/tsconfig.json @Architecture-Matrix
+frontend/package.json @Architecture-Matrix
+frontend/vite.config.* @Architecture-Matrix
+frontend/tsconfig.json @Architecture-Matrix
 backend/requirements.txt @Architecture-Matrix
 backend/pyproject.toml @Architecture-Matrix

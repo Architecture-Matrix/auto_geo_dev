@@ -23,7 +23,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: ./fronted
+        working-directory: ./frontend
 
     steps:
       - name: Checkout
@@ -34,7 +34,7 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
-          cache-dependency-path: fronted/package-lock.json
+          cache-dependency-path: frontend/package-lock.json
 
       - name: Install dependencies
         run: npm ci
@@ -58,7 +58,7 @@ jobs:
     needs: check
     defaults:
       run:
-        working-directory: ./fronted
+        working-directory: ./frontend
 
     steps:
       - name: Checkout
@@ -69,7 +69,7 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
-          cache-dependency-path: fronted/package-lock.json
+          cache-dependency-path: frontend/package-lock.json
 
       - name: Install dependencies
         run: npm ci
@@ -85,8 +85,8 @@ jobs:
         with:
           name: web-assets
           path: |
-            fronted/dist/
-            fronted/electron/
+            frontend/dist/
+            frontend/electron/
           retention-days: 1
 
   # ============================================
@@ -139,7 +139,7 @@ jobs:
 
     defaults:
       run:
-        working-directory: ./fronted
+        working-directory: ./frontend
 
     steps:
       - name: Checkout
@@ -152,7 +152,7 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
-          cache-dependency-path: fronted/package-lock.json
+          cache-dependency-path: frontend/package-lock.json
 
       - name: Install dependencies
         run: npm ci
@@ -161,7 +161,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: web-assets
-          path: fronted/
+          path: frontend/
 
       - name: Install native dependencies
         run: npm rebuild
@@ -193,7 +193,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            fronted/dist/*.{exe,msi,zip,dmg,AppImage,deb,rpm,snap}
+            frontend/dist/*.{exe,msi,zip,dmg,AppImage,deb,rpm,snap}
           draft: false
           prerelease: ${{ contains(github.ref_name, 'beta') || contains(github.ref_name, 'alpha') }}
           generate_release_notes: true

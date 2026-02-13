@@ -4,12 +4,12 @@ on:
   push:
     branches: ['**']
     paths:
-      - 'fronted/**'
+      - 'frontend/**'
       - '.github/workflows/frontend-ci.yml'
   pull_request:
     branches: [master, dev]
     paths:
-      - 'fronted/**'
+      - 'frontend/**'
 
 env:
   NODE_VERSION: '20'
@@ -21,7 +21,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: ./fronted
+        working-directory: ./frontend
 
     steps:
       - name: Checkout
@@ -37,7 +37,7 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'pnpm'
-          cache-dependency-path: fronted/pnpm-lock.yaml
+          cache-dependency-path: frontend/pnpm-lock.yaml
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -53,7 +53,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: ./fronted
+        working-directory: ./frontend
     needs: lint
 
     steps:
@@ -70,7 +70,7 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'pnpm'
-          cache-dependency-path: fronted/pnpm-lock.yaml
+          cache-dependency-path: frontend/pnpm-lock.yaml
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -81,7 +81,7 @@ jobs:
       - name: Upload coverage
         uses: codecov/codecov-action@v3
         with:
-          files: fronted/coverage/lcov.info
+          files: frontend/coverage/lcov.info
           flags: frontend
 
   build:
@@ -89,7 +89,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: ./fronted
+        working-directory: ./frontend
     needs: [lint, test]
 
     steps:
@@ -106,7 +106,7 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'pnpm'
-          cache-dependency-path: fronted/pnpm-lock.yaml
+          cache-dependency-path: frontend/pnpm-lock.yaml
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -118,5 +118,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: frontend-dist
-          path: fronted/dist
+          path: frontend/dist
           retention-days: 7
