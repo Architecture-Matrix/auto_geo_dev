@@ -313,9 +313,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Edit, Delete, Plus, Document, Search } from '@element-plus/icons-vue'
+import { knowledgeApi } from '@/services/api'
 
 // ==================== 类型定义 ====================
 interface Category {
@@ -429,38 +430,15 @@ const filteredKnowledge = computed(() => {
 const loadCategories = async () => {
   loading.value = true
   try {
-    // TODO: 实际应该从API获取
-    // 模拟数据
-    categories.value = [
-      {
-        id: 1,
-        name: '绿阳环保科技',
-        industry: '环保工程',
-        description: '专注于工业清洗和环保技术服务',
-        tags: ['环保', '清洁服务', '无人机'],
-        color: '#22c55e',
-        initial: '绿',
-        knowledge_count: 12,
-        project_count: 2,
-        updated_at: new Date().toISOString(),
-        created_at: new Date().toISOString(),
-      },
-      {
-        id: 2,
-        name: '智能云软件',
-        industry: 'SaaS软件',
-        description: '企业数字化转型解决方案提供商',
-        tags: ['SaaS', 'CRM', 'ERP'],
-        color: '#6366f1',
-        initial: '智',
-        knowledge_count: 8,
-        project_count: 1,
-        updated_at: new Date().toISOString(),
-        created_at: new Date().toISOString(),
-      },
-    ]
+    const data = await knowledgeApi.getCategories(searchKeyword.value)
+    categories.value = data.map((cat: any) => ({
+      ...cat,
+      initial: cat.name.charAt(0),
+      tags: cat.tags ? cat.tags.split(',').map((t: string) => t.trim()).filter(t => t) : []
+    }))
   } catch (error) {
     console.error('加载分类失败:', error)
+    ElMessage.error('加载分类失败')
   } finally {
     loading.value = false
   }
@@ -482,27 +460,11 @@ const manageKnowledge = async (category: Category) => {
 const loadKnowledge = async (categoryId: number) => {
   knowledgeLoading.value = true
   try {
-    // TODO: 实际应该从API获取
-    knowledges.value = [
-      {
-        id: 1,
-        title: '企业简介',
-        content: '绿阳环保科技成立于2020年，专注于工业清洗和环保技术服务...',
-        type: 'company_intro',
-        category_id: categoryId,
-        created_at: new Date().toISOString(),
-      },
-      {
-        id: 2,
-        title: '无人机清洗服务优势',
-        content: '1. 高效节能：相比传统清洗方式节省60%用水...',
-        type: 'product',
-        category_id: categoryId,
-        created_at: new Date().toISOString(),
-      },
-    ]
+    const data = await knowledgeApi.getKnowledgeList(categoryId, knowledgeSearch.value)
+    knowledges.value = data
   } catch (error) {
     console.error('加载知识失败:', error)
+    ElMessage.error('加载知识失败')
   } finally {
     knowledgeLoading.value = false
   }
@@ -535,10 +497,15 @@ const deleteKnowledge = async (item: Knowledge) => {
       confirmButtonText: '确定删除',
       cancelButtonText: '取消',
     })
-    knowledges.value = knowledges.value.filter(k => k.id !== item.id)
+    await knowledgeApi.deleteKnowledge(item.id)
     ElMessage.success('删除成功')
-  } catch (error) {
-    // 用户取消
+    await loadKnowledge(currentCategory.value!.id)
+    await loadCategories() // 更新分类统计
+  } catch (error: any) {
+    if (error !== 'cancel') {
+      console.error('删除失败:', error)
+      ElMessage.error('删除失败')
+    }
   }
 }
 
@@ -555,39 +522,25 @@ const saveKnowledge = async () => {
 
   savingKnowledge.value = true
   try {
-    if (editingKnowledge.value) {
-      // 更新
-      const index = knowledges.value.findIndex(k => k.id === editingKnowledge.value!.id)
-      if (index !== -1) {
-        knowledges.value[index] = {
-          ...knowledges.value[index],
-          title: knowledgeForm.value.title,
-          type: knowledgeForm.value.type,
-          content: knowledgeForm.value.content,
-        }
-      }
-      ElMessage.success('更新成功')
-    } else {
-      // 新增
-      const newKnowledge: Knowledge = {
-        id: Date.now(),
-        title: knowledgeForm.value.title,
-        type: knowledgeForm.value.type,
-        content: knowledgeForm.value.content,
-        category_id: currentCategory.value!.id,
-        created_at: new Date().toISOString(),
-      }
-      knowledges.value.unshift(newKnowledge)
-      ElMessage.success('添加成功')
+    const payload = {
+      category_id: currentCategory.value!.id,
+      title: knowledgeForm.value.title,
+      type: knowledgeForm.value.type,
+      content: knowledgeForm.value.content,
     }
 
-    // 更新分类统计
-    if (currentCategory.value) {
-      currentCategory.value.knowledge_count = knowledges.value.length
+    if (editingKnowledge.value) {
+      await knowledgeApi.updateKnowledge(editingKnowledge.value.id, payload)
+      ElMessage.success('更新成功')
+    } else {
+      await knowledgeApi.createKnowledge(payload)
+      ElMessage.success('添加成功')
     }
 
     showAddKnowledge.value = false
     resetKnowledgeForm()
+    await loadKnowledge(currentCategory.value!.id)
+    await loadCategories() // 更新分类统计
   } catch (error) {
     console.error('保存失败:', error)
     ElMessage.error('保存失败')
@@ -623,10 +576,14 @@ const deleteCategory = async (category: Category) => {
       '确认删除',
       { type: 'warning', confirmButtonText: '确定删除', cancelButtonText: '取消' }
     )
-    categories.value = categories.value.filter(c => c.id !== category.id)
+    await knowledgeApi.deleteCategory(category.id)
     ElMessage.success('删除成功')
-  } catch (error) {
-    // 用户取消
+    await loadCategories()
+  } catch (error: any) {
+    if (error !== 'cancel') {
+      console.error('删除失败:', error)
+      ElMessage.error('删除失败')
+    }
   }
 }
 
@@ -643,43 +600,25 @@ const saveCategory = async () => {
       ? categoryForm.value.tagsInput.split(',').map(t => t.trim()).filter(t => t)
       : []
 
+    const payload = {
+      name: categoryForm.value.name,
+      industry: categoryForm.value.industry,
+      description: categoryForm.value.description,
+      tags: tags.join(','),
+      color: categoryForm.value.color,
+    }
+
     if (editingCategory.value) {
-      // 更新
-      const index = categories.value.findIndex(c => c.id === editingCategory.value!.id)
-      if (index !== -1) {
-        categories.value[index] = {
-          ...categories.value[index],
-          name: categoryForm.value.name,
-          industry: categoryForm.value.industry,
-          description: categoryForm.value.description,
-          tags,
-          color: categoryForm.value.color,
-          initial: categoryForm.value.name.charAt(0),
-          updated_at: new Date().toISOString(),
-        }
-      }
+      await knowledgeApi.updateCategory(editingCategory.value.id, payload)
       ElMessage.success('更新成功')
     } else {
-      // 新增
-      const newCategory: Category = {
-        id: Date.now(),
-        name: categoryForm.value.name,
-        industry: categoryForm.value.industry,
-        description: categoryForm.value.description,
-        tags,
-        color: categoryForm.value.color,
-        initial: categoryForm.value.name.charAt(0),
-        knowledge_count: 0,
-        project_count: 0,
-        updated_at: new Date().toISOString(),
-        created_at: new Date().toISOString(),
-      }
-      categories.value.unshift(newCategory)
+      await knowledgeApi.createCategory(payload)
       ElMessage.success('创建成功')
     }
 
     showCreateCategory.value = false
     resetCategoryForm()
+    await loadCategories()
   } catch (error) {
     console.error('保存失败:', error)
     ElMessage.error('保存失败')
@@ -712,6 +651,17 @@ const formatTime = (dateStr: string) => {
   if (days < 7) return `${days}天前更新`
   return date.toLocaleDateString('zh-CN')
 }
+
+// ==================== 监听 ====================
+watch(searchKeyword, () => {
+  loadCategories()
+})
+
+watch(knowledgeSearch, () => {
+  if (currentCategory.value) {
+    loadKnowledge(currentCategory.value.id)
+  }
+})
 
 // ==================== 生命周期 ====================
 onMounted(() => {
